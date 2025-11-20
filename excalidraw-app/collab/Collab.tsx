@@ -6,6 +6,7 @@ import type {
   SocketId,
   Collaborator,
   Gesture,
+  IMeetingDetails,
 } from "@excalidraw/excalidraw/types";
 import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
 import { APP_NAME, ENV, EVENT } from "@excalidraw/excalidraw/constants";
@@ -49,12 +50,13 @@ import {
   getSyncableElements,
 } from "../data";
 import {
-  isSavedToFirebase,
-  loadFilesFromFirebase,
-  loadFromFirebase,
-  saveFilesToFirebase,
-  saveToFirebase,
-} from "../data/firebase";
+  isSavedToStorage,
+  loadFilesFromStorage,
+  loadFromStorage,
+  saveFilesToStorage,
+  saveToStorage,
+  initializeBackend,
+} from "../data/storage";
 import {
   importUsernameFromLocalStorage,
   saveUsernameToLocalStorage,
@@ -122,6 +124,8 @@ export interface CollabAPI {
 
 interface CollabProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
+  storageBackendUrl?: string;
+  meetingDetails: IMeetingDetails;
 }
 
 class Collab extends PureComponent<CollabProps, CollabState> {
@@ -151,7 +155,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           throw new AbortError();
         }
 
-        return loadFilesFromFirebase(`files/rooms/${roomId}`, roomKey, fileIds);
+        return loadFilesFromStorage(`files/rooms/${roomId}`, roomKey, fileIds);
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -159,7 +163,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           throw new AbortError();
         }
 
-        const { savedFiles, erroredFiles } = await saveFilesToFirebase({
+        const { savedFiles, erroredFiles } = await saveFilesToStorage({
           prefix: `${FIREBASE_STORAGE_PREFIXES.collabFiles}/${roomId}`,
           files: await encodeFilesForUpload({
             files: addedFiles,
@@ -170,7 +174,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
         return {
           savedFiles: savedFiles.reduce(
-            (acc: Map<FileId, BinaryFileData>, id) => {
+            (acc: Map<FileId, BinaryFileData>, id: FileId) => {
               const fileData = addedFiles.get(id);
               if (fileData) {
                 acc.set(id, fileData);
@@ -180,7 +184,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             new Map(),
           ),
           erroredFiles: erroredFiles.reduce(
-            (acc: Map<FileId, BinaryFileData>, id) => {
+            (acc: Map<FileId, BinaryFileData>, id: FileId) => {
               const fileData = addedFiles.get(id);
               if (fileData) {
                 acc.set(id, fileData);
@@ -290,7 +294,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     if (
       this.isCollaborating() &&
       (this.fileManager.shouldPreventUnload(syncableElements) ||
-        !isSavedToFirebase(this.portal, syncableElements))
+        !isSavedToStorage(this.portal, syncableElements))
     ) {
       // this won't run in time if user decides to leave the site, but
       //  the purpose is to run in immediately after user decides to stay
@@ -304,7 +308,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     syncableElements: readonly SyncableExcalidrawElement[],
   ) => {
     try {
-      const storedElements = await saveToFirebase(
+      const storedElements = await saveToStorage(
         this.portal,
         syncableElements,
         this.excalidrawAPI.getAppState(),
@@ -320,24 +324,24 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         ? t("errors.collabSaveFailed_sizeExceeded")
         : t("errors.collabSaveFailed");
 
-      if (
-        !this.state.dialogNotifiedErrors[errorMessage] ||
-        !this.isCollaborating()
-      ) {
-        this.setErrorDialog(errorMessage);
-        this.setState({
-          dialogNotifiedErrors: {
-            ...this.state.dialogNotifiedErrors,
-            [errorMessage]: true,
-          },
-        });
-      }
+      // if (
+      //   !this.state.dialogNotifiedErrors[errorMessage] ||
+      //   !this.isCollaborating()
+      // ) {
+      //   this.setErrorDialog(errorMessage);
+      //   this.setState({
+      //     dialogNotifiedErrors: {
+      //       ...this.state.dialogNotifiedErrors,
+      //       [errorMessage]: true,
+      //     },
+      //   });
+      // }
 
-      if (this.isCollaborating()) {
-        this.setErrorIndicator(errorMessage);
-      }
+      // if (this.isCollaborating()) {
+      //   this.setErrorIndicator(errorMessage);
+      // }
 
-      console.error(error);
+      // console.error(error);
     }
   };
 
@@ -481,6 +485,20 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         APP_NAME,
         getCollaborationLink({ roomId, roomKey }),
       );
+    }
+
+    // Initializing storage backend if storageBackendUrl & jwt are provided
+    const { storageBackendUrl , meetingDetails } = this.props;
+    // Session Id is required to initialize the storage backend
+    if (storageBackendUrl && meetingDetails?.sessionId && meetingDetails.token) {
+      try {
+        initializeBackend(storageBackendUrl, meetingDetails);
+      } catch (error: any) {
+        console.error("Failed to initialize storage backend:", error);
+        this.setErrorDialog(`Storage initialization failed: ${error.message}`);
+      }
+    } else {
+      console.log("Storage not initialized missing");
     }
 
     // TODO: `ImportedDataState` type here seems abused
@@ -703,7 +721,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       this.excalidrawAPI.resetScene();
 
       try {
-        const elements = await loadFromFirebase(
+        const elements = await loadFromStorage(
           roomLinkData.roomId,
           roomLinkData.roomKey,
           this.portal.socket,
