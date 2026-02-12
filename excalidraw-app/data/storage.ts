@@ -34,7 +34,7 @@ import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconc
 
 const BACKEND_CONFIG = {
   baseUrl: import.meta.env.VITE_APP_STORAGE_BACKEND_URL || "http://localhost:3000",
-  apiPrefix: import.meta.env.VITE_APP_STORAGE_API_PREFIX || "/v1/documents",
+  apiPrefix: import.meta.env.VITE_APP_STORAGE_API_PREFIX || "/api/file-sharing",
 };
 
 let backendApi: { baseUrl: string; apiPrefix: string } | null = null;
@@ -205,16 +205,31 @@ const downloadFilesFromBackend = async (prefix: string, fileIds: readonly FileId
           method: 'GET',
           headers,
         });
-        
+
         if (response.ok) {
-          const arrayBuffer = await response.arrayBuffer();
+          // Backend returns { presignedUrl, fileName } - fetch the actual file from S3
+          const data = await response.json();
+          if (!data.presignedUrl) {
+            console.error(`No presigned URL returned for file ${id}`);
+            erroredFiles.push(id);
+            return;
+          }
+
+          const fileResponse = await fetch(data.presignedUrl);
+          if (!fileResponse.ok) {
+            console.error(`Failed to download file from S3: ${id}, Status: ${fileResponse.status}`);
+            erroredFiles.push(id);
+            return;
+          }
+
+          const arrayBuffer = await fileResponse.arrayBuffer();
           loadedFiles.push({
             id,
             buffer: new Uint8Array(arrayBuffer),
           });
         } else {
           erroredFiles.push(id);
-          console.log(`Failed to download file: ${id}, Status: ${response.status}`);
+          console.error(`Failed to download file: ${id}, Status: ${response.status}`);
         }
       } catch (error: any) {
         erroredFiles.push(id);
@@ -416,10 +431,21 @@ export const saveToStorage = async (
   portal: Portal,
   elements: readonly SyncableExcalidrawElement[],
   appState: AppState,
-) => {  
+) => {
   const { roomId, roomKey, socket } = portal;
-  if ( !roomId || !roomKey || !socket || isSavedToStorage(portal, elements)) {
-    console.log("Missing required fields", { roomId: !!roomId, roomKey: !!roomKey, socket: !!socket });
+
+  // Check if missing required fields (error case)
+  if (!roomId || !roomKey || !socket) {
+    console.error("Cannot save to storage: missing required fields", {
+      roomId: !!roomId,
+      roomKey: !!roomKey,
+      socket: !!socket
+    });
+    return null;
+  }
+
+  // Check if already saved (happy path - no need to log)
+  if (isSavedToStorage(portal, elements)) {
     return null;
   }
 

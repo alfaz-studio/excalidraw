@@ -498,7 +498,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         this.setErrorDialog(`Storage initialization failed: ${error.message}`);
       }
     } else {
-      console.log("Storage not initialized missing");
+      console.error("Storage not initialized: missing storage backend configuration");
     }
 
     // TODO: `ImportedDataState` type here seems abused
@@ -741,9 +741,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         console.error(error);
       } finally {
         this.portal.socketInitialized = true;
+        await this.portal.flushPendingBroadcasts();
       }
     } else {
       this.portal.socketInitialized = true;
+      await this.portal.flushPendingBroadcasts();
     }
     return null;
   };

@@ -28,6 +28,7 @@ class Portal {
   roomId: string | null = null;
   roomKey: string | null = null;
   broadcastedElementVersions: Map<string, number> = new Map();
+  pendingBroadcasts: Array<() => Promise<void>> = []; // queue broadcasts until socket is initialized
 
   constructor(collab: TCollabClass) {
     this.collab = collab;
@@ -70,6 +71,7 @@ class Portal {
     this.roomKey = null;
     this.socketInitialized = false;
     this.broadcastedElementVersions = new Map();
+    this.pendingBroadcasts = [];
   }
 
   isOpen() {
@@ -86,17 +88,36 @@ class Portal {
     volatile: boolean = false,
     roomId?: string,
   ) {
-    if (this.isOpen()) {
-      const json = JSON.stringify(data);
-      const encoded = new TextEncoder().encode(json);
-      const { encryptedBuffer, iv } = await encryptData(this.roomKey!, encoded);
+    const broadcast = async () => {
+      if (this.socket && this.roomId && this.roomKey) {
+        const json = JSON.stringify(data);
+        const encoded = new TextEncoder().encode(json);
+        const { encryptedBuffer, iv } = await encryptData(this.roomKey, encoded);
 
-      this.socket?.emit(
-        volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
-        roomId ?? this.roomId,
-        encryptedBuffer,
-        iv,
-      );
+        this.socket.emit(
+          volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
+          roomId ?? this.roomId,
+          encryptedBuffer,
+          iv,
+        );
+      }
+    };
+
+    // If socket is not yet initialized, queue the broadcast
+    if (!this.socketInitialized) {
+      this.pendingBroadcasts.push(broadcast);
+      return;
+    }
+
+    await broadcast();
+  }
+
+  async flushPendingBroadcasts() {
+    const broadcasts = this.pendingBroadcasts;
+    this.pendingBroadcasts = [];
+
+    for (const broadcast of broadcasts) {
+      await broadcast();
     }
   }
 

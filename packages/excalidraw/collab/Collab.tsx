@@ -259,6 +259,18 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     appJotaiStore.set(isOfflineAtom, !window.navigator.onLine);
   };
 
+  componentDidUpdate(prevProps: ExcalidrawCollabProps) {
+    // Re-initialize storage backend when the token changes (initial fetch or refresh)
+    const { storageBackendUrl, meetingDetails } = this.props;
+    if (
+      storageBackendUrl
+      && meetingDetails?.token
+      && meetingDetails.token !== prevProps.meetingDetails?.token
+    ) {
+      initializeBackend(storageBackendUrl, meetingDetails);
+    }
+  }
+
   componentWillUnmount() {
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
@@ -473,8 +485,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   ) => {
     if (!this.state.username) {
       import("@excalidraw/random-username").then(({ getRandomUsername }) => {
-        const username = getRandomUsername();
-        this.setUsername(username);
+        // Don't overwrite a username that was set while loading
+        if (!this.state.username) {
+          const username = getRandomUsername();
+          this.setUsername(username);
+        }
       });
     }
 
