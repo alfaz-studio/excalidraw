@@ -2,7 +2,7 @@ import type { LaserPointerOptions } from "@excalidraw/laser-pointer";
 import { LaserPointer } from "@excalidraw/laser-pointer";
 import type { AnimationFrameHandler } from "./animation-frame-handler";
 import type { AppState } from "./types";
-import { getSvgPathFromStroke, sceneCoordsToViewportCoords } from "./utils";
+import { getSvgPathFromStroke } from "./utils";
 import type App from "./components/App";
 import { SVG_NS } from "./constants";
 
@@ -136,12 +136,12 @@ export class AnimatedTrail implements Trail {
     const stroke = trail
       .getStrokeOutline(trail.options.size / state.zoom.value)
       .map(([x, y]) => {
-        const result = sceneCoordsToViewportCoords(
-          { sceneX: x, sceneY: y },
-          state,
-        );
+        // Compute coordinates relative to the container (not the viewport)
+        // since the SVGLayer is position:absolute within the excalidraw container
+        const cx = (x + state.scrollX) * state.zoom.value;
+        const cy = (y + state.scrollY) * state.zoom.value;
 
-        return [result.x, result.y];
+        return [cx, cy];
       });
 
     return getSvgPathFromStroke(stroke, true);
