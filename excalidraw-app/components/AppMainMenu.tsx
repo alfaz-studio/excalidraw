@@ -32,8 +32,8 @@ export const AppMainMenu: React.FC<{
       )} */}
       {/* <MainMenu.DefaultItems.CommandPalette className="highlighted" /> */}
       <MainMenu.DefaultItems.SearchMenu />
-      {/* <MainMenu.DefaultItems.Help /> */}
-      {/* <MainMenu.DefaultItems.ClearCanvas /> */}
+      <MainMenu.DefaultItems.Help />
+      <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
       {/* <MainMenu.ItemLink
         icon={ExcalLogo}
@@ -72,14 +72,14 @@ export const AppMainMenu: React.FC<{
         </MainMenu.Item>
       )}
       <MainMenu.Separator /> */}
-      {/* <MainMenu.DefaultItems.ToggleTheme
+      <MainMenu.DefaultItems.ToggleTheme
         allowSystemTheme
         theme={props.theme}
         onSelect={props.setTheme}
-      /> */}
-      {/* <MainMenu.ItemCustom>
+      />
+      <MainMenu.ItemCustom>
         <LanguageList style={{ width: "100%" }} />
-      </MainMenu.ItemCustom> */}
+      </MainMenu.ItemCustom>
       <MainMenu.DefaultItems.ChangeCanvasBackground />
     </MainMenu>
   );
