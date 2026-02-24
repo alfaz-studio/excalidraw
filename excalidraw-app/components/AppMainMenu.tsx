@@ -7,7 +7,6 @@ import {
 import type { Theme } from "@excalidraw/excalidraw/element/types";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
-import { LanguageList } from "../app-language/LanguageList";
 import { saveDebugState } from "./DebugCanvas";
 
 export const AppMainMenu: React.FC<{
@@ -32,7 +31,7 @@ export const AppMainMenu: React.FC<{
       )} */}
       {/* <MainMenu.DefaultItems.CommandPalette className="highlighted" /> */}
       <MainMenu.DefaultItems.SearchMenu />
-      <MainMenu.DefaultItems.Help />
+      {/* <MainMenu.DefaultItems.Help /> */}
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
       {/* <MainMenu.ItemLink
@@ -77,9 +76,9 @@ export const AppMainMenu: React.FC<{
         theme={props.theme}
         onSelect={props.setTheme}
       />
-      <MainMenu.ItemCustom>
+      {/* <MainMenu.ItemCustom>
         <LanguageList style={{ width: "100%" }} />
-      </MainMenu.ItemCustom>
+      </MainMenu.ItemCustom> */}
       <MainMenu.DefaultItems.ChangeCanvasBackground />
     </MainMenu>
   );
