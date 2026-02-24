@@ -9,8 +9,8 @@ import type {
   ExcalidrawElement,
   FileId,
   OrderedExcalidrawElement,
-} from "@excalidraw/excalidraw/element/types";
-import { getSceneVersion } from "@excalidraw/excalidraw/element";
+} from "@excalidraw/element/types";
+import { getSceneVersion } from "@excalidraw/element";
 import type Portal from "../collab/Portal";
 import { restoreElements } from "@excalidraw/excalidraw/data/restore";
 import type {
@@ -26,7 +26,7 @@ import {
   encryptData,
   decryptData,
 } from "@excalidraw/excalidraw/data/encryption";
-import { MIME_TYPES } from "@excalidraw/excalidraw/constants";
+import { MIME_TYPES } from "@excalidraw/common";
 import type { SyncableExcalidrawElement } from ".";
 import { getSyncableElements } from ".";
 import type { Socket } from "socket.io-client";
@@ -294,7 +294,11 @@ const decryptElements = async (
   const ciphertext = data.ciphertext.toUint8Array();
   const iv = data.iv.toUint8Array();
 
-  const decrypted = await decryptData(iv, ciphertext, roomKey);
+  const decrypted = await decryptData(
+    iv as Uint8Array<ArrayBuffer>,
+    ciphertext as Uint8Array<ArrayBuffer>,
+    roomKey,
+  );
   const decodedData = new TextDecoder("utf-8").decode(
     new Uint8Array(decrypted),
   );

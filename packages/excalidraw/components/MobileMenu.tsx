@@ -1,30 +1,28 @@
-import type { JSX } from "react";
 import React from "react";
+
+import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
+
+import { useTunnels } from "../context/tunnels";
+import { t } from "../i18n";
+import { calculateScrollCenter } from "../scene";
+import { SCROLLBAR_WIDTH, SCROLLBAR_MARGIN } from "../scene/scrollbars";
+
+import { ExitViewModeButton, MobileShapeActions } from "./Actions";
+import { MobileToolBar } from "./MobileToolBar";
+import { FixedSideContainer } from "./FixedSideContainer";
+
+import { Island } from "./Island";
+
+import { PenModeButton } from "./PenModeButton";
+
+import type { ActionManager } from "../actions/manager";
 import type {
   AppClassProperties,
   AppProps,
   AppState,
-  Device,
-  ExcalidrawProps,
   UIAppState,
 } from "../types";
-import type { ActionManager } from "../actions/manager";
-import { t } from "../i18n";
-import Stack from "./Stack";
-import { showSelectedShapeActions } from "../element";
-import type { NonDeletedExcalidrawElement } from "../element/types";
-import { FixedSideContainer } from "./FixedSideContainer";
-import { Island } from "./Island";
-import { HintViewer } from "./HintViewer";
-import { calculateScrollCenter } from "../scene";
-import { SelectedShapeActions, ShapesSwitcher } from "./Actions";
-import { Section } from "./Section";
-import { SCROLLBAR_WIDTH, SCROLLBAR_MARGIN } from "../scene/scrollbars";
-import { LockButton } from "./LockButton";
-import { PenModeButton } from "./PenModeButton";
-import { HandButton } from "./HandButton";
-import { isHandToolActive } from "../appState";
-import { useTunnels } from "../context/tunnels";
+import type { JSX } from "react";
 
 type MobileMenuProps = {
   appState: UIAppState;
@@ -34,7 +32,6 @@ type MobileMenuProps = {
   renderImageExportDialog: () => React.ReactNode;
   setAppState: React.Component<any, AppState>["setState"];
   elements: readonly NonDeletedExcalidrawElement[];
-  onLockToggle: () => void;
   onHandToolToggle: () => void;
   onPenModeToggle: AppClassProperties["togglePenMode"];
 
@@ -42,9 +39,11 @@ type MobileMenuProps = {
     isMobile: boolean,
     appState: UIAppState,
   ) => JSX.Element | null;
-  renderCustomStats?: ExcalidrawProps["renderCustomStats"];
+  renderTopLeftUI?: (
+    isMobile: boolean,
+    appState: UIAppState,
+  ) => JSX.Element | null;
   renderSidebars: () => JSX.Element | null;
-  device: Device;
   renderWelcomeScreen: boolean;
   UIOptions: AppProps["UIOptions"];
   app: AppClassProperties;
@@ -55,148 +54,107 @@ export const MobileMenu = ({
   elements,
   actionManager,
   setAppState,
-  onLockToggle,
   onHandToolToggle,
-  onPenModeToggle,
-
+  renderTopLeftUI,
   renderTopRightUI,
-  renderCustomStats,
   renderSidebars,
   allowedShapes,
-  device,
   renderWelcomeScreen,
   UIOptions,
   app,
+  onPenModeToggle,
 }: MobileMenuProps) => {
   const {
     WelcomeScreenCenterTunnel,
     MainMenuTunnel,
     DefaultSidebarTriggerTunnel,
   } = useTunnels();
-  const renderToolbar = () => {
-    return (
-      <FixedSideContainer side="top" className="App-top-bar">
-        {renderWelcomeScreen && <WelcomeScreenCenterTunnel.Out />}
-        <Section heading="shapes">
-          {(heading: React.ReactNode) => (
-            <Stack.Col gap={4} align="center">
-              <Stack.Row gap={1} className="App-toolbar-container">
-                <Island padding={1} className="App-toolbar App-toolbar--mobile">
-                  {heading}
-                  <Stack.Row gap={1}>
-                    <ShapesSwitcher
-                      appState={appState}
-                      activeTool={appState.activeTool}
-                      allowedShapes={allowedShapes}
-                      UIOptions={UIOptions}
-                      app={app}
-                      disableShortcuts={UIOptions.canvasActions.disableShortcuts}
-                    />
-                  </Stack.Row>
-                </Island>
-                {renderTopRightUI && renderTopRightUI(true, appState)}
-                <div className="mobile-misc-tools-container">
-                  {!appState.viewModeEnabled &&
-                    appState.openDialog?.name !== "elementLinkSelector" && (
-                      <DefaultSidebarTriggerTunnel.Out />
-                    )}
-                  <PenModeButton
-                    checked={appState.penMode}
-                    onChange={() => onPenModeToggle(null)}
-                    title={t("toolBar.penMode")}
-                    isMobile
-                    penDetected={appState.penDetected}
-                  />
-                  {!UIOptions.canvasActions.hideLockButton && (
-                    <LockButton
-                      checked={appState.activeTool.locked}
-                      onChange={onLockToggle}
-                      title={t("toolBar.lock")}
-                      isMobile
-                    />
-                  )}
-                  <HandButton
-                    checked={isHandToolActive(appState)}
-                    onChange={() => onHandToolToggle()}
-                    title={t("toolBar.hand")}
-                    isMobile
-                  />
-                </div>
-              </Stack.Row>
-            </Stack.Col>
-          )}
-        </Section>
-        {!UIOptions.canvasActions.disableHints && (
-          <HintViewer
-            appState={appState}
-            isMobile={true}
-            device={device}
-            app={app}
-          />
+  const renderAppTopBar = () => {
+    if (appState.openDialog?.name === "elementLinkSelector") {
+      return null;
+    }
+
+    const topRightUI = (
+      <div className="excalidraw-ui-top-right">
+        {renderTopRightUI?.(true, appState) ??
+          (!appState.viewModeEnabled && (
+            <>
+              <PenModeButton
+                checked={appState.penMode}
+                onChange={() => onPenModeToggle(null)}
+                title={t("toolBar.penMode")}
+                isMobile
+                penDetected={appState.penDetected}
+              />
+              <DefaultSidebarTriggerTunnel.Out />
+            </>
+          ))}
+        {appState.viewModeEnabled && (
+          <ExitViewModeButton actionManager={actionManager} />
         )}
-      </FixedSideContainer>
+      </div>
+    );
+
+    const topLeftUI = (
+      <div className="excalidraw-ui-top-left">
+        {renderTopLeftUI?.(true, appState)}
+        <MainMenuTunnel.Out />
+      </div>
+    );
+
+    return (
+      <div
+        className="App-toolbar-content"
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          justifyContent: "space-between",
+        }}
+      >
+        {topLeftUI}
+        {topRightUI}
+      </div>
     );
   };
 
-  const renderAppToolbar = () => {
-    if (
-      appState.viewModeEnabled ||
-      appState.openDialog?.name === "elementLinkSelector"
-    ) {
-      return (
-        <div className="App-toolbar-content">
-          <MainMenuTunnel.Out />
-        </div>
-      );
-    }
-
+  const renderToolbar = () => {
     return (
-      <div className="App-toolbar-content">
-        <MainMenuTunnel.Out />
-        {actionManager.renderAction("toggleEditMenu")}
-        {actionManager.renderAction(
-          appState.multiElement ? "finalize" : "duplicateSelection",
-        )}
-        {actionManager.renderAction("deleteSelectedElements")}
-        <div>
-          {actionManager.renderAction("undo")}
-          {actionManager.renderAction("redo")}
-        </div>
-      </div>
+      <MobileToolBar
+        app={app}
+        onHandToolToggle={onHandToolToggle}
+        setAppState={setAppState}
+      />
     );
   };
 
   return (
     <>
       {renderSidebars()}
-      {!appState.viewModeEnabled &&
-        appState.openDialog?.name !== "elementLinkSelector" &&
-        renderToolbar()}
-      <div
-        className="App-bottom-bar"
-        style={{
-          marginBottom: SCROLLBAR_WIDTH + SCROLLBAR_MARGIN * 2,
-          marginLeft: SCROLLBAR_WIDTH + SCROLLBAR_MARGIN * 2,
-          marginRight: SCROLLBAR_WIDTH + SCROLLBAR_MARGIN * 2,
-        }}
-      >
-        <Island padding={0}>
-          {appState.openMenu === "shape" &&
-          !appState.viewModeEnabled &&
-          appState.openDialog?.name !== "elementLinkSelector" &&
-          showSelectedShapeActions(appState, elements) ? (
-            <Section className="App-mobile-menu" heading="selectedShapeActions">
-              <SelectedShapeActions
-                appState={appState}
-                elementsMap={app.scene.getNonDeletedElementsMap()}
-                renderAction={actionManager.renderAction}
-                app={app}
-                UIOptions={UIOptions}
-              />
-            </Section>
-          ) : null}
-          <footer className="App-toolbar">
-            {renderAppToolbar()}
+      {/* welcome screen, bottom bar, and top bar all have the same z-index */}
+      {/* ordered in this reverse order so that top bar is on top */}
+      <div className="App-welcome-screen">
+        {renderWelcomeScreen && <WelcomeScreenCenterTunnel.Out />}
+      </div>
+
+      {!appState.viewModeEnabled && (
+        <div
+          className="App-bottom-bar"
+          style={{
+            marginBottom: SCROLLBAR_WIDTH + SCROLLBAR_MARGIN,
+          }}
+        >
+          <MobileShapeActions
+            appState={appState}
+            elementsMap={app.scene.getNonDeletedElementsMap()}
+            renderAction={actionManager.renderAction}
+            app={app}
+            setAppState={setAppState}
+          />
+
+          <Island className="App-toolbar">
+            {!appState.viewModeEnabled &&
+              appState.openDialog?.name !== "elementLinkSelector" &&
+              renderToolbar()}
             {appState.scrolledOutside &&
               !appState.openMenu &&
               !appState.openSidebar && (
@@ -212,9 +170,13 @@ export const MobileMenu = ({
                   {t("buttons.scrollBackToContent")}
                 </button>
               )}
-          </footer>
-        </Island>
-      </div>
+          </Island>
+        </div>
+      )}
+
+      <FixedSideContainer side="top" className="App-top-bar">
+        {renderAppTopBar()}
+      </FixedSideContainer>
     </>
   );
 };

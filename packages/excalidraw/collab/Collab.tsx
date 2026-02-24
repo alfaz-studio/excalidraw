@@ -1,35 +1,57 @@
-import throttle from "lodash.throttle";
-import { PureComponent } from "react";
-import type {
-  BinaryFileData,
-  ExcalidrawImperativeAPI,
-  SocketId,
-  Collaborator,
-  Gesture,
-  ExcalidrawCollabProps
-} from "@excalidraw/excalidraw/types";
-import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
-import { APP_NAME, ENV, EVENT } from "@excalidraw/excalidraw/constants";
-import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
-import type {
-  ExcalidrawElement,
-  FileId,
-  InitializedExcalidrawImageElement,
-  OrderedExcalidrawElement,
-} from "@excalidraw/excalidraw/element/types";
 import {
   CaptureUpdateAction,
   getSceneVersion,
   restoreElements,
   zoomToFitBounds,
   reconcileElements,
-} from "../index";
+} from "@excalidraw/excalidraw";
+import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
+import { APP_NAME, EVENT } from "@excalidraw/common";
 import {
+  IDLE_THRESHOLD,
+  ACTIVE_THRESHOLD,
+  UserIdleState,
   assertNever,
+  isDevEnv,
+  isTestEnv,
   preventUnload,
   resolvablePromise,
   throttleRAF,
-} from "../utils";
+} from "@excalidraw/common";
+import { decryptData } from "@excalidraw/excalidraw/data/encryption";
+import { getVisibleSceneBounds } from "@excalidraw/element";
+import { newElementWith } from "@excalidraw/element";
+import { isImageElement, isInitializedImageElement } from "@excalidraw/element";
+import { AbortError } from "@excalidraw/excalidraw/errors";
+import { t } from "@excalidraw/excalidraw/i18n";
+import { withBatchedUpdates } from "@excalidraw/excalidraw/reactUtils";
+
+import throttle from "lodash.throttle";
+import { PureComponent } from "react";
+
+import type {
+  ReconciledExcalidrawElement,
+  RemoteExcalidrawElement,
+} from "@excalidraw/excalidraw/data/reconcile";
+import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
+import type {
+  ExcalidrawElement,
+  FileId,
+  InitializedExcalidrawImageElement,
+  OrderedExcalidrawElement,
+} from "@excalidraw/element/types";
+import type {
+  BinaryFileData,
+  ExcalidrawImperativeAPI,
+  SocketId,
+  Collaborator,
+  Gesture,
+  ExcalidrawCollabProps,
+  IMeetingDetails,
+} from "@excalidraw/excalidraw/types";
+import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
+
+import { appJotaiStore, atom } from "../../../excalidraw-app/app-jotai";
 import {
   CURSOR_SYNC_TIMEOUT,
   FILE_UPLOAD_MAX_BYTES,
@@ -40,59 +62,40 @@ import {
   SYNC_FULL_SCENE_INTERVAL_MS,
   WS_EVENTS,
 } from "../../../excalidraw-app/app_constants";
-import type {
-  SocketUpdateDataSource,
-  SyncableExcalidrawElement,
-} from "../../../excalidraw-app/data";
 import {
   generateCollaborationLinkData,
   getCollaborationLink,
   getSyncableElements,
 } from "../../../excalidraw-app/data";
 import {
+  encodeFilesForUpload,
+  FileManager,
+  updateStaleImageStatuses,
+} from "../../../excalidraw-app/data/FileManager";
+import { LocalData } from "../../../excalidraw-app/data/LocalData";
+import {
   isSavedToStorage,
   loadFilesFromStorage,
   loadFromStorage,
   saveFilesToStorage,
   saveToStorage,
-  initializeBackend
+  initializeBackend,
 } from "../../../excalidraw-app/data/storage";
 import {
   importUsernameFromLocalStorage,
   saveUsernameToLocalStorage,
 } from "../../../excalidraw-app/data/localStorage";
-import Portal from "../../../excalidraw-app/collab/Portal";
-import { t } from "@excalidraw/excalidraw/i18n";
-import {
-  IDLE_THRESHOLD,
-  ACTIVE_THRESHOLD,
-  UserIdleState,
-} from "@excalidraw/excalidraw/constants";
-import {
-  encodeFilesForUpload,
-  FileManager,
-  updateStaleImageStatuses,
-} from "../../../excalidraw-app/data/FileManager";
-import { AbortError } from "@excalidraw/excalidraw/errors";
-import {
-  isImageElement,
-  isInitializedImageElement,
-} from "@excalidraw/excalidraw/element/typeChecks";
-import { newElementWith } from "@excalidraw/excalidraw/element/mutateElement";
-import { decryptData } from "@excalidraw/excalidraw/data/encryption";
 import { resetBrowserStateVersions } from "../../../excalidraw-app/data/tabSync";
-import { LocalData } from "../../../excalidraw-app/data/LocalData";
-import { appJotaiStore, atom } from "../../../excalidraw-app/app-jotai";
-import type { Mutable, ValueOf } from "@excalidraw/excalidraw/utility-types";
-import { getVisibleSceneBounds } from "@excalidraw/excalidraw/element/bounds";
-import { withBatchedUpdates } from "@excalidraw/excalidraw/reactUtils";
-import { collabErrorIndicatorAtom } from "../../../excalidraw-app/collab/CollabError";
-import type {
-  ReconciledExcalidrawElement,
-  RemoteExcalidrawElement,
-} from "@excalidraw/excalidraw/data/reconcile";
 
-let isUsingTestingEnv : any;
+import { collabErrorIndicatorAtom } from "../../../excalidraw-app/collab/CollabError";
+import Portal from "../../../excalidraw-app/collab/Portal";
+
+import type {
+  SocketUpdateDataSource,
+  SyncableExcalidrawElement,
+} from "../../../excalidraw-app/data";
+
+let isUsingTestingEnv: any;
 export const collabAPIAtom = atom<CollabAPI | null>(null);
 export const isCollaboratingAtom = atom(false);
 export const isOfflineAtom = atom(false);
@@ -463,7 +466,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     decryptionKey: string,
   ): Promise<ValueOf<SocketUpdateDataSource>> => {
     try {
-      const decrypted = await decryptData(iv, encryptedData, decryptionKey);
+      const decrypted = await decryptData(
+        iv as Uint8Array<ArrayBuffer>,
+        encryptedData,
+        decryptionKey,
+      );
 
       const decodedData = new TextDecoder("utf-8").decode(
         new Uint8Array(decrypted),
@@ -1064,7 +1071,7 @@ declare global {
   }
 }
 
-if (import.meta.env.MODE === ENV.TEST || import.meta.env.DEV) {
+if (isTestEnv() || isDevEnv()) {
   window.collab = window.collab || ({} as Window["collab"]);
 }
 

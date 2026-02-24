@@ -1,17 +1,13 @@
 import clsx from "clsx";
+
 import { actionShortcuts } from "../../actions";
-import type { ActionManager } from "../../actions/manager";
-import {
-  ExitZenModeAction,
-  FinalizeAction,
-  UndoRedoActions,
-  ZoomActions,
-} from "../Actions";
-import { useDevice } from "../App";
 import { useTunnels } from "../../context/tunnels";
+import { ExitZenModeButton, UndoRedoActions, ZoomActions } from "../Actions";
 import { HelpButton } from "../HelpButton";
 import { Section } from "../Section";
 import Stack from "../Stack";
+
+import type { ActionManager } from "../../actions/manager";
 import type { UIAppState, AppProps } from "../../types";
 
 const Footer = ({
@@ -28,10 +24,6 @@ const Footer = ({
   UIOptions : AppProps["UIOptions"];
 }) => {
   const { FooterCenterTunnel, WelcomeScreenHelpHintTunnel } = useTunnels();
-
-  const device = useDevice();
-  const showFinalize =
-    !appState.viewModeEnabled && appState.multiElement && device.isTouchScreen;
 
   return (
     <footer
@@ -61,15 +53,6 @@ const Footer = ({
                 })}
               />
             )}
-            {showFinalize && (
-              <FinalizeAction
-                renderAction={actionManager.renderAction}
-                className={clsx("zen-mode-transition", {
-                  "layer-ui__wrapper__footer-left--transition-left":
-                    appState.zenModeEnabled,
-                })}
-              />
-            )}
           </Section>
         </Stack.Col>
       </div>
@@ -88,7 +71,7 @@ const Footer = ({
           </div>
         </div>
       )}
-      <ExitZenModeAction
+      <ExitZenModeButton
         actionManager={actionManager}
         showExitZenModeBtn={showExitZenModeBtn}
       />

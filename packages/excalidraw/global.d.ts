@@ -2,9 +2,9 @@ interface Window {
   ClipboardItem: any;
   __EXCALIDRAW_SHA__: string | undefined;
   EXCALIDRAW_ASSET_PATH: string | string[] | undefined;
-  EXCALIDRAW_EXPORT_SOURCE: string;
   EXCALIDRAW_THROTTLE_RENDER: boolean | undefined;
   DEBUG_FRACTIONAL_INDICES: boolean | undefined;
+  EXCALIDRAW_EXPORT_SOURCE: string;
   gtag: Function;
   sa_event: Function;
   fathom: { trackEvent: Function };
@@ -42,7 +42,7 @@ declare module "png-chunk-text" {
   function decode(data: Uint8Array): { keyword: string; text: string };
 }
 declare module "png-chunks-encode" {
-  function encode(chunks: TEXtChunk[]): Uint8Array;
+  function encode(chunks: TEXtChunk[]): Uint8Array<ArrayBuffer>;
   export = encode;
 }
 declare module "png-chunks-extract" {
@@ -57,6 +57,19 @@ interface Blob {
 }
 
 declare module "*.scss";
+
+// tunnel-rat types are built against React 18 and incompatible with React 19's
+// stricter JSX component signatures. Override Out to use React.FC.
+declare module "tunnel-rat" {
+  import type React from "react";
+  type Props = {
+    children: React.ReactNode;
+  };
+  export default function tunnel(): {
+    In: ({ children }: Props) => null;
+    Out: React.FC;
+  };
+}
 
 // --------------------------------------------------------------------------—
 // ensure Uint8Array isn't assignable to ArrayBuffer
@@ -101,7 +114,10 @@ declare module "image-blob-reduce" {
 
 interface CustomMatchers {
   toBeNonNaNNumber(): void;
-  toCloselyEqualPoints(points: readonly [number, number][]): void;
+  toCloselyEqualPoints(
+    points: readonly [number, number][],
+    precision?: number,
+  ): void;
 }
 
 declare namespace jest {
