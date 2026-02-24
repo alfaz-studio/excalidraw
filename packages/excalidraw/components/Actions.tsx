@@ -44,11 +44,12 @@ import {
   EmbedIcon,
   extraToolsIcon,
   frameToolIcon,
-  // mermaidLogoIcon,
-  // MagicIcon,
+  mermaidLogoIcon,
+  laserPointerToolIcon,
+  MagicIcon,
 } from "./icons";
 import { KEYS } from "../keys";
-// import { useTunnels } from "../context/tunnels";
+import { useTunnels } from "../context/tunnels";
 import { CLASSES } from "../constants";
 import { alignActionsPredicate } from "../actions/actionAlign";
 
@@ -309,9 +310,10 @@ export const ShapesSwitcher = ({
   const [isExtraToolsMenuOpen, setIsExtraToolsMenuOpen] = useState(false);
 
   const frameToolSelected = activeTool.type === "frame";
+  const laserToolSelected = activeTool.type === "laser";
   const embeddableToolSelected = activeTool.type === "embeddable";
 
-  // const { TTDDialogTriggerTunnel } = useTunnels();
+  const { TTDDialogTriggerTunnel } = useTunnels();
 
   const hasStorageBackend = Boolean(app.props.storageBackendUrl);
 
@@ -385,7 +387,11 @@ export const ShapesSwitcher = ({
           className={clsx("App-toolbar__extra-tools-trigger", {
             "App-toolbar__extra-tools-trigger--selected":
               frameToolSelected ||
-              embeddableToolSelected,
+              embeddableToolSelected ||
+              // in collab we're already highlighting the laser button
+              // outside toolbar, so let's not highlight extra-tools button
+              // on top of it
+              (laserToolSelected && !app.props.isCollaborating),
           })}
           onToggle={() => setIsExtraToolsMenuOpen(!isExtraToolsMenuOpen)}
           title={t("toolBar.extraTools")}
@@ -405,6 +411,15 @@ export const ShapesSwitcher = ({
             selected={frameToolSelected}
           >
             {t("toolBar.frame")}
+          </DropdownMenu.Item>
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "laser" })}
+            icon={laserPointerToolIcon}
+            data-testid="toolbar-laser"
+            selected={laserToolSelected}
+            shortcut={KEYS.K.toLocaleUpperCase()}
+          >
+            {t("toolBar.laser")}
           </DropdownMenu.Item>
           {!UIOptions.canvasActions.hideEmbedableTools && (
           <>
