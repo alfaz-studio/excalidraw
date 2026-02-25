@@ -412,7 +412,7 @@ export const ShapesSwitcher = ({
           >
             {t("toolBar.frame")}
           </DropdownMenu.Item>
-          <DropdownMenu.Item
+          {/* <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}
             icon={laserPointerToolIcon}
             data-testid="toolbar-laser"
@@ -420,7 +420,7 @@ export const ShapesSwitcher = ({
             shortcut={KEYS.K.toLocaleUpperCase()}
           >
             {t("toolBar.laser")}
-          </DropdownMenu.Item>
+          </DropdownMenu.Item> */}
           {!UIOptions.canvasActions.hideEmbedableTools && (
           <>
           <DropdownMenu.Item
