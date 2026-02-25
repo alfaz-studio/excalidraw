@@ -21,7 +21,7 @@ export const AppMainMenu: React.FC<{
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
-      {/* <MainMenu.DefaultItems.Export /> */}
+      <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
       {/* {props.isCollabEnabled && (
         <MainMenu.DefaultItems.LiveCollaborationTrigger
