@@ -803,44 +803,44 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
     );
   }
 
-  const ExcalidrawPlusCommand = {
-    label: "Excalidraw+",
-    category: DEFAULT_CATEGORIES.links,
-    predicate: true,
-    icon: <div style={{ width: 14 }}>{ExcalLogo}</div>,
-    keywords: ["plus", "cloud", "server"],
-    perform: () => {
-      window.open(
-        `${
-          import.meta.env.VITE_APP_PLUS_LP
-        }/plus?utm_source=excalidraw&utm_medium=app&utm_content=command_palette`,
-        "_blank",
-      );
-    },
-  };
-  const ExcalidrawPlusAppCommand = {
-    label: "Sign up",
-    category: DEFAULT_CATEGORIES.links,
-    predicate: true,
-    icon: <div style={{ width: 14 }}>{ExcalLogo}</div>,
-    keywords: [
-      "excalidraw",
-      "plus",
-      "cloud",
-      "server",
-      "signin",
-      "login",
-      "signup",
-    ],
-    perform: () => {
-      window.open(
-        `${
-          import.meta.env.VITE_APP_PLUS_APP
-        }?utm_source=excalidraw&utm_medium=app&utm_content=command_palette`,
-        "_blank",
-      );
-    },
-  };
+  // const ExcalidrawPlusCommand = {
+  //   label: "Excalidraw+",
+  //   category: DEFAULT_CATEGORIES.links,
+  //   predicate: true,
+  //   icon: <div style={{ width: 14 }}>{ExcalLogo}</div>,
+  //   keywords: ["plus", "cloud", "server"],
+  //   perform: () => {
+  //     window.open(
+  //       `${
+  //         import.meta.env.VITE_APP_PLUS_LP
+  //       }/plus?utm_source=excalidraw&utm_medium=app&utm_content=command_palette`,
+  //       "_blank",
+  //     );
+  //   },
+  // };
+  // const ExcalidrawPlusAppCommand = {
+  //   label: "Sign up",
+  //   category: DEFAULT_CATEGORIES.links,
+  //   predicate: true,
+  //   icon: <div style={{ width: 14 }}>{ExcalLogo}</div>,
+  //   keywords: [
+  //     "excalidraw",
+  //     "plus",
+  //     "cloud",
+  //     "server",
+  //     "signin",
+  //     "login",
+  //     "signup",
+  //   ],
+  //   perform: () => {
+  //     window.open(
+  //       `${
+  //         import.meta.env.VITE_APP_PLUS_APP
+  //       }?utm_source=excalidraw&utm_medium=app&utm_content=command_palette`,
+  //       "_blank",
+  //     );
+  //   },
+  // };
 
   return (
     <div
@@ -905,7 +905,7 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
         <OverwriteConfirmDialog>
           <OverwriteConfirmDialog.Actions.ExportToImage />
           <OverwriteConfirmDialog.Actions.SaveToDisk />
-          {excalidrawAPI && (
+          {/* {excalidrawAPI && (
             <OverwriteConfirmDialog.Action
               title={t("overwriteConfirm.action.excalidrawPlus.title")}
               actionLabel={t("overwriteConfirm.action.excalidrawPlus.button")}
@@ -920,7 +920,7 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
             >
               {t("overwriteConfirm.action.excalidrawPlus.description")}
             </OverwriteConfirmDialog.Action>
-          )}
+          )} */}
         </OverwriteConfirmDialog>
         <AppFooter onChange={() => excalidrawAPI?.refresh()} />
         {excalidrawAPI && <AIComponents excalidrawAPI={excalidrawAPI} />}
@@ -1109,32 +1109,32 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
                 );
               },
             },
-            ...(isExcalidrawPlusSignedUser
-              ? [
-                  {
-                    ...ExcalidrawPlusAppCommand,
-                    label: "Sign in / Go to Excalidraw+",
-                  },
-                ]
-              : [ExcalidrawPlusCommand, ExcalidrawPlusAppCommand]),
+            // ...(isExcalidrawPlusSignedUser
+            //   ? [
+            //       {
+            //         ...ExcalidrawPlusAppCommand,
+            //         label: "Sign in / Go to Excalidraw+",
+            //       },
+            //     ]
+            //   : [ExcalidrawPlusCommand, ExcalidrawPlusAppCommand]),
 
-            {
-              label: t("overwriteConfirm.action.excalidrawPlus.button"),
-              category: DEFAULT_CATEGORIES.export,
-              icon: exportToPlus,
-              predicate: true,
-              keywords: ["plus", "export", "save", "backup"],
-              perform: () => {
-                if (excalidrawAPI) {
-                  exportToExcalidrawPlus(
-                    excalidrawAPI.getSceneElements(),
-                    excalidrawAPI.getAppState(),
-                    excalidrawAPI.getFiles(),
-                    excalidrawAPI.getName(),
-                  );
-                }
-              },
-            },
+            // {
+            //   label: t("overwriteConfirm.action.excalidrawPlus.button"),
+            //   category: DEFAULT_CATEGORIES.export,
+            //   icon: exportToPlus,
+            //   predicate: true,
+            //   keywords: ["plus", "export", "save", "backup"],
+            //   perform: () => {
+            //     if (excalidrawAPI) {
+            //       exportToExcalidrawPlus(
+            //         excalidrawAPI.getSceneElements(),
+            //         excalidrawAPI.getAppState(),
+            //         excalidrawAPI.getFiles(),
+            //         excalidrawAPI.getName(),
+            //       );
+            //     }
+            //   },
+            // },
             {
               ...CommandPalette.defaultItems.toggleTheme,
               perform: () => {
