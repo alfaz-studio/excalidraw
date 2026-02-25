@@ -7,7 +7,6 @@ import {
 import type { Theme } from "@excalidraw/excalidraw/element/types";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
-import { LanguageList } from "../app-language/LanguageList";
 import { saveDebugState } from "./DebugCanvas";
 
 export const AppMainMenu: React.FC<{
@@ -20,9 +19,9 @@ export const AppMainMenu: React.FC<{
 }> = React.memo((props) => {
   return (
     <MainMenu>
-      {/* <MainMenu.DefaultItems.LoadScene /> */}
-      {/* <MainMenu.DefaultItems.SaveToActiveFile /> */}
-      {/* <MainMenu.DefaultItems.Export /> */}
+      <MainMenu.DefaultItems.LoadScene />
+      <MainMenu.DefaultItems.SaveToActiveFile />
+      <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
       {/* {props.isCollabEnabled && (
         <MainMenu.DefaultItems.LiveCollaborationTrigger
@@ -33,7 +32,7 @@ export const AppMainMenu: React.FC<{
       {/* <MainMenu.DefaultItems.CommandPalette className="highlighted" /> */}
       <MainMenu.DefaultItems.SearchMenu />
       {/* <MainMenu.DefaultItems.Help /> */}
-      {/* <MainMenu.DefaultItems.ClearCanvas /> */}
+      <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
       {/* <MainMenu.ItemLink
         icon={ExcalLogo}
@@ -72,11 +71,11 @@ export const AppMainMenu: React.FC<{
         </MainMenu.Item>
       )}
       <MainMenu.Separator /> */}
-      {/* <MainMenu.DefaultItems.ToggleTheme
+      <MainMenu.DefaultItems.ToggleTheme
         allowSystemTheme
         theme={props.theme}
         onSelect={props.setTheme}
-      /> */}
+      />
       {/* <MainMenu.ItemCustom>
         <LanguageList style={{ width: "100%" }} />
       </MainMenu.ItemCustom> */}

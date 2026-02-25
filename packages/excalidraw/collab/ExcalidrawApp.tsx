@@ -17,7 +17,7 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import { useCallbackRefState } from "@excalidraw/excalidraw/hooks/useCallbackRefState";
-import { t } from "@excalidraw/excalidraw/i18n";
+import { t, languages } from "@excalidraw/excalidraw/i18n";
 import {
   Excalidraw,
   LiveCollaborationTrigger,
@@ -328,6 +328,29 @@ export const initializeScene = async (opts: {
   return { scene: null, isExternalScene: false };
 };
 
+/**
+ * Normalize a language code from the host app (e.g. Jitsi's "fr") to a code
+ * that excalidraw recognises (e.g. "fr-FR").
+ *
+ * Jitsi uses bare ISO 639-1 codes ("fr", "de", "ar") while excalidraw uses
+ * language-region codes ("fr-FR", "de-DE", "ar-SA").  This helper resolves
+ * the mismatch using the same prefix-matching strategy that
+ * `getPreferredLanguage()` already uses.
+ */
+const normalizeToExcalidrawLang = (code: string): string => {
+  // Exact match — no conversion needed (covers "en", "zh-CN", "pt-BR", etc.)
+  if (languages.find((l) => l.code === code)) {
+    return code;
+  }
+  // Prefix match — e.g. "fr" → "fr-FR", "ar" → "ar-SA"
+  const prefixMatch = languages.find((l) => l.code.startsWith(code));
+  if (prefixMatch) {
+    return prefixMatch.code;
+  }
+  // No match — return as-is and let Excalidraw fall back to defaultLang
+  return code;
+};
+
 const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
@@ -335,6 +358,18 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
 
   const [langCode, setLangCode] = useAppLangCode();
+
+  // Normalize the host app's language code to an excalidraw-compatible code
+  const normalizedHostLang = props.excalidraw?.langCode
+    ? normalizeToExcalidrawLang(props.excalidraw.langCode)
+    : undefined;
+
+  // Sync language from host app (e.g. Jitsi) when the prop changes
+  useEffect(() => {
+    if (normalizedHostLang && normalizedHostLang !== langCode) {
+      setLangCode(normalizedHostLang);
+    }
+  }, [normalizedHostLang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // initial state
   // ---------------------------------------------------------------------------
@@ -822,7 +857,7 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
         initialData={initialStatePromiseRef.current.promise}
         isCollaborating={isCollaborating}
         onPointerUpdate={collabAPI?.onPointerUpdate}
-        langCode={langCode}
+        langCode={normalizedHostLang || langCode}
         renderCustomStats={renderCustomStats}
         detectScroll={false}
         handleKeyboardGlobally={true}

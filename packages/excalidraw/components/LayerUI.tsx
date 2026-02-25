@@ -147,7 +147,7 @@ const LayerUI = ({
   const [eyeDropperState, setEyeDropperState] = useAtom(activeEyeDropperAtom);
 
   const renderJSONExportDialog = () => {
-    if (!UIOptions.canvasActions.export || !UIOptions.canvasActions.hideIOActions) {
+    if (!UIOptions.canvasActions.export || UIOptions.canvasActions.hideIOActions) {
       return null;
     }
 
