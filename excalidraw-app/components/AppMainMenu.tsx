@@ -10,7 +10,6 @@ import { isDevEnv } from "@excalidraw/common";
 
 import type { Theme } from "@excalidraw/element/types";
 
-import { LanguageList } from "../app-language/LanguageList";
 import { isExcalidrawPlusSignedUser } from "../app_constants";
 
 import { saveDebugState } from "./DebugCanvas";
@@ -27,7 +26,7 @@ export const AppMainMenu: React.FC<{
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
-      {/* <MainMenu.DefaultItems.Export /> */}
+      <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
       {/* {props.isCollabEnabled && (
         <MainMenu.DefaultItems.LiveCollaborationTrigger
@@ -36,8 +35,8 @@ export const AppMainMenu: React.FC<{
         />
       )} */}
       {/* <MainMenu.DefaultItems.CommandPalette className="highlighted" /> */}
-      <MainMenu.DefaultItems.SearchMenu />
-      <MainMenu.DefaultItems.Help />
+      {/* <MainMenu.DefaultItems.SearchMenu /> */}
+      {/* <MainMenu.DefaultItems.Help /> */}
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
       {/* <MainMenu.ItemLink
@@ -83,9 +82,9 @@ export const AppMainMenu: React.FC<{
         theme={props.theme}
         onSelect={props.setTheme}
       />
-      <MainMenu.ItemCustom>
+      {/* <MainMenu.ItemCustom>
         <LanguageList style={{ width: "100%" }} />
-      </MainMenu.ItemCustom>
+      </MainMenu.ItemCustom> */}
       <MainMenu.DefaultItems.ChangeCanvasBackground />
     </MainMenu>
   );
