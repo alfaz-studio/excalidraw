@@ -34,7 +34,7 @@ import polyfill from "@excalidraw/excalidraw/polyfill";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
 import { useCallbackRefState } from "@excalidraw/excalidraw/hooks/useCallbackRefState";
-import { t } from "@excalidraw/excalidraw/i18n";
+import { t, languages } from "@excalidraw/excalidraw/i18n";
 
 import {
   GithubIcon,

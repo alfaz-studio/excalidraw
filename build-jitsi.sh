@@ -7,8 +7,21 @@ echo "Building Excalidraw for Jitsi Meet..."
 
 # Check if the package dist exists
 if [ ! -f "packages/excalidraw/dist/prod/index.js" ]; then
-    echo "Error: Package dist not found. Building package..."
-    yarn build:package
+    echo "Package dist not found. Building packages (esbuild only, skipping type generation)..."
+
+    # Build each package using esbuild directly (skip gen:types which has
+    # upstream TS2717 duplicate-declaration errors we don't need to fix).
+    echo "  Building @excalidraw/common..."
+    (cd packages/common && rm -rf dist && node ../../scripts/buildBase.js)
+
+    echo "  Building @excalidraw/math..."
+    (cd packages/math && rm -rf dist && node ../../scripts/buildBase.js)
+
+    echo "  Building @excalidraw/element..."
+    (cd packages/element && rm -rf dist && node ../../scripts/buildBase.js)
+
+    echo "  Building @excalidraw/excalidraw..."
+    (cd packages/excalidraw && rm -rf dist && node ../../scripts/buildPackage.js)
 else
     echo "Using existing package build from packages/excalidraw/dist/prod/"
 fi
