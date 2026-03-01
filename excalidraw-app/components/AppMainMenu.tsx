@@ -1,12 +1,17 @@
-import React from "react";
 import {
   loginIcon,
   ExcalLogo,
   eyeIcon,
 } from "@excalidraw/excalidraw/components/icons";
-import type { Theme } from "@excalidraw/excalidraw/element/types";
 import { MainMenu } from "@excalidraw/excalidraw/index";
+import React from "react";
+
+import { isDevEnv } from "@excalidraw/common";
+
+import type { Theme } from "@excalidraw/element/types";
+
 import { isExcalidrawPlusSignedUser } from "../app_constants";
+
 import { saveDebugState } from "./DebugCanvas";
 
 export const AppMainMenu: React.FC<{
@@ -53,10 +58,10 @@ export const AppMainMenu: React.FC<{
       >
         {isExcalidrawPlusSignedUser ? "Sign in" : "Sign up"}
       </MainMenu.ItemLink>
-      {import.meta.env.DEV && (
+      {isDevEnv() && (
         <MainMenu.Item
           icon={eyeIcon}
-          onClick={() => {
+          onSelect={() => {
             if (window.visualDebug) {
               delete window.visualDebug;
               saveDebugState({ enabled: false });
@@ -71,6 +76,7 @@ export const AppMainMenu: React.FC<{
         </MainMenu.Item>
       )}
       <MainMenu.Separator /> */}
+      <MainMenu.DefaultItems.Preferences />
       <MainMenu.DefaultItems.ToggleTheme
         allowSystemTheme
         theme={props.theme}
