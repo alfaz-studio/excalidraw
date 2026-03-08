@@ -5,22 +5,35 @@ set -e
 
 echo "Building Excalidraw for Jitsi Meet..."
 
-# Check if the package dist exists
-if [ ! -f "packages/excalidraw/dist/prod/index.js" ]; then
-    echo "Package dist not found. Building packages (esbuild only, skipping type generation)..."
+# Build sub-packages if any are missing (needed as external deps by the main bundle)
+if [ ! -f "packages/common/dist/prod/index.js" ] || \
+   [ ! -f "packages/math/dist/prod/index.js" ] || \
+   [ ! -f "packages/element/dist/prod/index.js" ]; then
+    echo "Building sub-packages (esbuild only, skipping type generation)..."
 
     # Build each package using esbuild directly (skip gen:types which has
     # upstream TS2717 duplicate-declaration errors we don't need to fix).
-    echo "  Building @excalidraw/common..."
-    (cd packages/common && rm -rf dist && node ../../scripts/buildBase.js)
+    if [ ! -f "packages/common/dist/prod/index.js" ]; then
+        echo "  Building @excalidraw/common..."
+        (cd packages/common && rm -rf dist && node ../../scripts/buildBase.js)
+    fi
 
-    echo "  Building @excalidraw/math..."
-    (cd packages/math && rm -rf dist && node ../../scripts/buildBase.js)
+    if [ ! -f "packages/math/dist/prod/index.js" ]; then
+        echo "  Building @excalidraw/math..."
+        (cd packages/math && rm -rf dist && node ../../scripts/buildBase.js)
+    fi
 
-    echo "  Building @excalidraw/element..."
-    (cd packages/element && rm -rf dist && node ../../scripts/buildBase.js)
+    if [ ! -f "packages/element/dist/prod/index.js" ]; then
+        echo "  Building @excalidraw/element..."
+        (cd packages/element && rm -rf dist && node ../../scripts/buildBase.js)
+    fi
+else
+    echo "Sub-packages already built."
+fi
 
-    echo "  Building @excalidraw/excalidraw..."
+# Build main excalidraw package if missing
+if [ ! -f "packages/excalidraw/dist/prod/index.js" ]; then
+    echo "Building @excalidraw/excalidraw..."
     (cd packages/excalidraw && rm -rf dist && node ../../scripts/buildPackage.js)
 else
     echo "Using existing package build from packages/excalidraw/dist/prod/"
