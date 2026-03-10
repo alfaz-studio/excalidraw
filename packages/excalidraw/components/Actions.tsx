@@ -74,6 +74,7 @@ import {
   laserPointerToolIcon,
   // MagicIcon,
   LassoIcon,
+  toggleLayoutIcon,
   sharpArrowIcon,
   roundArrowIcon,
   elbowArrowIcon,
@@ -1334,6 +1335,18 @@ export const ShapesSwitcher = ({
           )} */}
           </>
           )}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            onSelect={() => {
+              document.dispatchEvent(
+                new CustomEvent("anno-toggle-layout"),
+              );
+            }}
+            icon={toggleLayoutIcon}
+            data-testid="toolbar-toggle-layout"
+          >
+            Toggle layout
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
     </>
