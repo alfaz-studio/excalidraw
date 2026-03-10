@@ -667,8 +667,9 @@ export interface IMeetingDetails {
   sessionId: string;
   roomJid: string;
   jwt: string;
-  jid: string;
+  jid?: string;
   token?: string;
+  sceneType?: "whiteboard" | "annotation";
 }
 
 export type SceneData = {

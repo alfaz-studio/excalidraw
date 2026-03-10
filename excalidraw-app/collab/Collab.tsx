@@ -457,6 +457,14 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     decryptionKey: string,
   ): Promise<ValueOf<SocketUpdateDataSource>> => {
     try {
+      // Empty IV = plaintext (no encryption)
+      if (iv.byteLength === 0) {
+        const decodedData = new TextDecoder("utf-8").decode(
+          new Uint8Array(encryptedData),
+        );
+        return JSON.parse(decodedData);
+      }
+
       const decrypted = await decryptData(iv, encryptedData, decryptionKey);
 
       const decodedData = new TextDecoder("utf-8").decode(
@@ -540,12 +548,18 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.fallbackInitializationHandler = fallbackInitializationHandler;
 
     try {
+      const { meetingDetails } = this.props;
       this.portal.socket = this.portal.open(
         socketIOClient(import.meta.env.VITE_APP_WS_SERVER_URL, {
           transports: ["websocket", "polling"],
         }),
         roomId,
         roomKey,
+        meetingDetails ? {
+          meetingId: meetingDetails.sessionId,
+          roomName: meetingDetails.roomJid,
+          sceneType: meetingDetails.sceneType || "whiteboard",
+        } : undefined,
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
