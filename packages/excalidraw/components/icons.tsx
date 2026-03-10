@@ -1847,7 +1847,6 @@ export const extraToolsIcon = createIcon(
   tablerIconProps,
 );
 
-// tabler-icons: layout-columns (adapted for layout toggle)
 export const toggleLayoutIcon = createIcon(
   <g strokeWidth={1.5}>
     <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
