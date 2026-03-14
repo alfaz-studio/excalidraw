@@ -1333,9 +1333,9 @@ export const ShapesSwitcher = ({
           );
         },
       )}
-      <div className="App-toolbar__divider" />
-
       {UIOptions.canvasActions.groupShapes !== false && (
+      <>
+      <div className="App-toolbar__divider" />
       <ToolPopover
         key="shape-popover"
         app={app}
@@ -1356,6 +1356,7 @@ export const ShapesSwitcher = ({
         }}
         fillable={true}
       />
+      </>
       )}
 
       <DropdownMenu open={isExtraToolsMenuOpen}>
