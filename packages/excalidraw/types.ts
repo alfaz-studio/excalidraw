@@ -718,6 +718,7 @@ export type CanvasActions = Partial<{
   hideTextAlign?: boolean
   hideArrowHeadsOptions?: boolean;
   hideColorInput?: boolean;
+  groupShapes?: boolean;
   hideEmbedableTools?: boolean;
   hideIOActions?: boolean;
   hideLaserOnCollaboration?: boolean;

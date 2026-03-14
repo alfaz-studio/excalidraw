@@ -1209,7 +1209,7 @@ export const ShapesSwitcher = ({
           }
 
           // ── Shape group rendered outside .map(), skip here ──
-          if (GROUPED_SHAPE_TYPES.has(value)) {
+          if (GROUPED_SHAPE_TYPES.has(value) && UIOptions.canvasActions.groupShapes !== false) {
             return null;
           }
 
@@ -1335,6 +1335,7 @@ export const ShapesSwitcher = ({
       )}
       <div className="App-toolbar__divider" />
 
+      {UIOptions.canvasActions.groupShapes !== false && (
       <ToolPopover
         key="shape-popover"
         app={app}
@@ -1355,6 +1356,7 @@ export const ShapesSwitcher = ({
         }}
         fillable={true}
       />
+      )}
 
       <DropdownMenu open={isExtraToolsMenuOpen}>
         <DropdownMenu.Trigger
