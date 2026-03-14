@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Popover } from "radix-ui";
 
 import {
@@ -74,6 +74,7 @@ import {
   laserPointerToolIcon,
   // MagicIcon,
   LassoIcon,
+  toggleLayoutIcon,
   sharpArrowIcon,
   roundArrowIcon,
   elbowArrowIcon,
@@ -81,6 +82,12 @@ import {
   adjustmentsIcon,
   DotsHorizontalIcon,
   SelectionIcon,
+  RectangleIcon,
+  DiamondIcon,
+  EllipseIcon,
+  ShapesIcon,
+  ArrowIcon,
+  LineIcon,
   pencilIcon,
 } from "./icons";
 
@@ -1101,6 +1108,65 @@ export const ShapesSwitcher = ({
     },
   ] as const;
 
+  const SHAPE_TOOLS = [
+    {
+      type: "rectangle",
+      icon: RectangleIcon,
+      title: capitalizeString(t("toolBar.rectangle")),
+    },
+    {
+      type: "diamond",
+      icon: DiamondIcon,
+      title: capitalizeString(t("toolBar.diamond")),
+    },
+    {
+      type: "ellipse",
+      icon: EllipseIcon,
+      title: capitalizeString(t("toolBar.ellipse")),
+    },
+  ] as const;
+
+  const LINEAR_TOOLS = [
+    {
+      type: "arrow",
+      icon: ArrowIcon,
+      title: capitalizeString(t("toolBar.arrow")),
+    },
+    {
+      type: "line",
+      icon: LineIcon,
+      title: capitalizeString(t("toolBar.line")),
+    },
+  ] as const;
+
+  // Track which shape/linear tool was last used so the popover shows the right default
+  const [lastActiveShape, setLastActiveShape] = useState<
+    "rectangle" | "diamond" | "ellipse"
+  >("rectangle");
+  const [lastActiveLinear, setLastActiveLinear] = useState<
+    "arrow" | "line"
+  >("arrow");
+
+  useEffect(() => {
+    if (
+      activeTool.type === "rectangle" ||
+      activeTool.type === "diamond" ||
+      activeTool.type === "ellipse"
+    ) {
+      setLastActiveShape(activeTool.type);
+    }
+  }, [activeTool.type]);
+
+  useEffect(() => {
+    if (activeTool.type === "arrow" || activeTool.type === "line") {
+      setLastActiveLinear(activeTool.type);
+    }
+  }, [activeTool.type]);
+
+  // Tools that get grouped into popovers
+  const GROUPED_SHAPE_TYPES = new Set(["rectangle", "diamond", "ellipse"]);
+  const GROUPED_LINEAR_TYPES = new Set(["arrow", "line"]);
+
   const frameToolSelected = activeTool.type === "frame";
   const laserToolSelected = activeTool.type === "laser";
   const lassoToolSelected =
@@ -1113,6 +1179,9 @@ export const ShapesSwitcher = ({
   // const { TTDDialogTriggerTunnel } = useTunnels();
 
   const hasStorageBackend = Boolean(app.props.storageBackendUrl);
+
+  // Track whether we've already rendered the linear popover group
+  let linearPopoverRendered = false;
 
   return (
     <>
@@ -1137,6 +1206,41 @@ export const ShapesSwitcher = ({
             ] === false
           ) {
             return null;
+          }
+
+          // ── Shape group rendered outside .map(), skip here ──
+          if (GROUPED_SHAPE_TYPES.has(value)) {
+            return null;
+          }
+
+          // ── Linear tools popover (arrow, line) ──
+          if (GROUPED_LINEAR_TYPES.has(value)) {
+            if (linearPopoverRendered) {
+              return null;
+            }
+            linearPopoverRendered = true;
+
+            return (
+              <ToolPopover
+                key="linear-popover"
+                app={app}
+                options={LINEAR_TOOLS}
+                activeTool={activeTool}
+                defaultOption={lastActiveLinear}
+                namePrefix="linearType"
+                title={capitalizeString(t("toolBar.arrow"))}
+                data-testid="toolbar-linear"
+                onToolChange={(type: string) => {
+                  app.setActiveTool({ type: type as any });
+                }}
+                displayedOption={
+                  LINEAR_TOOLS.find(
+                    (tool) => tool.type === lastActiveLinear,
+                  ) || LINEAR_TOOLS[0]
+                }
+                fillable={true}
+              />
+            );
           }
 
           const label = t(`toolBar.${value}`);
@@ -1230,6 +1334,27 @@ export const ShapesSwitcher = ({
         },
       )}
       <div className="App-toolbar__divider" />
+
+      <ToolPopover
+        key="shape-popover"
+        app={app}
+        options={SHAPE_TOOLS}
+        activeTool={activeTool}
+        defaultOption={lastActiveShape}
+        wrapperClassName="tool-popover--shape"
+        namePrefix="shapeType"
+        title="Shapes"
+        data-testid="toolbar-shapes"
+        onToolChange={(type: string) => {
+          app.setActiveTool({ type: type as any });
+        }}
+        displayedOption={{
+          type: lastActiveShape,
+          icon: ShapesIcon,
+          title: "Shapes",
+        }}
+        fillable={true}
+      />
 
       <DropdownMenu open={isExtraToolsMenuOpen}>
         <DropdownMenu.Trigger
@@ -1334,8 +1459,21 @@ export const ShapesSwitcher = ({
           )} */}
           </>
           )}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            onSelect={() => {
+              document.dispatchEvent(
+                new CustomEvent("anno-toggle-layout"),
+              );
+            }}
+            icon={toggleLayoutIcon}
+            data-testid="toolbar-toggle-layout"
+          >
+            Toggle layout
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
+      <div className="App-toolbar__divider App-toolbar__shapes-divider" />
     </>
   );
 };

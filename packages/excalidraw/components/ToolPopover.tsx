@@ -27,6 +27,7 @@ type ToolPopoverProps = {
   activeTool: { type: string };
   defaultOption: string;
   className?: string;
+  wrapperClassName?: string;
   namePrefix: string;
   title: string;
   "data-testid": string;
@@ -41,6 +42,7 @@ export const ToolPopover = ({
   activeTool,
   defaultOption,
   className = "Shape",
+  wrapperClassName,
   namePrefix,
   title,
   "data-testid": dataTestId,
@@ -54,10 +56,16 @@ export const ToolPopover = ({
   const SIDE_OFFSET = 32 / 2 + 10;
   const { container } = useExcalidrawContainer();
 
-  // if currentType is not in options, close popup
-  if (!options.some((o) => o.type === currentType) && isPopupOpen) {
-    setIsPopupOpen(false);
-  }
+  // Close popup when user actively switches to a tool outside this group
+  const prevType = React.useRef(currentType);
+  useEffect(() => {
+    if (prevType.current !== currentType) {
+      prevType.current = currentType;
+      if (isPopupOpen && !options.some((o) => o.type === currentType)) {
+        setIsPopupOpen(false);
+      }
+    }
+  }, [currentType]);
 
   // Close popover when user starts interacting with the canvas (pointer down)
   useEffect(() => {
@@ -68,7 +76,7 @@ export const ToolPopover = ({
     return () => unsubscribe?.();
   }, [app]);
 
-  return (
+  const popover = (
     <Popover.Root open={isPopupOpen}>
       <Popover.Trigger asChild>
         <ToolButton
@@ -85,7 +93,6 @@ export const ToolPopover = ({
           data-testid={dataTestId}
           onPointerDown={() => {
             setIsPopupOpen((v) => !v);
-            onToolChange(defaultOption);
           }}
         />
       </Popover.Trigger>
@@ -121,4 +128,9 @@ export const ToolPopover = ({
       </Popover.Content>
     </Popover.Root>
   );
+
+  if (wrapperClassName) {
+    return <div className={wrapperClassName}>{popover}</div>;
+  }
+  return popover;
 };
