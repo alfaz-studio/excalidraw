@@ -343,6 +343,7 @@ export const DEFAULT_UI_OPTIONS: AppProps["UIOptions"] = {
     hideTextAlign: false,
     hideArrowHeadsOptions: false,
     hideColorInput: false,
+    groupShapes: true,
     hideEmbedableTools: false,
     hideIOActions: false,
     hideLaserOnCollaboration: false,

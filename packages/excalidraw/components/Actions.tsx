@@ -1209,7 +1209,7 @@ export const ShapesSwitcher = ({
           }
 
           // ── Shape group rendered outside .map(), skip here ──
-          if (GROUPED_SHAPE_TYPES.has(value)) {
+          if (GROUPED_SHAPE_TYPES.has(value) && UIOptions.canvasActions.groupShapes !== false) {
             return null;
           }
 
@@ -1333,28 +1333,31 @@ export const ShapesSwitcher = ({
           );
         },
       )}
-      <div className="App-toolbar__divider" />
-
-      <ToolPopover
-        key="shape-popover"
-        app={app}
-        options={SHAPE_TOOLS}
-        activeTool={activeTool}
-        defaultOption={lastActiveShape}
-        wrapperClassName="tool-popover--shape"
-        namePrefix="shapeType"
-        title="Shapes"
-        data-testid="toolbar-shapes"
-        onToolChange={(type: string) => {
-          app.setActiveTool({ type: type as any });
-        }}
-        displayedOption={{
-          type: lastActiveShape,
-          icon: ShapesIcon,
-          title: "Shapes",
-        }}
-        fillable={true}
-      />
+      {UIOptions.canvasActions.groupShapes !== false && (
+        <>
+          <div className="App-toolbar__divider" />
+          <ToolPopover
+            key="shape-popover"
+            app={app}
+            options={SHAPE_TOOLS}
+            activeTool={activeTool}
+            defaultOption={lastActiveShape}
+            wrapperClassName="tool-popover--shape"
+            namePrefix="shapeType"
+            title="Shapes"
+            data-testid="toolbar-shapes"
+            onToolChange={(type: string) => {
+              app.setActiveTool({ type: type as any });
+            }}
+            displayedOption={{
+              type: lastActiveShape,
+              icon: ShapesIcon,
+              title: "Shapes",
+            }}
+            fillable={true}
+          />
+        </>
+      )}
 
       <DropdownMenu open={isExtraToolsMenuOpen}>
         <DropdownMenu.Trigger
