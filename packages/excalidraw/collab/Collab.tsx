@@ -466,6 +466,14 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     decryptionKey: string,
   ): Promise<ValueOf<SocketUpdateDataSource>> => {
     try {
+      // Empty IV = plaintext (no encryption)
+      if (iv.byteLength === 0) {
+        const decodedData = new TextDecoder("utf-8").decode(
+          new Uint8Array(encryptedData),
+        );
+        return JSON.parse(decodedData);
+      }
+
       const decrypted = await decryptData(
         iv as Uint8Array<ArrayBuffer>,
         encryptedData,
@@ -561,6 +569,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.fallbackInitializationHandler = fallbackInitializationHandler;
 
     try {
+      const { meetingDetails } = this.props;
       this.portal.socket = this.portal.open(
         socketIOClient(this.props.collabServerUrl || "", {
           transports: ["websocket", "polling"],
@@ -570,6 +579,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         }),
         roomId,
         roomKey,
+        meetingDetails ? {
+          meetingId: meetingDetails.sessionId,
+          roomName: meetingDetails.roomJid,
+          sceneType: meetingDetails.sceneType || "whiteboard",
+        } : undefined,
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);

@@ -1,6 +1,5 @@
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
-import { encryptData } from "@excalidraw/excalidraw/data/encryption";
 import { newElementWith } from "@excalidraw/element";
 import throttle from "lodash.throttle";
 
@@ -22,12 +21,19 @@ import type {
 import type { TCollabClass } from "./Collab";
 import type { Socket } from "socket.io-client";
 
+export interface RoomMetadata {
+  meetingId?: string;
+  roomName?: string;
+  sceneType?: "whiteboard" | "annotation";
+}
+
 class Portal {
   collab: TCollabClass;
   socket: Socket | null = null;
   socketInitialized: boolean = false; // we don't want the socket to emit any updates until it is fully initialized
   roomId: string | null = null;
   roomKey: string | null = null;
+  roomMetadata: RoomMetadata | null = null;
   broadcastedElementVersions: Map<string, number> = new Map();
   pendingBroadcasts: Array<() => Promise<void>> = []; // queue broadcasts until socket is initialized
 
@@ -35,15 +41,16 @@ class Portal {
     this.collab = collab;
   }
 
-  open(socket: Socket, id: string, key: string) {
+  open(socket: Socket, id: string, key: string, metadata?: RoomMetadata) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
+    this.roomMetadata = metadata ?? null;
 
     // Initialize socket listeners
     this.socket.on("init-room", () => {
       if (this.socket) {
-        this.socket.emit("join-room", this.roomId);
+        this.socket.emit("join-room", this.roomId, this.roomMetadata ?? {});
         trackEvent("share", "room joined");
       }
     });
@@ -70,6 +77,7 @@ class Portal {
     this.socket = null;
     this.roomId = null;
     this.roomKey = null;
+    this.roomMetadata = null;
     this.socketInitialized = false;
     this.broadcastedElementVersions = new Map();
     this.pendingBroadcasts = [];
@@ -93,13 +101,15 @@ class Portal {
       if (this.socket && this.roomId && this.roomKey) {
         const json = JSON.stringify(data);
         const encoded = new TextEncoder().encode(json);
-        const { encryptedBuffer, iv } = await encryptData(this.roomKey, encoded);
+        // Send plaintext with empty IV sentinel — server needs to read messages
+        // for scene persistence. Encryption is disabled.
+        const emptyIV = new Uint8Array(0);
 
         this.socket.emit(
           volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
           roomId ?? this.roomId,
-          encryptedBuffer,
-          iv,
+          encoded,
+          emptyIV,
         );
       }
     };
