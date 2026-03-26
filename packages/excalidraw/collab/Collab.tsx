@@ -336,8 +336,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       if (this.isCollaborating()) {
         this.handleRemoteSceneUpdate(this._reconcileElements(storedElements));
       }
-    } catch {
-      // error handling removed — previously computed errorMessage but never used it
+    } catch (error) {
+      console.error("Failed to save collab room:", error);
     }
   };
 

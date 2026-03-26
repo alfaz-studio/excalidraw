@@ -82,6 +82,15 @@ export const loadStorage = async () => {
   return _getBackendApi();
 };
 
+const _getAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {};
+  const token = _getToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+};
+
 // Helper function to upload files using Multer
 const uploadFilesWithMulter = async (
   prefix: string,
@@ -122,15 +131,9 @@ const uploadFilesWithMulter = async (
       });
       formData.append("file", blob, id);
 
-      const headers: Record<string, string> = {};
-      const token = _getToken();
-      if (token) {
-        headers.Authorization = `Bearer ${token}`;
-      }
-
       const response = await fetch(url, {
         method: "POST",
-        headers,
+        headers: _getAuthHeaders(),
         body: formData,
       });
 
@@ -180,11 +183,7 @@ const downloadFilesFromBackend = async (
   const loadedFiles: Array<{ id: FileId; buffer: Uint8Array }> = [];
   const erroredFiles: FileId[] = [];
 
-  const headers: Record<string, string> = {};
-  const token = _getToken();
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+  const headers = _getAuthHeaders();
 
   await Promise.all(
     [...new Set(fileIds)].map(async (id) => {

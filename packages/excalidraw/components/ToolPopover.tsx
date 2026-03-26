@@ -65,7 +65,8 @@ export const ToolPopover = ({
         setIsPopupOpen(false);
       }
     }
-  }, [currentType, isPopupOpen, options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentType]);
 
   // Close popover when user starts interacting with the canvas (pointer down)
   useEffect(() => {

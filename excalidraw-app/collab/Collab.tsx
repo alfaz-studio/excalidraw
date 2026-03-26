@@ -334,8 +334,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           ),
         );
       }
-    } catch {
-      // error handling removed — previously computed errorMessage but never used it
+    } catch (error) {
+      console.error("Failed to save collab room:", error);
     }
   };
 
