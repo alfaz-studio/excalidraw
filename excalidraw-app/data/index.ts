@@ -266,15 +266,10 @@ export const loadScene = async (
     };
   } else {
     data = {
-      elements: restoreElements(
-        localDataState?.elements,
-        null,
-        { repairBindings: true },
-      ),
-      appState: restoreAppState(
-        localDataState?.appState,
-        null,
-      ),
+      elements: restoreElements(localDataState?.elements, null, {
+        repairBindings: true,
+      }),
+      appState: restoreAppState(localDataState?.appState, null),
       files: localDataState?.files || {},
     };
   }

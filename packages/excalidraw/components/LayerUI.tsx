@@ -186,7 +186,10 @@ const LayerUI = ({
   const [eyeDropperState, setEyeDropperState] = useAtom(activeEyeDropperAtom);
 
   const renderJSONExportDialog = () => {
-    if (!UIOptions.canvasActions.export || UIOptions.canvasActions.hideIOActions) {
+    if (
+      !UIOptions.canvasActions.export ||
+      UIOptions.canvasActions.hideIOActions
+    ) {
       return null;
     }
 
@@ -337,12 +340,12 @@ const LayerUI = ({
                           })}
                         >
                           {!UIOptions.canvasActions.disableHints && (
-                          <HintViewer
-                            appState={appState}
-                            isMobile={editorInterface.formFactor === "phone"}
-                            editorInterface={editorInterface}
-                            app={app}
-                          />
+                            <HintViewer
+                              appState={appState}
+                              isMobile={editorInterface.formFactor === "phone"}
+                              editorInterface={editorInterface}
+                              app={app}
+                            />
                           )}
                           {heading}
                           <Stack.Row gap={spacing.toolbarInnerRowGap}>
@@ -353,48 +356,50 @@ const LayerUI = ({
                               title={t("toolBar.penMode")}
                               penDetected={appState.penDetected}
                             />
-                            {
-                              !UIOptions.canvasActions.hideLockButton && (
-                            <LockButton
-                              checked={appState.activeTool.locked}
-                              onChange={onLockToggle}
-                              title={t("toolBar.lock")}
-                            />
-                            ) && (
-                              <div className="App-toolbar__divider" />
-                            )}
+                            {!UIOptions.canvasActions.hideLockButton && (
+                                <LockButton
+                                  checked={appState.activeTool.locked}
+                                  onChange={onLockToggle}
+                                  title={t("toolBar.lock")}
+                                />
+                              ) && <div className="App-toolbar__divider" />}
 
                             <ShapesSwitcher
-                              allowedShapes={UIOptions.canvasActions.allowedShapes}
+                              allowedShapes={
+                                UIOptions.canvasActions.allowedShapes
+                              }
                               appState={appState}
                               setAppState={setAppState}
                               activeTool={appState.activeTool}
                               UIOptions={UIOptions}
                               app={app}
-                              disableShortcuts={UIOptions.canvasActions.disableShortcuts}
+                              disableShortcuts={
+                                UIOptions.canvasActions.disableShortcuts
+                              }
                             />
                           </Stack.Row>
                         </Island>
-                        {!UIOptions.canvasActions.hideLaserOnCollaboration && isCollaborating && (
-                          <Island
-                            style={{
-                              marginLeft: spacing.collabMarginLeft,
-                              alignSelf: "center",
-                              height: "fit-content",
-                            }}
-                          >
-                            <LaserPointerButton
-                              title={t("toolBar.laser")}
-                              checked={
-                                appState.activeTool.type === TOOL_TYPE.laser
-                              }
-                              onChange={() =>
-                                app.setActiveTool({ type: TOOL_TYPE.laser })
-                              }
-                              isMobile
-                            />
-                          </Island>
-                        )}
+                        {!UIOptions.canvasActions.hideLaserOnCollaboration &&
+                          isCollaborating && (
+                            <Island
+                              style={{
+                                marginLeft: spacing.collabMarginLeft,
+                                alignSelf: "center",
+                                height: "fit-content",
+                              }}
+                            >
+                              <LaserPointerButton
+                                title={t("toolBar.laser")}
+                                checked={
+                                  appState.activeTool.type === TOOL_TYPE.laser
+                                }
+                                onChange={() =>
+                                  app.setActiveTool({ type: TOOL_TYPE.laser })
+                                }
+                                isMobile
+                              />
+                            </Island>
+                          )}
                       </Stack.Row>
                     </Stack.Col>
                   </div>
@@ -410,12 +415,13 @@ const LayerUI = ({
               },
             )}
           >
-            {!UIOptions.canvasActions.hideUserList && appState.collaborators.size > 0 && (
-              <UserList
-                collaborators={appState.collaborators}
-                userToFollow={appState.userToFollow?.socketId || null}
-              />
-            )}
+            {!UIOptions.canvasActions.hideUserList &&
+              appState.collaborators.size > 0 && (
+                <UserList
+                  collaborators={appState.collaborators}
+                  userToFollow={appState.userToFollow?.socketId || null}
+                />
+              )}
             {renderTopRightUI?.(
               editorInterface.formFactor === "phone",
               appState,
@@ -472,25 +478,25 @@ const LayerUI = ({
         have defaults when host do not render anything. */}
       <DefaultMainMenu UIOptions={UIOptions} />
       {!UIOptions.canvasActions.hideLibraries && (
-      <DefaultSidebar.Trigger
-        __fallback
-        icon={sidebarRightIcon}
-        title={capitalizeString(t("toolBar.library"))}
-        onToggle={(open) => {
-          if (open) {
-            trackEvent(
-              "sidebar",
-              `${DEFAULT_SIDEBAR.name} (open)`,
-              `button (${
-                editorInterface.formFactor === "phone" ? "mobile" : "desktop"
-              })`,
-            );
-          }
-        }}
-        tab={DEFAULT_SIDEBAR.defaultTab}
-      >
-        {t("toolBar.library")}
-      </DefaultSidebar.Trigger>
+        <DefaultSidebar.Trigger
+          __fallback
+          icon={sidebarRightIcon}
+          title={capitalizeString(t("toolBar.library"))}
+          onToggle={(open) => {
+            if (open) {
+              trackEvent(
+                "sidebar",
+                `${DEFAULT_SIDEBAR.name} (open)`,
+                `button (${
+                  editorInterface.formFactor === "phone" ? "mobile" : "desktop"
+                })`,
+              );
+            }
+          }}
+          tab={DEFAULT_SIDEBAR.defaultTab}
+        >
+          {t("toolBar.library")}
+        </DefaultSidebar.Trigger>
       )}
       <DefaultOverwriteConfirmDialog />
       {appState.openDialog?.name === "ttd" && <TTDDialog __fallback />}

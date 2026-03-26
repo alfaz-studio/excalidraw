@@ -334,29 +334,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           ),
         );
       }
-    } catch (error: any) {
-      const errorMessage = /is longer than.*?bytes/.test(error.message)
-        ? t("errors.collabSaveFailed_sizeExceeded")
-        : t("errors.collabSaveFailed");
-
-      // if (
-      //   !this.state.dialogNotifiedErrors[errorMessage] ||
-      //   !this.isCollaborating()
-      // ) {
-      //   this.setErrorDialog(errorMessage);
-      //   this.setState({
-      //     dialogNotifiedErrors: {
-      //       ...this.state.dialogNotifiedErrors,
-      //       [errorMessage]: true,
-      //     },
-      //   });
-      // }
-
-      // if (this.isCollaborating()) {
-      //   this.setErrorIndicator(errorMessage);
-      // }
-
-      // console.error(error);
+    } catch (error) {
+      console.error("Failed to save collab room:", error);
     }
   };
 
@@ -511,17 +490,27 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
 
     // Initializing storage backend if storageBackendUrl & jwt are provided
-    const { storageBackendUrl , meetingDetails } = this.props;
+    const { storageBackendUrl, meetingDetails } = this.props;
     // Session Id is required to initialize the storage backend
-    if (storageBackendUrl && meetingDetails?.sessionId && meetingDetails.token) {
+    if (
+      storageBackendUrl &&
+      meetingDetails?.sessionId &&
+      meetingDetails.token
+    ) {
       try {
         initializeBackend(storageBackendUrl, meetingDetails);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Failed to initialize storage backend:", error);
-        this.setErrorDialog(`Storage initialization failed: ${error.message}`);
+        this.setErrorDialog(
+          `Storage initialization failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     } else {
-      console.error("Storage not initialized: missing storage backend configuration");
+      console.error(
+        "Storage not initialized: missing storage backend configuration",
+      );
     }
 
     // TODO: `ImportedDataState` type here seems abused
@@ -555,17 +544,21 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         }),
         roomId,
         roomKey,
-        meetingDetails ? {
-          meetingId: meetingDetails.sessionId,
-          roomName: meetingDetails.roomJid,
-          sceneType: meetingDetails.sceneType || "whiteboard",
-        } : undefined,
+        meetingDetails
+          ? {
+              meetingId: meetingDetails.sessionId,
+              roomName: meetingDetails.roomJid,
+              sceneType: meetingDetails.sceneType || "whiteboard",
+            }
+          : undefined,
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      this.setErrorDialog(error.message);
+      this.setErrorDialog(
+        error instanceof Error ? error.message : String(error),
+      );
       return null;
     }
 
@@ -774,7 +767,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             scrollToContent: true,
           };
         }
-      } catch (error: any) {
+      } catch (error) {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {

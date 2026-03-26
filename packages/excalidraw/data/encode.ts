@@ -305,10 +305,7 @@ const _encryptAndCompress = async (
     return { iv: new Uint8Array(0), buffer: new Uint8Array(compressed) };
   }
 
-  const { encryptedBuffer, iv } = await encryptData(
-    encryptionKey,
-    compressed,
-  );
+  const { encryptedBuffer, iv } = await encryptData(encryptionKey, compressed);
 
   return { iv, buffer: new Uint8Array(encryptedBuffer) };
 };
@@ -373,9 +370,7 @@ const _decryptAndDecompress = async (
   let data: Uint8Array = buffer;
 
   if (isEncrypted) {
-    data = new Uint8Array(
-      await decryptData(iv, buffer, decryptionKey),
-    );
+    data = new Uint8Array(await decryptData(iv, buffer, decryptionKey));
   }
 
   if (isCompressed) {

@@ -1,18 +1,22 @@
 /**
  * @fileoverview Storage module for Excalidraw data persistence with external Jitsi backend.
- * 
+ *
  * Handles encrypted scene storage, file management, and real-time collaboration
  * through JWT-authenticated API calls to the external backend service.
  */
 import { reconcileElements } from "@excalidraw/excalidraw";
-import type {
-  ExcalidrawElement,
-  FileId,
-  OrderedExcalidrawElement,
-} from "@excalidraw/element/types";
+
 import { getSceneVersion } from "@excalidraw/element";
-import type Portal from "../collab/Portal";
+
 import { restoreElements } from "@excalidraw/excalidraw/data/restore";
+
+import { decompressData } from "@excalidraw/excalidraw/data/encode";
+import {
+  encryptData,
+  decryptData,
+} from "@excalidraw/excalidraw/data/encryption";
+import { MIME_TYPES } from "@excalidraw/common";
+
 import type {
   AppState,
   BinaryFileData,
@@ -20,29 +24,35 @@ import type {
   DataURL,
   IMeetingDetails,
 } from "@excalidraw/excalidraw/types";
-import { FILE_CACHE_MAX_AGE_SEC } from "../app_constants";
-import { decompressData } from "@excalidraw/excalidraw/data/encode";
-import {
-  encryptData,
-  decryptData,
-} from "@excalidraw/excalidraw/data/encryption";
-import { MIME_TYPES } from "@excalidraw/common";
-import type { SyncableExcalidrawElement } from ".";
-import { getSyncableElements } from ".";
-import type { Socket } from "socket.io-client";
+import type {
+  ExcalidrawElement,
+  FileId,
+  OrderedExcalidrawElement,
+} from "@excalidraw/element/types";
+
 import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
 
+import { getSyncableElements } from ".";
+
+import type { Socket } from "socket.io-client";
+
+import type { SyncableExcalidrawElement } from ".";
+import type Portal from "../collab/Portal";
+
 const BACKEND_CONFIG = {
-  baseUrl: import.meta.env.VITE_APP_STORAGE_BACKEND_URL || "http://localhost:3000",
+  baseUrl:
+    import.meta.env.VITE_APP_STORAGE_BACKEND_URL || "http://localhost:3000",
   apiPrefix: import.meta.env.VITE_APP_STORAGE_API_PREFIX || "/api/file-sharing",
 };
 
 let backendApi: { baseUrl: string; apiPrefix: string } | null = null;
 let meetingDetailsCache: IMeetingDetails | null = null; // Cache for meeting details
 
-
 // Initialize backend configuration with storageBackendUrl & meetingDetails (Token comes from meetingDetails)
-export const initializeBackend = (storageBackendUrl?: string, meetingDetails?: IMeetingDetails) => {
+export const initializeBackend = (
+  storageBackendUrl?: string,
+  meetingDetails?: IMeetingDetails,
+) => {
   backendApi = {
     baseUrl: storageBackendUrl || BACKEND_CONFIG.baseUrl,
     apiPrefix: BACKEND_CONFIG.apiPrefix,
@@ -72,35 +82,20 @@ export const loadStorage = async () => {
   return _getBackendApi();
 };
 
-// Backend API helper functions
-const apiCall = async (endpoint: string, options: RequestInit = {}) => {
-  const api = _getBackendApi();
-  const url = `${api.baseUrl}${api.apiPrefix}${endpoint}`;
-  
-  // Adding token to headers if available
-  const headers: Record<string, string> = {
-    ...options.headers as Record<string, string>,
-  };
-  
+const _getAuthHeaders = (): Record<string, string> => {
+  const headers: Record<string, string> = {};
   const token = _getToken();
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
-    
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new Error(`API call failed: ${response.status} ${response.statusText}`);
-  }
-
-  return response;
+  return headers;
 };
 
 // Helper function to upload files using Multer
-const uploadFilesWithMulter = async (prefix: string, files: { id: FileId; buffer: Uint8Array }[]): Promise<{ savedFiles: FileId[]; erroredFiles: FileId[] }> => {
+const uploadFilesWithMulter = async (
+  prefix: string,
+  files: { id: FileId; buffer: Uint8Array }[],
+): Promise<{ savedFiles: FileId[]; erroredFiles: FileId[] }> => {
   if (!files || files.length === 0) {
     return { savedFiles: [], erroredFiles: [] };
   }
@@ -108,9 +103,9 @@ const uploadFilesWithMulter = async (prefix: string, files: { id: FileId; buffer
   const api = _getBackendApi();
   const meetingDetails = _getMeetingDetails();
   const baseUrl = `${api.baseUrl}${api.apiPrefix}`;
-  
+
   if (!meetingDetails?.sessionId || !meetingDetails?.roomJid) {
-    throw new Error('Missing required meeting details (sessionId or roomJid)');
+    throw new Error("Missing required meeting details (sessionId or roomJid)");
   }
 
   const savedFiles: FileId[] = [];
@@ -126,29 +121,27 @@ const uploadFilesWithMulter = async (prefix: string, files: { id: FileId; buffer
         fileId: id,
         fileSize: buffer.byteLength,
         timestamp: Date.now(),
-        prefix
+        prefix,
       };
 
       const formData = new FormData();
-      formData.append('metadata', JSON.stringify(fileMetaData));
-      const blob = new Blob([new Uint8Array(buffer)], { type: 'application/octet-stream' });
-      formData.append('file', blob, id);
-
-      const headers: Record<string, string> = {};
-      const token = _getToken();
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
+      formData.append("metadata", JSON.stringify(fileMetaData));
+      const blob = new Blob([new Uint8Array(buffer)], {
+        type: "application/octet-stream",
+      });
+      formData.append("file", blob, id);
 
       const response = await fetch(url, {
-        method: 'POST',
-        headers,
+        method: "POST",
+        headers: _getAuthHeaders(),
         body: formData,
       });
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        console.error(`Upload failed for file ${id}: ${response.status} ${response.statusText} ${text}`);
+        const text = await response.text().catch(() => "");
+        console.error(
+          `Upload failed for file ${id}: ${response.status} ${response.statusText} ${text}`,
+        );
         erroredFiles.push(id);
         continue;
       }
@@ -170,11 +163,11 @@ const uploadFilesWithMulter = async (prefix: string, files: { id: FileId; buffer
   return { savedFiles, erroredFiles };
 };
 
-
-
-  // Helper function to download files
-const downloadFilesFromBackend = async (prefix: string, fileIds: readonly FileId[]) => {
-  
+// Helper function to download files
+const downloadFilesFromBackend = async (
+  prefix: string,
+  fileIds: readonly FileId[],
+) => {
   // Early return if no files to download
   if (!fileIds || fileIds.length === 0) {
     return { loadedFiles: [], erroredFiles: [] };
@@ -183,18 +176,14 @@ const downloadFilesFromBackend = async (prefix: string, fileIds: readonly FileId
   const api = _getBackendApi();
   const baseUrl = `${api.baseUrl}${api.apiPrefix}`;
   const meetingDetails = _getMeetingDetails();
-  
+
   if (!meetingDetails?.sessionId || !meetingDetails?.roomJid) {
-    throw new Error('Missing required meeting details (sessionId or roomJid)');
+    throw new Error("Missing required meeting details (sessionId or roomJid)");
   }
   const loadedFiles: Array<{ id: FileId; buffer: Uint8Array }> = [];
   const erroredFiles: FileId[] = [];
 
-  const headers: Record<string, string> = {};
-  const token = _getToken();
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  const headers = _getAuthHeaders();
 
   await Promise.all(
     [...new Set(fileIds)].map(async (id) => {
@@ -202,7 +191,7 @@ const downloadFilesFromBackend = async (prefix: string, fileIds: readonly FileId
         const encodedFileId = encodeURIComponent(`${prefix}/${id}`);
         const url = `${baseUrl}/sessions/${meetingDetails.sessionId}/files/${encodedFileId}`;
         const response = await fetch(url, {
-          method: 'GET',
+          method: "GET",
           headers,
         });
 
@@ -217,7 +206,9 @@ const downloadFilesFromBackend = async (prefix: string, fileIds: readonly FileId
 
           const fileResponse = await fetch(data.presignedUrl);
           if (!fileResponse.ok) {
-            console.error(`Failed to download file from S3: ${id}, Status: ${fileResponse.status}`);
+            console.error(
+              `Failed to download file from S3: ${id}, Status: ${fileResponse.status}`,
+            );
             erroredFiles.push(id);
             return;
           }
@@ -229,13 +220,15 @@ const downloadFilesFromBackend = async (prefix: string, fileIds: readonly FileId
           });
         } else {
           erroredFiles.push(id);
-          console.error(`Failed to download file: ${id}, Status: ${response.status}`);
+          console.error(
+            `Failed to download file: ${id}, Status: ${response.status}`,
+          );
         }
-      } catch (error: any) {
+      } catch (error) {
         erroredFiles.push(id);
         console.error(`Error downloading file ${id}:`, error);
       }
-    })
+    }),
   );
 
   return { loadedFiles, erroredFiles };
@@ -339,7 +332,6 @@ export const saveFilesToStorage = async ({
   prefix: string;
   files: { id: FileId; buffer: Uint8Array }[];
 }) => {
-  
   if (!files || files.length === 0) {
     return { savedFiles: [], erroredFiles: [] };
   }
@@ -349,11 +341,10 @@ export const saveFilesToStorage = async ({
 
   try {
     const result = await uploadFilesWithMulter(prefix, files);
-    
+
     savedFiles.push(...(result.savedFiles || []));
     erroredFiles.push(...(result.erroredFiles || []));
-
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error uploading files to backend:", error);
     // Mark all files as errored if the API call fails
     files.forEach(({ id }) => erroredFiles.push(id));
@@ -375,51 +366,18 @@ const createStorageSceneDocument = async (
   } as StoredScene;
 };
 
-const getBackendDocument = async (roomId: string): Promise<StoredScene | null> => {
+// TODO: implement when backend scene persistence is ready
+const getBackendDocument = async (
+  _roomId: string,
+): Promise<StoredScene | null> => {
   return null;
-  try {
-    const response = await apiCall(`/scenes/${roomId}`, {
-      method: "GET",
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      // converting base64 back to BackendBytes
-      return {
-        sceneVersion: data.sceneVersion,
-        ciphertext: BackendBytes.fromBase64(data.ciphertext),
-        iv: BackendBytes.fromBase64(data.iv),
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error("Error loading scene document:", roomId, error);
-    return null;
-  }
 };
 
-const setBackendDocument = async (roomId: string, document: StoredScene): Promise<void> => {
-  
-  return ;
-  const serializedDoc = {
-    roomId,
-    sceneVersion: document.sceneVersion,
-    ciphertext: document.ciphertext.toBase64(), // converting to base64 for API transfer
-    iv: document.iv.toBase64(),
-  };
-
-  const response = await apiCall("/scenes", {
-    method: "POST",
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(serializedDoc),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to save scene: ${response.status} ${response.statusText}`);
-  }  
-};
+// TODO: implement when backend scene persistence is ready
+const setBackendDocument = async (
+  _roomId: string,
+  _document: StoredScene,
+): Promise<void> => {};
 
 // Backend transaction simulation - using simple read-modify-write
 const runBackendTransaction = async <T>(
@@ -443,7 +401,7 @@ export const saveToStorage = async (
     console.error("Cannot save to storage: missing required fields", {
       roomId: !!roomId,
       roomKey: !!roomKey,
-      socket: !!socket
+      socket: !!socket,
     });
     return null;
   }
@@ -498,11 +456,11 @@ export const loadFromStorage = async (
   socket: Socket | null,
 ): Promise<readonly SyncableExcalidrawElement[] | null> => {
   const storedScene = await getBackendDocument(roomId);
-  
+
   if (!storedScene) {
     return null;
   }
-  
+
   const elements = getSyncableElements(
     restoreElements(await decryptElements(storedScene, roomKey), null),
   );
@@ -527,8 +485,9 @@ export const loadFilesFromStorage = async (
   const erroredFiles = new Map<FileId, true>();
 
   try {
-    const { loadedFiles: downloadedFiles, erroredFiles: downloadErrors } = await downloadFilesFromBackend(prefix, filesIds);
-    
+    const { loadedFiles: downloadedFiles, erroredFiles: downloadErrors } =
+      await downloadFilesFromBackend(prefix, filesIds);
+
     await Promise.all(
       downloadedFiles.map(async ({ id, buffer }) => {
         try {
@@ -548,19 +507,18 @@ export const loadFilesFromStorage = async (
             created: metadata?.created || Date.now(),
             lastRetrieved: metadata?.created || Date.now(),
           });
-        } catch (error: any) {
+        } catch (error) {
           erroredFiles.set(id as FileId, true);
           console.error("Error processing file:", id, error);
         }
-      })
+      }),
     );
 
     // Marking errored files from backend
     downloadErrors.forEach((id) => {
       erroredFiles.set(id as FileId, true);
     });
-                                                          
-  } catch (error: any) {                                    
+  } catch (error) {
     // Marking all files as errored if the API call fails
     console.error("Error loading files from backend:", error);
     filesIds.forEach((id) => erroredFiles.set(id, true));

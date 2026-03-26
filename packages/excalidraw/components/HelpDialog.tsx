@@ -123,7 +123,13 @@ const ShortcutKey = (props: { children: React.ReactNode }) => (
   <kbd className="HelpDialog__key" {...props} />
 );
 
-export const HelpDialog = ({ onClose, hideLibraries }: { onClose?: () => void, hideLibraries?: boolean }) => {
+export const HelpDialog = ({
+  onClose,
+  hideLibraries,
+}: {
+  onClose?: () => void;
+  hideLibraries?: boolean;
+}) => {
   const handleClose = React.useCallback(() => {
     if (onClose) {
       onClose();
@@ -179,8 +185,8 @@ export const HelpDialog = ({ onClose, hideLibraries }: { onClose?: () => void, h
             <Shortcut label={t("toolBar.image")} shortcuts={[KEYS["9"]]} />
             {!hideLibraries && (
               <Shortcut
-              label={t("toolBar.eraser")}
-              shortcuts={[KEYS.E, KEYS["0"]]}
+                label={t("toolBar.eraser")}
+                shortcuts={[KEYS.E, KEYS["0"]]}
               />
             )}
             <Shortcut label={t("toolBar.frame")} shortcuts={[KEYS.F]} />

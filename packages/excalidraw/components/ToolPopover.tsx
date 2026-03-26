@@ -65,6 +65,8 @@ export const ToolPopover = ({
         setIsPopupOpen(false);
       }
     }
+    // Only re-run when the active tool type changes, not when options/isPopupOpen change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentType]);
 
   // Close popover when user starts interacting with the canvas (pointer down)

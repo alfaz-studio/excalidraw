@@ -319,12 +319,25 @@ export const URL_HASH_KEYS = {
 
 export const DEFAULT_UI_OPTIONS: AppProps["UIOptions"] = {
   canvasActions: {
-        allowedShapes: [
-            'arrow', 'diamond', 'ellipse', 'freedraw', 'line', 'rectangle', 'selection', 'text', 'eraser', 'image'
-        ],
-        allowedShortcuts: [
-            'cut', 'deleteSelectedElements', 'redo', 'selectAll', 'undo'
-        ],
+    allowedShapes: [
+      "arrow",
+      "diamond",
+      "ellipse",
+      "freedraw",
+      "line",
+      "rectangle",
+      "selection",
+      "text",
+      "eraser",
+      "image",
+    ],
+    allowedShortcuts: [
+      "cut",
+      "deleteSelectedElements",
+      "redo",
+      "selectAll",
+      "undo",
+    ],
     changeViewBackgroundColor: true,
     clearCanvas: true,
     disableFileDrop: false,

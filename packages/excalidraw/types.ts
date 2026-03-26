@@ -716,7 +716,7 @@ export type CanvasActions = Partial<{
   hideFontFamily?: boolean;
   hideUserList?: boolean;
   hideLockButton?: boolean;
-  hideTextAlign?: boolean
+  hideTextAlign?: boolean;
   hideArrowHeadsOptions?: boolean;
   hideColorInput?: boolean;
   groupShapes?: boolean;
@@ -725,7 +725,7 @@ export type CanvasActions = Partial<{
   hideLaserOnCollaboration?: boolean;
   hideLayers?: boolean;
   hideLibraries?: boolean;
-  hideOpacityInput? : boolean;
+  hideOpacityInput?: boolean;
   hideSharpness?: boolean;
   hideStrokeStyle?: boolean;
   hideWelcomeScreen?: boolean;

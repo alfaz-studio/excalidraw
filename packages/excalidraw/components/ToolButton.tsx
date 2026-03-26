@@ -188,8 +188,8 @@ export const ToolButton = React.forwardRef(
           name={props.name}
           aria-label={props["aria-label"]}
           {...(props.disableShortcuts
-          ? {}
-          : { ariaKeyshortcuts: props["aria-keyshortcuts"] })}
+            ? {}
+            : { ariaKeyshortcuts: props["aria-keyshortcuts"] })}
           data-testid={props["data-testid"]}
           id={`${excalId}-${props.id}`}
           onChange={() => {

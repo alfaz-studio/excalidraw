@@ -96,10 +96,7 @@ export class FileManager {
       const fileData =
         isInitializedImageElement(element) && files[element.fileId];
 
-      if (
-        fileData &&
-        !this.isFileSavedOrBeingSaved(fileData)
-      ) {
+      if (fileData && !this.isFileSavedOrBeingSaved(fileData)) {
         addedFiles.set(element.fileId, files[element.fileId]);
         this.savingFiles.set(element.fileId, this.getFileVersion(fileData));
       }
