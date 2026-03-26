@@ -287,6 +287,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.idleTimeoutId = null;
     }
     this.onUmmount?.();
+
+    // Close the socket.io connection to prevent runaway reconnection loops
+    // that can exhaust browser WebSocket resources and crash the meeting.
+    // Content is preserved server-side and re-synced on reconnect.
+    this.destroySocketClient({ isUnload: true });
   }
 
   isCollaborating = () => appJotaiStore.get(isCollaboratingAtom)!;
@@ -554,6 +559,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.portal.socket = this.portal.open(
         socketIOClient(this.props.collabServerUrl || "", {
           transports: ["websocket", "polling"],
+          reconnectionAttempts: 5,
           query: {
             roomId,
           },
