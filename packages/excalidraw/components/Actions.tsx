@@ -33,8 +33,6 @@ import { actionToggleZenMode } from "../actions";
 
 import { alignActionsPredicate } from "../actions/actionAlign";
 import { trackEvent } from "../analytics";
-import { useTunnels } from "../context/tunnels";
-
 import { t } from "../i18n";
 import {
   canChangeRoundness,
@@ -146,13 +144,13 @@ export const SelectedShapeActions = ({
   elementsMap,
   renderAction,
   app,
-  UIOptions
+  UIOptions,
 }: {
   appState: UIAppState;
   elementsMap: NonDeletedElementsMap | NonDeletedSceneElementsMap;
   renderAction: ActionManager["renderAction"];
   app: AppClassProperties;
-  UIOptions: AppProps["UIOptions"]
+  UIOptions: AppProps["UIOptions"];
 }) => {
   const targetElements = getTargetElements(elementsMap, appState);
 
@@ -204,9 +202,11 @@ export const SelectedShapeActions = ({
           })}
       </div>
       {canChangeBackgroundColor(appState, targetElements) && (
-        <div>{renderAction("changeBackgroundColor",{
-          hideColorInput: UIOptions.canvasActions.hideColorInput,
-        })}</div>
+        <div>
+          {renderAction("changeBackgroundColor", {
+            hideColorInput: UIOptions.canvasActions.hideColorInput,
+          })}
+        </div>
       )}
       {showFillIcons && renderAction("changeFillStyle")}
 
@@ -219,19 +219,19 @@ export const SelectedShapeActions = ({
         renderAction("changeStrokeShape")}
 
       {!UIOptions.canvasActions.hideStrokeStyle &&
-      (hasStrokeStyle(appState.activeTool.type) ||
-        targetElements.some((element) => hasStrokeStyle(element.type))) && (
-        <>
-          {renderAction("changeStrokeStyle")}
-          {renderAction("changeSloppiness")}
-        </>
-      )}
+        (hasStrokeStyle(appState.activeTool.type) ||
+          targetElements.some((element) => hasStrokeStyle(element.type))) && (
+          <>
+            {renderAction("changeStrokeStyle")}
+            {renderAction("changeSloppiness")}
+          </>
+        )}
 
-      {!UIOptions.canvasActions.hideSharpness && (
-      (canChangeRoundness(appState.activeTool.type) ||
-        targetElements.some((element) => canChangeRoundness(element.type))) && (
-        <>{renderAction("changeRoundness")}</>
-      ))}
+      {!UIOptions.canvasActions.hideSharpness &&
+        (canChangeRoundness(appState.activeTool.type) ||
+          targetElements.some((element) =>
+            canChangeRoundness(element.type),
+          )) && <>{renderAction("changeRoundness")}</>}
 
       {(toolIsArrow(appState.activeTool.type) ||
         targetElements.some((element) => toolIsArrow(element.type))) && (
@@ -241,9 +241,10 @@ export const SelectedShapeActions = ({
       {(appState.activeTool.type === "text" ||
         targetElements.some(isTextElement)) && (
         <>
-          {!UIOptions.canvasActions.hideFontFamily && renderAction("changeFontFamily")}
-          {renderAction("changeFontSize", { 
-            fontSizeOptions: UIOptions?.canvasActions?.fontSizeOptions 
+          {!UIOptions.canvasActions.hideFontFamily &&
+            renderAction("changeFontFamily")}
+          {renderAction("changeFontSize", {
+            fontSizeOptions: UIOptions?.canvasActions?.fontSizeOptions,
           })}
           {(appState.activeTool.type === "text" ||
             suppportsHorizontalAlign(targetElements, elementsMap)) &&
@@ -253,99 +254,103 @@ export const SelectedShapeActions = ({
       )}
 
       {!UIOptions.canvasActions.disableVerticalAlignOptions &&
-       shouldAllowVerticalAlign(targetElements, elementsMap) &&
+        shouldAllowVerticalAlign(targetElements, elementsMap) &&
         renderAction("changeVerticalAlign")}
-      {!UIOptions.canvasActions.hideArrowHeadsOptions && (canHaveArrowheads(appState.activeTool.type) ||
-        targetElements.some((element) => canHaveArrowheads(element.type))) && (
-        <>{renderAction("changeArrowhead")}</>
-      )}
+      {!UIOptions.canvasActions.hideArrowHeadsOptions &&
+        (canHaveArrowheads(appState.activeTool.type) ||
+          targetElements.some((element) =>
+            canHaveArrowheads(element.type),
+          )) && <>{renderAction("changeArrowhead")}</>}
 
-      {!UIOptions.canvasActions.hideOpacityInput && renderAction("changeOpacity")}
+      {!UIOptions.canvasActions.hideOpacityInput &&
+        renderAction("changeOpacity")}
 
       {!UIOptions.canvasActions.hideLayers && (
         <fieldset>
-        <legend>{t("labels.layers")}</legend>
-        <div className="buttonList">
-          {renderAction("sendToBack")}
-          {renderAction("sendBackward")}
-          {renderAction("bringForward")}
-          {renderAction("bringToFront")}
-        </div>
+          <legend>{t("labels.layers")}</legend>
+          <div className="buttonList">
+            {renderAction("sendToBack")}
+            {renderAction("sendBackward")}
+            {renderAction("bringForward")}
+            {renderAction("bringToFront")}
+          </div>
         </fieldset>
       )}
 
       {showAlignActions &&
-       !isSingleElementBoundContainer &&
+        !isSingleElementBoundContainer &&
         !UIOptions.canvasActions.disableAlignItems && (
-        <fieldset>
-          <legend>{t("labels.align")}</legend>
-          <div className="buttonList">
-            {
-              // swap this order for RTL so the button positions always match their action
-              // (i.e. the leftmost button aligns left)
-            }
-            {isRTL ? (
-              <>
-                {renderAction("alignRight")}
-                {renderAction("alignHorizontallyCentered")}
-                {renderAction("alignLeft")}
-              </>
-            ) : (
-              <>
-                {renderAction("alignLeft")}
-                {renderAction("alignHorizontallyCentered")}
-                {renderAction("alignRight")}
-              </>
-            )}
-            {targetElements.length > 2 &&
-              renderAction("distributeHorizontally")}
-            {/* breaks the row ˇˇ */}
-            <div style={{ flexBasis: "100%", height: 0 }} />
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: ".5rem",
-                marginTop: "-0.5rem",
-              }}
-            >
-              {renderAction("alignTop")}
-              {renderAction("alignVerticallyCentered")}
-              {renderAction("alignBottom")}
+          <fieldset>
+            <legend>{t("labels.align")}</legend>
+            <div className="buttonList">
+              {
+                // swap this order for RTL so the button positions always match their action
+                // (i.e. the leftmost button aligns left)
+              }
+              {isRTL ? (
+                <>
+                  {renderAction("alignRight")}
+                  {renderAction("alignHorizontallyCentered")}
+                  {renderAction("alignLeft")}
+                </>
+              ) : (
+                <>
+                  {renderAction("alignLeft")}
+                  {renderAction("alignHorizontallyCentered")}
+                  {renderAction("alignRight")}
+                </>
+              )}
               {targetElements.length > 2 &&
-                renderAction("distributeVertically")}
+                renderAction("distributeHorizontally")}
+              {/* breaks the row ˇˇ */}
+              <div style={{ flexBasis: "100%", height: 0 }} />
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: ".5rem",
+                  marginTop: "-0.5rem",
+                }}
+              >
+                {renderAction("alignTop")}
+                {renderAction("alignVerticallyCentered")}
+                {renderAction("alignBottom")}
+                {targetElements.length > 2 &&
+                  renderAction("distributeVertically")}
+              </div>
             </div>
-          </div>
-        </fieldset>
-      )}
-      {!UIOptions.canvasActions.disableGrouping && !isEditingTextOrNewElement && targetElements.length > 0 && (
-        <fieldset>
-          <legend>{t("labels.actions")}</legend>
-          <div className="buttonList">
-            {editorInterface.formFactor !== "phone" &&
-              renderAction("duplicateSelection", {
-                disableShortcuts: UIOptions.canvasActions.disableShortcuts,
-              })}
-            {editorInterface.formFactor !== "phone" &&
-              renderAction("deleteSelectedElements")}
-            {!UIOptions.canvasActions.disableGrouping && (
-              <>
-                {renderAction("group", {
+          </fieldset>
+        )}
+      {!UIOptions.canvasActions.disableGrouping &&
+        !isEditingTextOrNewElement &&
+        targetElements.length > 0 && (
+          <fieldset>
+            <legend>{t("labels.actions")}</legend>
+            <div className="buttonList">
+              {editorInterface.formFactor !== "phone" &&
+                renderAction("duplicateSelection", {
                   disableShortcuts: UIOptions.canvasActions.disableShortcuts,
                 })}
-                {renderAction("ungroup", {
-                  disableShortcuts: UIOptions.canvasActions.disableShortcuts,
-                })}
-              </>
-            )}
-            {!UIOptions.canvasActions.disableLink &&
-              showLinkIcon &&
-              renderAction("hyperlink")}
-            {showCropEditorAction && renderAction("cropEditor")}
-            {showLineEditorAction && renderAction("toggleLinearEditor")}
-          </div>
-        </fieldset>
-      )}
+              {editorInterface.formFactor !== "phone" &&
+                renderAction("deleteSelectedElements")}
+              {!UIOptions.canvasActions.disableGrouping && (
+                <>
+                  {renderAction("group", {
+                    disableShortcuts: UIOptions.canvasActions.disableShortcuts,
+                  })}
+                  {renderAction("ungroup", {
+                    disableShortcuts: UIOptions.canvasActions.disableShortcuts,
+                  })}
+                </>
+              )}
+              {!UIOptions.canvasActions.disableLink &&
+                showLinkIcon &&
+                renderAction("hyperlink")}
+              {showCropEditorAction && renderAction("cropEditor")}
+              {showLineEditorAction && renderAction("toggleLinearEditor")}
+            </div>
+          </fieldset>
+        )}
     </div>
   );
 };
@@ -1143,9 +1148,9 @@ export const ShapesSwitcher = ({
   const [lastActiveShape, setLastActiveShape] = useState<
     "rectangle" | "diamond" | "ellipse"
   >("rectangle");
-  const [lastActiveLinear, setLastActiveLinear] = useState<
-    "arrow" | "line"
-  >("arrow");
+  const [lastActiveLinear, setLastActiveLinear] = useState<"arrow" | "line">(
+    "arrow",
+  );
 
   useEffect(() => {
     if (
@@ -1189,8 +1194,7 @@ export const ShapesSwitcher = ({
         .filter(
           (shape) => !allowedShapes || allowedShapes.includes(shape.value),
         )
-        .map(
-        ({ value, icon, key, numericKey, fillable, toolbar }) => {
+        .map(({ value, icon, key, numericKey, fillable, toolbar }) => {
           // Hide image tool option if no storageBackendUrl is provided
           if (value === "image" && !hasStorageBackend) {
             return null;
@@ -1209,7 +1213,10 @@ export const ShapesSwitcher = ({
           }
 
           // ── Shape group rendered outside .map(), skip here ──
-          if (GROUPED_SHAPE_TYPES.has(value) && UIOptions.canvasActions.groupShapes !== false) {
+          if (
+            GROUPED_SHAPE_TYPES.has(value) &&
+            UIOptions.canvasActions.groupShapes !== false
+          ) {
             return null;
           }
 
@@ -1234,9 +1241,8 @@ export const ShapesSwitcher = ({
                   app.setActiveTool({ type: type as any });
                 }}
                 displayedOption={
-                  LINEAR_TOOLS.find(
-                    (tool) => tool.type === lastActiveLinear,
-                  ) || LINEAR_TOOLS[0]
+                  LINEAR_TOOLS.find((tool) => tool.type === lastActiveLinear) ||
+                  LINEAR_TOOLS[0]
                 }
                 fillable={true}
               />
@@ -1331,8 +1337,7 @@ export const ShapesSwitcher = ({
               }}
             />
           );
-        },
-      )}
+        })}
       {UIOptions.canvasActions.groupShapes !== false && (
         <>
           <div className="App-toolbar__divider" />
@@ -1411,16 +1416,16 @@ export const ShapesSwitcher = ({
             {t("toolBar.laser")}
           </DropdownMenu.Item> */}
           {!UIOptions.canvasActions.hideEmbedableTools && (
-          <>
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "embeddable" })}
-            icon={EmbedIcon}
-            data-testid="toolbar-embeddable"
-            selected={embeddableToolSelected}
-          >
-            {t("toolBar.embeddable")}
-          </DropdownMenu.Item>
-          {/* <DropdownMenu.Item
+            <>
+              <DropdownMenu.Item
+                onSelect={() => app.setActiveTool({ type: "embeddable" })}
+                icon={EmbedIcon}
+                data-testid="toolbar-embeddable"
+                selected={embeddableToolSelected}
+              >
+                {t("toolBar.embeddable")}
+              </DropdownMenu.Item>
+              {/* <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "laser" })}
             icon={laserPointerToolIcon}
             data-testid="toolbar-laser"
@@ -1429,20 +1434,20 @@ export const ShapesSwitcher = ({
           >
             {t("toolBar.laser")}
           </DropdownMenu.Item> */}
-          {isFullStylesPanel && (
-            <DropdownMenu.Item
-              onSelect={() => app.setActiveTool({ type: "lasso" })}
-              icon={LassoIcon}
-              data-testid="toolbar-lasso"
-              selected={lassoToolSelected}
-            >
-              {t("toolBar.lasso")}
-            </DropdownMenu.Item>
-          )}
-          {/* <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
+              {isFullStylesPanel && (
+                <DropdownMenu.Item
+                  onSelect={() => app.setActiveTool({ type: "lasso" })}
+                  icon={LassoIcon}
+                  data-testid="toolbar-lasso"
+                  selected={lassoToolSelected}
+                >
+                  {t("toolBar.lasso")}
+                </DropdownMenu.Item>
+              )}
+              {/* <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
             Generate
           </div> */}
-          {/* {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
+              {/* {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
           <DropdownMenu.Item
             onSelect={() => app.setOpenDialog({ name: "ttd", tab: "mermaid" })}
             icon={mermaidLogoIcon}
@@ -1450,7 +1455,7 @@ export const ShapesSwitcher = ({
           >
             {t("toolBar.mermaidToExcalidraw")}
           </DropdownMenu.Item> */}
-          {/* {app.props.aiEnabled !== false && app.plugins.diagramToCode && (
+              {/* {app.props.aiEnabled !== false && app.plugins.diagramToCode && (
             <DropdownMenu.Item
               onSelect={() => app.onMagicframeToolSelect()}
               icon={MagicIcon}
@@ -1460,14 +1465,12 @@ export const ShapesSwitcher = ({
               {t("toolBar.magicframe")}
             </DropdownMenu.Item>
           )} */}
-          </>
+            </>
           )}
           <DropdownMenu.Separator />
           <DropdownMenu.Item
             onSelect={() => {
-              document.dispatchEvent(
-                new CustomEvent("anno-toggle-layout"),
-              );
+              document.dispatchEvent(new CustomEvent("anno-toggle-layout"));
             }}
             icon={toggleLayoutIcon}
             data-testid="toolbar-toggle-layout"
@@ -1492,9 +1495,9 @@ export const ZoomActions = ({
 }) => (
   <Stack.Col gap={1} className={CLASSES.ZOOM_ACTIONS}>
     <Stack.Row align="center">
-      {renderAction("zoomOut",{ disableShortcuts })}
+      {renderAction("zoomOut", { disableShortcuts })}
       {renderAction("resetZoom")}
-      {renderAction("zoomIn",{ disableShortcuts })}
+      {renderAction("zoomIn", { disableShortcuts })}
     </Stack.Row>
   </Stack.Col>
 );

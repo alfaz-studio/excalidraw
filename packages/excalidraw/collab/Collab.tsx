@@ -42,12 +42,10 @@ import type {
 } from "@excalidraw/element/types";
 import type {
   BinaryFileData,
-  ExcalidrawImperativeAPI,
   SocketId,
   Collaborator,
   Gesture,
   ExcalidrawCollabProps,
-  IMeetingDetails,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -74,7 +72,6 @@ import {
 } from "../../../excalidraw-app/data/FileManager";
 import { LocalData } from "../../../excalidraw-app/data/LocalData";
 import {
-  isSavedToStorage,
   loadFilesFromStorage,
   loadFromStorage,
   saveFilesToStorage,
@@ -95,7 +92,6 @@ import type {
   SyncableExcalidrawElement,
 } from "../../../excalidraw-app/data";
 
-let isUsingTestingEnv: any;
 export const collabAPIAtom = atom<CollabAPI | null>(null);
 export const isCollaboratingAtom = atom(false);
 export const isOfflineAtom = atom(false);
@@ -201,8 +197,6 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.excalidrawAPI = props.excalidrawAPI;
     this.activeIntervalId = null;
     this.idleTimeoutId = null;
-    isUsingTestingEnv = props.useTestEnv;
-
     //HAVE TO PUT SOMETHING FOR STARTING COLLABORATION
 
     props.collabDetails && this.startCollaboration(props.collabDetails);
@@ -266,9 +260,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Re-initialize storage backend when the token changes (initial fetch or refresh)
     const { storageBackendUrl, meetingDetails } = this.props;
     if (
-      storageBackendUrl
-      && meetingDetails?.token
-      && meetingDetails.token !== prevProps.meetingDetails?.token
+      storageBackendUrl &&
+      meetingDetails?.token &&
+      meetingDetails.token !== prevProps.meetingDetails?.token
     ) {
       initializeBackend(storageBackendUrl, meetingDetails);
     }
@@ -312,9 +306,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     if (
       this.isCollaborating() &&
-      (this.fileManager.shouldPreventUnload(syncableElements) 
+      this.fileManager.shouldPreventUnload(syncableElements)
       // || !isSavedToFirebase(this.portal, syncableElements)
-      )
     ) {
       // this won't run in time if user decides to leave the site, but
       //  the purpose is to run in immediately after user decides to stay
@@ -343,29 +336,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       if (this.isCollaborating()) {
         this.handleRemoteSceneUpdate(this._reconcileElements(storedElements));
       }
-    } catch (error: any) {
-      const errorMessage = /is longer than.*?bytes/.test(error.message)
-        ? t("errors.collabSaveFailed_sizeExceeded")
-        : t("errors.collabSaveFailed");
-
-      // if (
-      //   !this.state.dialogNotifiedErrors[errorMessage] ||
-      //   !this.isCollaborating()
-      // ) {
-      //   this.setErrorDialog(errorMessage);
-      //   this.setState({
-      //     dialogNotifiedErrors: {
-      //       ...this.state.dialogNotifiedErrors,
-      //       [errorMessage]: true,
-      //     },
-      //   });
-      // }
-
-      // if (this.isCollaborating()) {
-      //   this.setErrorIndicator(errorMessage);
-      // }
-
-      // console.error(error);
+    } catch (error) {
+      console.error("Failed to save collab room:", error);
     }
   };
 
@@ -528,7 +500,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     // Initialize storage backend if storageBackendUrl & jwt are provided
     const { storageBackendUrl, meetingDetails } = this.props;
-    if (storageBackendUrl && meetingDetails?.sessionId && meetingDetails.token) {
+    if (
+      storageBackendUrl &&
+      meetingDetails?.sessionId &&
+      meetingDetails.token
+    ) {
       try {
         if (!meetingDetails.sessionId) {
           console.warn("Missing sessionId in whiteboard");
@@ -537,11 +513,16 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           console.warn("Missing token in whiteboard");
         }
         initializeBackend(storageBackendUrl, meetingDetails);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Failed to initialize storage backend:", error);
-        this.setErrorDialog(`Storage initialization failed: ${error.message}`);
+        this.setErrorDialog(
+          `Storage initialization failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     } else {
+      // eslint-disable-next-line no-console
       console.log("Storage not initialized missing");
     }
 
@@ -579,17 +560,21 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         }),
         roomId,
         roomKey,
-        meetingDetails ? {
-          meetingId: meetingDetails.sessionId,
-          roomName: meetingDetails.roomJid,
-          sceneType: meetingDetails.sceneType || "whiteboard",
-        } : undefined,
+        meetingDetails
+          ? {
+              meetingId: meetingDetails.sessionId,
+              roomName: meetingDetails.roomJid,
+              sceneType: meetingDetails.sceneType || "whiteboard",
+            }
+          : undefined,
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      this.setErrorDialog(error.message);
+      this.setErrorDialog(
+        error instanceof Error ? error.message : String(error),
+      );
       return null;
     }
 
@@ -789,7 +774,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
             scrollToContent: true,
           };
         }
-      } catch (error: any) {
+      } catch (error) {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {
@@ -825,10 +810,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   };
 
   private loadImageFiles = throttle(async () => {
-    const response =
-      await this.fetchImageFilesFromFirebase({
-        elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
-      });
+    const response = await this.fetchImageFilesFromFirebase({
+      elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+    });
     if (!response) {
       return;
     }

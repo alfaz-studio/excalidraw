@@ -4,7 +4,7 @@ import { composeEventHandlers } from "@excalidraw/common";
 
 import { useTunnels } from "../../context/tunnels";
 import { useUIAppState } from "../../context/ui-appState";
-import type { AppProps } from "../../types";
+
 import { t } from "../../i18n";
 import { useEditorInterface, useExcalidrawSetAppState } from "../App";
 import { UserList } from "../UserList";
@@ -14,6 +14,8 @@ import { withInternalFallback } from "../hoc/withInternalFallback";
 import { HamburgerMenuIcon } from "../icons";
 
 import * as DefaultItems from "./DefaultItems";
+
+import type { AppProps } from "../../types";
 
 const MainMenu = Object.assign(
   withInternalFallback(

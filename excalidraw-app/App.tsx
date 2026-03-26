@@ -374,7 +374,10 @@ interface ExcalidrawWrapperProps {
   meetingDetails: IMeetingDetails;
 }
 
-const ExcalidrawWrapper = ({ storageBackendUrl , meetingDetails }: ExcalidrawWrapperProps) => {
+const ExcalidrawWrapper = ({
+  storageBackendUrl,
+  meetingDetails,
+}: ExcalidrawWrapperProps) => {
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
 
@@ -974,8 +977,8 @@ const ExcalidrawWrapper = ({ storageBackendUrl , meetingDetails }: ExcalidrawWra
           />
         )}
         {excalidrawAPI && !isCollabDisabled && (
-          <Collab 
-            excalidrawAPI={excalidrawAPI} 
+          <Collab
+            excalidrawAPI={excalidrawAPI}
             storageBackendUrl={storageBackendUrl}
             meetingDetails={meetingDetails}
           />
@@ -1212,14 +1215,13 @@ interface ExcalidrawAppProps {
   meetingDetails?: IMeetingDetails;
 }
 
-
 const meetingDetails = {
   sessionId: "example-session-id",
   roomJid: "example-room-jid",
   jwt: "example-jwt",
   jid: "example-jid",
-  token: "token"
-}
+  token: "token",
+};
 
 const ExcalidrawApp = (props?: ExcalidrawAppProps) => {
   const isCloudExportWindow =
@@ -1231,7 +1233,7 @@ const ExcalidrawApp = (props?: ExcalidrawAppProps) => {
   return (
     <TopErrorBoundary>
       <Provider store={appJotaiStore}>
-        <ExcalidrawWrapper 
+        <ExcalidrawWrapper
           storageBackendUrl={import.meta.env.VITE_APP_STORAGE_BACKEND_URL}
           meetingDetails={meetingDetails}
         />

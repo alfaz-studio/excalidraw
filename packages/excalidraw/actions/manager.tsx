@@ -97,7 +97,7 @@ export class ActionManager {
             : true) &&
           action.keyTest &&
           (canvasActions.allowedShortcuts.includes(action.name) ||
-          !canvasActions.disableShortcuts) &&
+            !canvasActions.disableShortcuts) &&
           action.keyTest(
             event,
             this.getAppState(),

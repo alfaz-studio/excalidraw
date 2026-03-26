@@ -50,7 +50,9 @@ export const actionLink = register({
           isEmbeddableElement(elements[0])
             ? t("labels.link.labelEmbed")
             : t("labels.link.label")
-        }${data?.disableShortcuts ? "" : ` - ${getShortcutKey("CtrlOrCmd+K")}`}`}
+        }${
+          data?.disableShortcuts ? "" : ` - ${getShortcutKey("CtrlOrCmd+K")}`
+        }`}
         onClick={() => updateData(null)}
         selected={selectedElements.length === 1 && !!selectedElements[0].link}
       />

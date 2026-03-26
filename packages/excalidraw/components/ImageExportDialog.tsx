@@ -11,9 +11,6 @@ import {
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
-import type { ActionManager } from "../actions/manager";
-import type { AppClassProperties, BinaryFiles, SaveAsImageOptions, UIAppState } from "../types";
-
 import {
   actionExportWithDarkMode,
   actionChangeExportBackground,
@@ -38,6 +35,14 @@ import { Tooltip } from "./Tooltip";
 import { FilledButton } from "./FilledButton";
 
 import "./ImageExportDialog.scss";
+
+import type {
+  AppClassProperties,
+  BinaryFiles,
+  SaveAsImageOptions,
+  UIAppState,
+} from "../types";
+import type { ActionManager } from "../actions/manager";
 
 export const ErrorCanvasPreview = () => {
   return (
@@ -212,23 +217,23 @@ const ImageExportModal = ({
           </ExportSetting>
         )}
         {!options.defaultBackgroundValue && (
-        <ExportSetting
-          label={t("imageExportDialog.label.withBackground")}
-          name="exportBackgroundSwitch"
-        >
-          <Switch
+          <ExportSetting
+            label={t("imageExportDialog.label.withBackground")}
             name="exportBackgroundSwitch"
-            checked={exportWithBackground}
-            onChange={(checked) => {
-              setExportWithBackground(checked);
-              actionManager.executeAction(
-                actionChangeExportBackground,
-                "ui",
-                checked,
-              );
-            }}
-          />
-        </ExportSetting>
+          >
+            <Switch
+              name="exportBackgroundSwitch"
+              checked={exportWithBackground}
+              onChange={(checked) => {
+                setExportWithBackground(checked);
+                actionManager.executeAction(
+                  actionChangeExportBackground,
+                  "ui",
+                  checked,
+                );
+              }}
+            />
+          </ExportSetting>
         )}
         {!options?.hideTheme && (
           <ExportSetting
@@ -250,43 +255,47 @@ const ImageExportModal = ({
           </ExportSetting>
         )}
         {!options?.disableSceneEmbed && (
-        <ExportSetting
-          label={t("imageExportDialog.label.embedScene")}
-          tooltip={t("imageExportDialog.tooltip.embedScene")}
-          name="exportEmbedSwitch"
-        >
-          <Switch
+          <ExportSetting
+            label={t("imageExportDialog.label.embedScene")}
+            tooltip={t("imageExportDialog.tooltip.embedScene")}
             name="exportEmbedSwitch"
-            checked={embedScene}
-            onChange={(checked) => {
-              setEmbedScene(checked);
-              actionManager.executeAction(
-                actionChangeExportEmbedScene,
-                "ui",
-                checked,
-              );
-            }}
-          />
-        </ExportSetting>
+          >
+            <Switch
+              name="exportEmbedSwitch"
+              checked={embedScene}
+              onChange={(checked) => {
+                setEmbedScene(checked);
+                actionManager.executeAction(
+                  actionChangeExportEmbedScene,
+                  "ui",
+                  checked,
+                );
+              }}
+            />
+          </ExportSetting>
         )}
         {!options.disableScale && (
-        <ExportSetting
-          label={t("imageExportDialog.label.scale")}
-          name="exportScale"
-        >
-          <RadioGroup
+          <ExportSetting
+            label={t("imageExportDialog.label.scale")}
             name="exportScale"
-            value={exportScale}
-            onChange={(scale) => {
-              setExportScale(scale);
-              actionManager.executeAction(actionChangeExportScale, "ui", scale);
-            }}
-            choices={EXPORT_SCALES.map((scale) => ({
-              value: scale,
-              label: `${scale}\u00d7`,
-            }))}
-          />
-        </ExportSetting>
+          >
+            <RadioGroup
+              name="exportScale"
+              value={exportScale}
+              onChange={(scale) => {
+                setExportScale(scale);
+                actionManager.executeAction(
+                  actionChangeExportScale,
+                  "ui",
+                  scale,
+                );
+              }}
+              choices={EXPORT_SCALES.map((scale) => ({
+                value: scale,
+                label: `${scale}\u00d7`,
+              }))}
+            />
+          </ExportSetting>
         )}
 
         <div className="ImageExportModal__settings__buttons">
@@ -314,26 +323,27 @@ const ImageExportModal = ({
           >
             {t("imageExportDialog.button.exportToSvg")}
           </FilledButton>
-          {!options.disableClipboard && (probablySupportsClipboardBlob || isFirefox) && (
-            <FilledButton
-              className="ImageExportModal__settings__buttons__button"
-              label={t("imageExportDialog.title.copyPngToClipboard")}
-              status={copyStatus}
-              onClick={async () => {
-                await onExportImage(
-                  EXPORT_IMAGE_TYPES.clipboard,
-                  exportedElements,
-                  {
-                    exportingFrame,
-                  },
-                );
-                onCopy();
-              }}
-              icon={copyIcon}
-            >
-              {t("imageExportDialog.button.copyPngToClipboard")}
-            </FilledButton>
-          )}
+          {!options.disableClipboard &&
+            (probablySupportsClipboardBlob || isFirefox) && (
+              <FilledButton
+                className="ImageExportModal__settings__buttons__button"
+                label={t("imageExportDialog.title.copyPngToClipboard")}
+                status={copyStatus}
+                onClick={async () => {
+                  await onExportImage(
+                    EXPORT_IMAGE_TYPES.clipboard,
+                    exportedElements,
+                    {
+                      exportingFrame,
+                    },
+                  );
+                  onCopy();
+                }}
+                icon={copyIcon}
+              >
+                {t("imageExportDialog.button.copyPngToClipboard")}
+              </FilledButton>
+            )}
         </div>
       </div>
     </div>

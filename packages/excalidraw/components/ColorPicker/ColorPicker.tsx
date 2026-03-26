@@ -92,15 +92,15 @@ const ColorPickerPopupContent = ({
     <div>
       <PickerHeading>{t("colorPicker.hexCode")}</PickerHeading>
       {!hideColorInput && (
-      <ColorInput
-        color={color || ""}
-        label={label}
-        onChange={(color) => {
-          onChange(color);
-        }}
-        colorPickerType={type}
-        placeholder={t("colorPicker.color")}
-      />
+        <ColorInput
+          color={color || ""}
+          label={label}
+          onChange={(color) => {
+            onChange(color);
+          }}
+          colorPickerType={type}
+          placeholder={t("colorPicker.color")}
+        />
       )}
     </div>
   );

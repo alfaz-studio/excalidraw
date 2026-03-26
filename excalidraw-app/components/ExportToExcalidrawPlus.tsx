@@ -13,7 +13,7 @@ import {
 import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
 import { isInitializedImageElement } from "@excalidraw/element";
 import { useI18n } from "@excalidraw/excalidraw/i18n";
-import { loadFilesFromStorage, loadStorage, saveFilesToStorage } from "../data/storage";
+
 import type {
   FileId,
   NonDeletedExcalidrawElement,
@@ -24,6 +24,8 @@ import type {
   BinaryFiles,
 } from "@excalidraw/excalidraw/types";
 
+import { loadStorage, saveFilesToStorage } from "../data/storage";
+
 import { FILE_UPLOAD_MAX_BYTES } from "../app_constants";
 import { encodeFilesForUpload } from "../data/FileManager";
 
@@ -33,7 +35,7 @@ export const exportToExcalidrawPlus = async (
   files: BinaryFiles,
   name: string,
 ) => {
-  const storage = await loadStorage();
+  await loadStorage();
 
   const id = `${nanoid(12)}`;
 
@@ -45,8 +47,11 @@ export const exportToExcalidrawPlus = async (
 
   const blob = new Blob(
     [
-      new Uint8Array(encryptedData.iv).buffer.slice(0, encryptedData.iv.byteLength),
-      encryptedData.encryptedBuffer
+      new Uint8Array(encryptedData.iv).buffer.slice(
+        0,
+        encryptedData.iv.byteLength,
+      ),
+      encryptedData.encryptedBuffer,
     ],
     {
       type: MIME_TYPES.binary,

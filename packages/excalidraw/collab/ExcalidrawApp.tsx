@@ -28,7 +28,6 @@ import {
   preventUnload,
   resolvablePromise,
   isRunningInIframe,
-  isDevEnv,
 } from "@excalidraw/common";
 import polyfill from "@excalidraw/excalidraw/polyfill";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -40,9 +39,7 @@ import {
   GithubIcon,
   XBrandIcon,
   DiscordIcon,
-  ExcalLogo,
   usersIcon,
-  exportToPlus,
   share,
   youtubeIcon,
 } from "@excalidraw/excalidraw/components/icons";
@@ -79,16 +76,10 @@ import type { ResolvablePromise } from "@excalidraw/common/utils";
 
 import {
   FIREBASE_STORAGE_PREFIXES,
-  isExcalidrawPlusSignedUser,
   STORAGE_KEYS,
   SYNC_BROWSER_TABS_TIMEOUT,
 } from "../../../excalidraw-app/app_constants";
-import type { CollabAPI } from "./Collab";
-import Collab, {
-  collabAPIAtom,
-  isCollaboratingAtom,
-  isOfflineAtom,
-} from "./Collab";
+
 import {
   exportToBackend,
   getCollaborationLinkData,
@@ -100,10 +91,6 @@ import {
   importUsernameFromLocalStorage,
 } from "../../../excalidraw-app/data/localStorage";
 import CustomStats from "../../../excalidraw-app/CustomStats";
-import {
-  ExportToExcalidrawPlus,
-  exportToExcalidrawPlus,
-} from "../../../excalidraw-app/components/ExportToExcalidrawPlus";
 import { updateStaleImageStatuses } from "../../../excalidraw-app/data/FileManager";
 import { loadFilesFromStorage } from "../../../excalidraw-app/data/storage";
 import {
@@ -124,8 +111,13 @@ import {
 } from "../../../excalidraw-app/app-jotai";
 
 import "../../../excalidraw-app/index.scss";
-import { ShareDialog, shareDialogStateAtom } from "../../../excalidraw-app/share/ShareDialog";
-import CollabError, { collabErrorIndicatorAtom } from "../../../excalidraw-app/collab/CollabError";
+import {
+  ShareDialog,
+  shareDialogStateAtom,
+} from "../../../excalidraw-app/share/ShareDialog";
+import CollabError, {
+  collabErrorIndicatorAtom,
+} from "../../../excalidraw-app/collab/CollabError";
 import { useHandleAppTheme } from "../../../excalidraw-app/useHandleAppTheme";
 import { getPreferredLanguage } from "../../../excalidraw-app/app-language/language-detector";
 import { useAppLangCode } from "../../../excalidraw-app/app-language/language-state";
@@ -135,7 +127,14 @@ import DebugCanvas, {
   loadSavedDebugState,
 } from "../../../excalidraw-app/components/DebugCanvas";
 import { AIComponents } from "../../../excalidraw-app/components/AI";
-import { ExcalidrawPlusIframeExport } from "../../../excalidraw-app/ExcalidrawPlusIframeExport";
+
+import Collab, {
+  collabAPIAtom,
+  isCollaboratingAtom,
+  isOfflineAtom,
+} from "./Collab";
+
+import type { CollabAPI } from "./Collab";
 
 polyfill();
 
@@ -274,7 +273,7 @@ export const initializeScene = async (opts: {
       ) {
         return { scene: data, isExternalScene };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         scene: {
           appState: {
@@ -355,7 +354,7 @@ const normalizeToExcalidrawLang = (code: string): string => {
   return code;
 };
 
-const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
+const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
 
@@ -431,31 +430,21 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
   }, [excalidrawAPI]);
 
   useEffect(() => {
-
     if (excalidrawAPI && props.getExcalidrawAPI) {
-
       props.getExcalidrawAPI(excalidrawAPI);
-
     }
-
   }, [excalidrawAPI, props]);
 
   useEffect(() => {
-
     if (collabAPI && props.getCollabAPI) {
-
       props.getCollabAPI(collabAPI);
-
     }
-
   }, [collabAPI, props]);
-
 
   useEffect(() => {
     if (!excalidrawAPI || (!isCollabDisabled && !collabAPI)) {
       return;
     }
-
 
     const loadImages = (
       data: ResolutionType<typeof initializeScene>,
@@ -652,7 +641,7 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
         visibilityChange,
         false,
       );
-    //   clearTimeout(titleTimeout);
+      //   clearTimeout(titleTimeout);
     };
   }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode]);
 
@@ -758,15 +747,15 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
       if (url) {
         setLatestShareableLink(url);
       }
-    } catch (error: any) {
-      if (error.name !== "AbortError") {
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
         const { width, height } = appState;
         console.error(error, {
           width,
           height,
           devicePixelRatio: window.devicePixelRatio,
         });
-        throw new Error(error.message);
+        throw error instanceof Error ? error : new Error(String(error));
       }
     }
   };
@@ -877,14 +866,14 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
           return (
             <div className="top-right-ui">
               {collabError.message && <CollabError collabError={collabError} />}
-            {!props.collabDetails && (
-              <LiveCollaborationTrigger
-                isCollaborating={isCollaborating}
-                onSelect={() =>
-                  setShareDialogState({ isOpen: true, type: "share" })
-                }
-              />
-            )}
+              {!props.collabDetails && (
+                <LiveCollaborationTrigger
+                  isCollaborating={isCollaborating}
+                  onSelect={() =>
+                    setShareDialogState({ isOpen: true, type: "share" })
+                  }
+                />
+              )}
             </div>
           );
         }}
@@ -946,13 +935,13 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
           />
         )}
         {excalidrawAPI && !isCollabDisabled && (
-            <Collab
+          <Collab
             collabServerUrl={props.collabServerUrl}
             collabDetails={props.collabDetails}
             excalidrawAPI={excalidrawAPI}
             storageBackendUrl={props.storageBackendUrl}
             meetingDetails={props.meetingDetails}
-            />
+          />
         )}
 
         <ShareDialog
@@ -965,8 +954,10 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
                   excalidrawAPI.getAppState(),
                   excalidrawAPI.getFiles(),
                 );
-              } catch (error: any) {
-                setErrorMessage(error.message);
+              } catch (error) {
+                setErrorMessage(
+                  error instanceof Error ? error.message : String(error),
+                );
               }
             }
           }}
@@ -1179,11 +1170,10 @@ const ExcalidrawWrapper = (props : ExcalidrawAppProps) => {
   );
 };
 
-export const ExcalidrawApp = (props : ExcalidrawAppProps) => {
-
+export const ExcalidrawApp = (props: ExcalidrawAppProps) => {
   return (
-      <Provider store={appJotaiStore}>
-        <ExcalidrawWrapper {...props}/>
-      </Provider>
+    <Provider store={appJotaiStore}>
+      <ExcalidrawWrapper {...props} />
+    </Provider>
   );
 };
