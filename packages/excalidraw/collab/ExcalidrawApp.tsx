@@ -273,7 +273,7 @@ export const initializeScene = async (opts: {
       ) {
         return { scene: data, isExternalScene };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         scene: {
           appState: {
@@ -747,15 +747,15 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       if (url) {
         setLatestShareableLink(url);
       }
-    } catch (error: any) {
-      if (error.name !== "AbortError") {
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
         const { width, height } = appState;
         console.error(error, {
           width,
           height,
           devicePixelRatio: window.devicePixelRatio,
         });
-        throw new Error(error.message);
+        throw error instanceof Error ? error : new Error(String(error));
       }
     }
   };
@@ -954,8 +954,10 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
                   excalidrawAPI.getAppState(),
                   excalidrawAPI.getFiles(),
                 );
-              } catch (error: any) {
-                setErrorMessage(error.message);
+              } catch (error) {
+                setErrorMessage(
+                  error instanceof Error ? error.message : String(error),
+                );
               }
             }
           }}

@@ -513,9 +513,13 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           console.warn("Missing token in whiteboard");
         }
         initializeBackend(storageBackendUrl, meetingDetails);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Failed to initialize storage backend:", error);
-        this.setErrorDialog(`Storage initialization failed: ${error.message}`);
+        this.setErrorDialog(
+          `Storage initialization failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     } else {
       // eslint-disable-next-line no-console
@@ -566,9 +570,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      this.setErrorDialog(error.message);
+      this.setErrorDialog(
+        error instanceof Error ? error.message : String(error),
+      );
       return null;
     }
 
@@ -768,7 +774,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
             scrollToContent: true,
           };
         }
-      } catch (error: any) {
+      } catch (error) {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {

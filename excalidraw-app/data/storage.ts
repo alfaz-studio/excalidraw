@@ -224,7 +224,7 @@ const downloadFilesFromBackend = async (
             `Failed to download file: ${id}, Status: ${response.status}`,
           );
         }
-      } catch (error: any) {
+      } catch (error) {
         erroredFiles.push(id);
         console.error(`Error downloading file ${id}:`, error);
       }
@@ -344,7 +344,7 @@ export const saveFilesToStorage = async ({
 
     savedFiles.push(...(result.savedFiles || []));
     erroredFiles.push(...(result.erroredFiles || []));
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error uploading files to backend:", error);
     // Mark all files as errored if the API call fails
     files.forEach(({ id }) => erroredFiles.push(id));
@@ -366,15 +366,17 @@ const createStorageSceneDocument = async (
   } as StoredScene;
 };
 
+// TODO: implement when backend scene persistence is ready
 const getBackendDocument = async (
-  roomId: string,
+  _roomId: string,
 ): Promise<StoredScene | null> => {
   return null;
 };
 
+// TODO: implement when backend scene persistence is ready
 const setBackendDocument = async (
-  roomId: string,
-  document: StoredScene,
+  _roomId: string,
+  _document: StoredScene,
 ): Promise<void> => {};
 
 // Backend transaction simulation - using simple read-modify-write
@@ -505,7 +507,7 @@ export const loadFilesFromStorage = async (
             created: metadata?.created || Date.now(),
             lastRetrieved: metadata?.created || Date.now(),
           });
-        } catch (error: any) {
+        } catch (error) {
           erroredFiles.set(id as FileId, true);
           console.error("Error processing file:", id, error);
         }
@@ -516,7 +518,7 @@ export const loadFilesFromStorage = async (
     downloadErrors.forEach((id) => {
       erroredFiles.set(id as FileId, true);
     });
-  } catch (error: any) {
+  } catch (error) {
     // Marking all files as errored if the API call fails
     console.error("Error loading files from backend:", error);
     filesIds.forEach((id) => erroredFiles.set(id, true));

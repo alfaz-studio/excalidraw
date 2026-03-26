@@ -499,9 +499,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     ) {
       try {
         initializeBackend(storageBackendUrl, meetingDetails);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Failed to initialize storage backend:", error);
-        this.setErrorDialog(`Storage initialization failed: ${error.message}`);
+        this.setErrorDialog(
+          `Storage initialization failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     } else {
       console.error(
@@ -550,9 +554,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
-    } catch (error: any) {
+    } catch (error) {
       console.error(error);
-      this.setErrorDialog(error.message);
+      this.setErrorDialog(
+        error instanceof Error ? error.message : String(error),
+      );
       return null;
     }
 
@@ -761,7 +767,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             scrollToContent: true,
           };
         }
-      } catch (error: any) {
+      } catch (error) {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {
