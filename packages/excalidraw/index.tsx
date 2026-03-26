@@ -322,6 +322,6 @@ export { setCustomTextMetricsProvider } from "@excalidraw/element";
 
 export { CommandPalette } from "./components/CommandPalette/CommandPalette";
 
-export { Collab , ExcalidrawApp } from "./collab/index";
+export { Collab, ExcalidrawApp } from "./collab/index";
 
 export { generateCollaborationLinkData } from "../../excalidraw-app/data/index";

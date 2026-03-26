@@ -65,7 +65,7 @@ export const ToolPopover = ({
         setIsPopupOpen(false);
       }
     }
-  }, [currentType]);
+  }, [currentType, isPopupOpen, options]);
 
   // Close popover when user starts interacting with the canvas (pointer down)
   useEffect(() => {

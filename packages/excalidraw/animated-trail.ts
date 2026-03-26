@@ -1,10 +1,6 @@
 import { LaserPointer } from "@excalidraw/laser-pointer";
 
-import {
-  SVG_NS,
-  getSvgPathFromStroke,
-  sceneCoordsToViewportCoords,
-} from "@excalidraw/common";
+import { SVG_NS, getSvgPathFromStroke } from "@excalidraw/common";
 
 import type { LaserPointerOptions } from "@excalidraw/laser-pointer";
 

@@ -15,13 +15,13 @@ const Footer = ({
   actionManager,
   showExitZenModeBtn,
   renderWelcomeScreen,
-  UIOptions
+  UIOptions,
 }: {
   appState: UIAppState;
   actionManager: ActionManager;
   showExitZenModeBtn: boolean;
   renderWelcomeScreen: boolean;
-  UIOptions : AppProps["UIOptions"];
+  UIOptions: AppProps["UIOptions"];
 }) => {
   const { FooterCenterTunnel, WelcomeScreenHelpHintTunnel } = useTunnels();
 
@@ -59,9 +59,12 @@ const Footer = ({
       <FooterCenterTunnel.Out />
       {!UIOptions.canvasActions.hideHelpDialog && (
         <div
-          className={clsx("layer-ui__wrapper__footer-right zen-mode-transition", {
-            "transition-right": appState.zenModeEnabled,
-          })}
+          className={clsx(
+            "layer-ui__wrapper__footer-right zen-mode-transition",
+            {
+              "transition-right": appState.zenModeEnabled,
+            },
+          )}
         >
           <div style={{ position: "relative" }}>
             {renderWelcomeScreen && <WelcomeScreenHelpHintTunnel.Out />}
