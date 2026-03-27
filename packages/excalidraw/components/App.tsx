@@ -2232,6 +2232,7 @@ class App extends React.Component<AppProps, AppState> {
                             pendingFlowchartNodes:
                               this.flowChartCreator.pendingNodes,
                             theme: this.state.theme,
+                            renderBackground: this.props.renderBackground,
                           }}
                         />
                         {this.state.newElement && (

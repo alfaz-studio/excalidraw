@@ -37,6 +37,13 @@ export type StaticCanvasRenderConfig = {
   elementsPendingErasure: ElementsPendingErasure;
   pendingFlowchartNodes: PendingExcalidrawElements | null;
   theme: AppState["theme"];
+  /** Optional callback to draw custom content behind all elements.
+   *  Called after zoom is applied and background is filled, before
+   *  grid/elements. The context is already translated by scrollX/scrollY. */
+  renderBackground?: (
+    ctx: CanvasRenderingContext2D,
+    appState: StaticCanvasAppState,
+  ) => void;
 };
 
 export type SVGRenderConfig = {

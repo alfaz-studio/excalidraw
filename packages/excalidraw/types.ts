@@ -642,6 +642,13 @@ export interface ExcalidrawProps {
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
   storageBackendUrl?: string;
+  /** Optional callback to draw custom content behind all elements on the
+   *  static canvas. Called after zoom is applied, before grid/elements.
+   *  The context is already translated by scrollX/scrollY. */
+  renderBackground?: (
+    ctx: CanvasRenderingContext2D,
+    appState: StaticCanvasAppState,
+  ) => void;
 }
 
 export interface ExcalidrawCollabProps {

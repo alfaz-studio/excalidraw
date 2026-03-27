@@ -260,6 +260,14 @@ const _renderStaticScene = ({
   // Apply zoom
   context.scale(appState.zoom.value, appState.zoom.value);
 
+  // Custom background rendering (e.g. video frame for annotations)
+  if (renderConfig.renderBackground) {
+    context.save();
+    context.translate(appState.scrollX, appState.scrollY);
+    renderConfig.renderBackground(context, appState);
+    context.restore();
+  }
+
   // Grid
   if (renderGrid) {
     strokeGrid(
