@@ -257,6 +257,16 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   };
 
   componentDidUpdate(prevProps: ExcalidrawCollabProps) {
+    // Start collaboration when collabDetails arrives after mount (canvas-only → annotation mode)
+    if (this.props.collabDetails && !prevProps.collabDetails) {
+      this.startCollaboration(this.props.collabDetails);
+    }
+
+    // Stop collaboration when collabDetails is removed (annotation mode → canvas-only)
+    if (!this.props.collabDetails && prevProps.collabDetails && this.isCollaborating()) {
+      this.destroySocketClient();
+    }
+
     // Re-initialize storage backend when the token changes (initial fetch or refresh)
     const { storageBackendUrl, meetingDetails } = this.props;
     if (
