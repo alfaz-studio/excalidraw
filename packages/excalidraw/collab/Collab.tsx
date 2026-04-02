@@ -471,12 +471,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   startCollaboration = async (
     existingRoomLinkData: null | { roomId: string; roomKey: string },
   ) => {
-    if (!this.state.username) {
-      import("@excalidraw/random-username").then(({ getRandomUsername }) => {
-        const username = getRandomUsername();
-        this.setUsername(username);
-      });
-    }
+
 
     if (this.portal.socket) {
       return null;
