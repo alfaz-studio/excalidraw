@@ -290,13 +290,6 @@ const LayerUI = ({
                               <div className="App-toolbar__divider" />
                             )}
 
-                            <HandButton
-                              checked={isHandToolActive(appState)}
-                              onChange={() => onHandToolToggle()}
-                              title={t("toolBar.hand")}
-                              isMobile
-                            />
-
                             <ShapesSwitcher
                               allowedShapes={UIOptions.canvasActions.allowedShapes}
                               appState={appState}
@@ -304,6 +297,12 @@ const LayerUI = ({
                               UIOptions={UIOptions}
                               app={app}
                               disableShortcuts={UIOptions.canvasActions.disableShortcuts}
+                            />
+                            <div className="App-toolbar__divider" />
+                            <HandButton
+                              checked={isHandToolActive(appState)}
+                              onChange={() => onHandToolToggle()}
+                              title={t("toolBar.hand")}
                             />
                           </Stack.Row>
                         </Island>

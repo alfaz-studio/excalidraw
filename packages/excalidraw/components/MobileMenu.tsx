@@ -92,36 +92,37 @@ export const MobileMenu = ({
                       app={app}
                       disableShortcuts={UIOptions.canvasActions.disableShortcuts}
                     />
+                    <div className="App-toolbar__divider" />
+                    <PenModeButton
+                      checked={appState.penMode}
+                      onChange={() => onPenModeToggle(null)}
+                      title={t("toolBar.penMode")}
+                      isMobile
+                      penDetected={appState.penDetected}
+                    />
+                    {!UIOptions.canvasActions.hideLockButton && (
+                      <LockButton
+                        checked={appState.activeTool.locked}
+                        onChange={onLockToggle}
+                        title={t("toolBar.lock")}
+                        isMobile
+                      />
+                    )}
+                    <HandButton
+                      checked={isHandToolActive(appState)}
+                      onChange={() => onHandToolToggle()}
+                      title={t("toolBar.hand")}
+                      isMobile
+                    />
                   </Stack.Row>
                 </Island>
                 {renderTopRightUI && renderTopRightUI(true, appState)}
-                <div className="mobile-misc-tools-container">
-                  {!appState.viewModeEnabled &&
-                    appState.openDialog?.name !== "elementLinkSelector" && (
+                {!appState.viewModeEnabled &&
+                  appState.openDialog?.name !== "elementLinkSelector" && (
+                    <div className="mobile-misc-tools-container">
                       <DefaultSidebarTriggerTunnel.Out />
-                    )}
-                  <PenModeButton
-                    checked={appState.penMode}
-                    onChange={() => onPenModeToggle(null)}
-                    title={t("toolBar.penMode")}
-                    isMobile
-                    penDetected={appState.penDetected}
-                  />
-                  {!UIOptions.canvasActions.hideLockButton && (
-                    <LockButton
-                      checked={appState.activeTool.locked}
-                      onChange={onLockToggle}
-                      title={t("toolBar.lock")}
-                      isMobile
-                    />
+                    </div>
                   )}
-                  <HandButton
-                    checked={isHandToolActive(appState)}
-                    onChange={() => onHandToolToggle()}
-                    title={t("toolBar.hand")}
-                    isMobile
-                  />
-                </div>
               </Stack.Row>
             </Stack.Col>
           )}
