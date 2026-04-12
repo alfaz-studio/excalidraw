@@ -25,6 +25,7 @@ export interface RoomMetadata {
   meetingId?: string;
   roomName?: string;
   sceneType?: "whiteboard" | "annotation";
+  clientId?: string;
 }
 
 class Portal {
@@ -46,6 +47,11 @@ class Portal {
     this.roomId = id;
     this.roomKey = key;
     this.roomMetadata = metadata ?? null;
+
+    // Remove any stale listeners to prevent duplicates on reconnection
+    this.socket.off("init-room");
+    this.socket.off("new-user");
+    this.socket.off("room-user-change");
 
     // Initialize socket listeners
     this.socket.on("init-room", () => {
@@ -73,6 +79,10 @@ class Portal {
       return;
     }
     this.queueFileUpload.flush();
+    // Remove listeners before closing to prevent dangling handlers
+    this.socket.off("init-room");
+    this.socket.off("new-user");
+    this.socket.off("room-user-change");
     this.socket.close();
     this.socket = null;
     this.roomId = null;
