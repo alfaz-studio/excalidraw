@@ -651,7 +651,13 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       );
       //   clearTimeout(titleTimeout);
     };
-  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, props.collabDetails]);
+  }, [
+    isCollabDisabled,
+    collabAPI,
+    excalidrawAPI,
+    setLangCode,
+    props.collabDetails,
+  ]);
 
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {
