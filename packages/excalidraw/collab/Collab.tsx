@@ -752,6 +752,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     this.initializeIdleDetector();
 
+    if (this.staleCollaboratorTimerId) {
+      window.clearInterval(this.staleCollaboratorTimerId);
+    }
     this.staleCollaboratorTimerId = window.setInterval(
       this.pruneStaleCollaborators,
       STALE_CHECK_INTERVAL_MS,
@@ -969,7 +972,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         continue;
       }
       const lastSeen = this.collaboratorLastSeen.get(socketId);
-      if (lastSeen && now - lastSeen > STALE_COLLABORATOR_TIMEOUT_MS) {
+      if (lastSeen !== undefined && now - lastSeen > STALE_COLLABORATOR_TIMEOUT_MS) {
         collaborators.delete(socketId);
         this.collaboratorLastSeen.delete(socketId);
         pruned = true;
