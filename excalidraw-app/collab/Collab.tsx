@@ -55,6 +55,8 @@ import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 import { appJotaiStore, atom } from "../app-jotai";
 import {
   CURSOR_SYNC_TIMEOUT,
+  STALE_COLLABORATOR_TIMEOUT_MS,
+  STALE_CHECK_INTERVAL_MS,
   FILE_UPLOAD_MAX_BYTES,
   FIREBASE_STORAGE_PREFIXES,
   INITIAL_SCENE_UPDATE_TIMEOUT,
@@ -142,6 +144,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private socketInitializationTimer?: number;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
   private collaborators = new Map<SocketId, Collaborator>();
+  private collaboratorLastSeen = new Map<SocketId, number>();
+  private staleCollaboratorTimerId: number | null = null;
+  private clientId = crypto.randomUUID();
 
   constructor(props: CollabProps) {
     super(props);
@@ -277,6 +282,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       window.clearTimeout(this.idleTimeoutId);
       this.idleTimeoutId = null;
     }
+    if (this.staleCollaboratorTimerId) {
+      window.clearInterval(this.staleCollaboratorTimerId);
+      this.staleCollaboratorTimerId = null;
+    }
     this.onUmmount?.();
   }
 
@@ -388,6 +397,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   };
 
   private destroySocketClient = (opts?: { isUnload: boolean }) => {
+    if (this.staleCollaboratorTimerId) {
+      window.clearInterval(this.staleCollaboratorTimerId);
+      this.staleCollaboratorTimerId = null;
+    }
+    this.collaboratorLastSeen.clear();
     this.lastBroadcastedOrReceivedSceneVersion = -1;
     this.portal.close();
     this.fileManager.reset();
@@ -549,8 +563,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
               meetingId: meetingDetails.sessionId,
               roomName: meetingDetails.roomJid,
               sceneType: meetingDetails.sceneType || "whiteboard",
+              clientId: this.clientId,
             }
-          : undefined,
+          : { clientId: this.clientId },
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
@@ -727,6 +742,14 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     this.initializeIdleDetector();
 
+    if (this.staleCollaboratorTimerId) {
+      window.clearInterval(this.staleCollaboratorTimerId);
+    }
+    this.staleCollaboratorTimerId = window.setInterval(
+      this.pruneStaleCollaborators,
+      STALE_CHECK_INTERVAL_MS,
+    );
+
     this.setActiveRoomLink(window.location.href);
 
     return scenePromise;
@@ -898,6 +921,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   setCollaborators(sockets: SocketId[]) {
     const collaborators: InstanceType<typeof Collab>["collaborators"] =
       new Map();
+    const now = Date.now();
+    const socketSet = new Set(sockets);
     for (const socketId of sockets) {
       collaborators.set(
         socketId,
@@ -905,6 +930,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           isCurrentUser: socketId === this.portal.socket?.id,
         }),
       );
+      this.collaboratorLastSeen.set(socketId, now);
+    }
+    for (const socketId of this.collaboratorLastSeen.keys()) {
+      if (!socketSet.has(socketId)) {
+        this.collaboratorLastSeen.delete(socketId);
+      }
     }
     this.collaborators = collaborators;
     this.excalidrawAPI.updateScene({ collaborators });
@@ -921,11 +952,39 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       },
     );
     collaborators.set(socketId, user);
+    this.collaboratorLastSeen.set(socketId, Date.now());
     this.collaborators = collaborators;
 
     this.excalidrawAPI.updateScene({
       collaborators,
     });
+  };
+
+  private pruneStaleCollaborators = () => {
+    if (!this.isCollaborating()) {
+      return;
+    }
+    const now = Date.now();
+    let pruned = false;
+    const collaborators = new Map(this.collaborators);
+    for (const [socketId, collaborator] of collaborators) {
+      if (collaborator.isCurrentUser) {
+        continue;
+      }
+      const lastSeen = this.collaboratorLastSeen.get(socketId);
+      if (
+        lastSeen !== undefined &&
+        now - lastSeen > STALE_COLLABORATOR_TIMEOUT_MS
+      ) {
+        collaborators.delete(socketId);
+        this.collaboratorLastSeen.delete(socketId);
+        pruned = true;
+      }
+    }
+    if (pruned) {
+      this.collaborators = collaborators;
+      this.excalidrawAPI.updateScene({ collaborators });
+    }
   };
 
   public setLastBroadcastedOrReceivedSceneVersion = (version: number) => {
