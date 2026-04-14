@@ -202,9 +202,6 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.excalidrawAPI = props.excalidrawAPI;
     this.activeIntervalId = null;
     this.idleTimeoutId = null;
-    //HAVE TO PUT SOMETHING FOR STARTING COLLABORATION
-
-    props.collabDetails && this.startCollaboration(props.collabDetails);
   }
 
   private onUmmount: (() => void) | null = null;
