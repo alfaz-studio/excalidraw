@@ -222,7 +222,10 @@ export const initializeScene = async (opts: {
     scrollToContent?: boolean;
   } = await loadScene(null, null, localDataState);
 
-  let roomLinkData = getCollaborationLinkData(window.location.href) || opts.collabDetails || null;
+  let roomLinkData =
+    getCollaborationLinkData(window.location.href) ||
+    opts.collabDetails ||
+    null;
   const isExternalScene = !!(id || jsonBackendMatch || roomLinkData);
   if (isExternalScene) {
     if (
@@ -514,7 +517,11 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       }
     };
 
-    initializeScene({ collabAPI, excalidrawAPI, collabDetails: props.collabDetails }).then(async (data) => {
+    initializeScene({
+      collabAPI,
+      excalidrawAPI,
+      collabDetails: props.collabDetails,
+    }).then(async (data) => {
       loadImages(data, /* isInitialLoad */ true);
       initialStatePromiseRef.current.promise.resolve(data.scene);
     });
@@ -644,7 +651,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       );
       //   clearTimeout(titleTimeout);
     };
-  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode]);
+  }, [isCollabDisabled, collabAPI, excalidrawAPI, setLangCode, props.collabDetails]);
 
   useEffect(() => {
     const unloadHandler = (event: BeforeUnloadEvent) => {

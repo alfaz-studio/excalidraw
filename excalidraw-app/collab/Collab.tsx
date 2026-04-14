@@ -972,7 +972,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         continue;
       }
       const lastSeen = this.collaboratorLastSeen.get(socketId);
-      if (lastSeen !== undefined && now - lastSeen > STALE_COLLABORATOR_TIMEOUT_MS) {
+      if (
+        lastSeen !== undefined &&
+        now - lastSeen > STALE_COLLABORATOR_TIMEOUT_MS
+      ) {
         collaborators.delete(socketId);
         this.collaboratorLastSeen.delete(socketId);
         pruned = true;
