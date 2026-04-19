@@ -570,7 +570,14 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.portal.socket = this.portal.open(
         socketIOClient(this.props.collabServerUrl || "", {
           transports: ["websocket", "polling"],
-          reconnectionAttempts: 5,
+          // Keep reconnecting for the lifetime of the Collab instance.
+          // componentWillUnmount calls destroySocketClient(), which is what
+          // prevents the leaked-socket crash the old 5-attempt cap was
+          // guarding against. An attempt cap just strands real users on
+          // flaky networks.
+          reconnection: true,
+          reconnectionDelay: 500,
+          reconnectionDelayMax: 5000,
           query: {
             roomId,
           },
