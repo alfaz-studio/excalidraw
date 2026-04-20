@@ -953,8 +953,8 @@ export const MobileShapeActions = ({
   const ACTIONS_WIDTH =
     mobileActionsRef.current?.getBoundingClientRect()?.width ?? 0;
 
-  // 7 actions + 2 for undo/redo
-  const MIN_ACTIONS = 9;
+  // 7 actions + 2 for undo/redo + 3 for zoom (in/out/reset)
+  const MIN_ACTIONS = 12;
 
   const GAP = 6;
   const WIDTH = 32;
@@ -1063,6 +1063,7 @@ export const MobileShapeActions = ({
       >
         <div style={{ pointerEvents: "auto" }}>
           <ZoomActions
+            disableShortcuts
             renderAction={renderAction}
             zoom={appState.zoom}
           />
