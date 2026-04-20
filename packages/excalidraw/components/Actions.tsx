@@ -1061,6 +1061,12 @@ export const MobileShapeActions = ({
           gap: GAP,
         }}
       >
+        <div style={{ pointerEvents: "auto" }}>
+          <ZoomActions
+            renderAction={renderAction}
+            zoom={appState.zoom}
+          />
+        </div>
         <div className="compact-action-item">{renderAction("undo")}</div>
         <div className="compact-action-item">{renderAction("redo")}</div>
         {showDuplicateOutside && (
