@@ -18,6 +18,7 @@ import { ShapeCache } from "@excalidraw/element";
 
 import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
+import { isHandToolActive } from "../appState";
 import { actionToggleStats } from "../actions";
 import { trackEvent } from "../analytics";
 import { TunnelsContext, useInitializeTunnels } from "../context/tunnels";
@@ -59,6 +60,7 @@ import { HintViewer } from "./HintViewer";
 import { ImageExportDialog } from "./ImageExportDialog";
 import { Island } from "./Island";
 import { JSONExportDialog } from "./JSONExportDialog";
+import { HandButton } from "./HandButton";
 import { LaserPointerButton } from "./LaserPointerButton";
 
 import "./LayerUI.scss";
@@ -376,6 +378,12 @@ const LayerUI = ({
                               disableShortcuts={
                                 UIOptions.canvasActions.disableShortcuts
                               }
+                            />
+                            <div className="App-toolbar__divider" />
+                            <HandButton
+                              checked={isHandToolActive(appState)}
+                              onChange={() => onHandToolToggle()}
+                              title={t("toolBar.hand")}
                             />
                           </Stack.Row>
                         </Island>
