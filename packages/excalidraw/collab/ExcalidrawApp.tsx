@@ -523,7 +523,23 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       collabDetails: props.collabDetails,
     }).then(async (data) => {
       loadImages(data, /* isInitialLoad */ true);
-      initialStatePromiseRef.current.promise.resolve(data.scene);
+
+      // When the host composites Excalidraw over other content (e.g. the Jitsi
+      // annotation overlay on a transparent window), make the very first canvas
+      // paint transparent so the default white scene background never flashes
+      // through. Scoped to the initial scene only; regular whiteboard usage
+      // (prop unset) keeps the default white background.
+      const initialScene = props.transparentBackground
+        ? {
+            ...data.scene,
+            appState: {
+              ...data.scene?.appState,
+              viewBackgroundColor: "transparent",
+            },
+          }
+        : data.scene;
+
+      initialStatePromiseRef.current.promise.resolve(initialScene);
     });
 
     const onHashChange = async (event: HashChangeEvent) => {

@@ -661,6 +661,14 @@ export interface ExcalidrawAppProps {
   getCollabAPI?: Function;
   storageBackendUrl?: string;
   meetingDetails?: IMeetingDetails;
+  /**
+   * Forces the initial scene's `viewBackgroundColor` to `"transparent"` so the
+   * very first canvas paint is transparent (no default white frame). Used by
+   * hosts that composite Excalidraw over other content (e.g. the Jitsi
+   * annotation overlay on a transparent window). Defaults to white when unset,
+   * so regular whiteboard usage is unaffected.
+   */
+  transparentBackground?: boolean;
 }
 
 export interface IMeetingDetails {
