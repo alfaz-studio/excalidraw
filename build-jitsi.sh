@@ -5,26 +5,25 @@ set -e
 
 echo "Building Excalidraw for Jitsi Meet..."
 
-# Check if the package dist exists
-if [ ! -f "packages/excalidraw/dist/prod/index.js" ]; then
-    echo "Package dist not found. Building packages (esbuild only, skipping type generation)..."
+# Always rebuild the packages. A previous guard skipped this whenever
+# packages/excalidraw/dist/prod/index.js existed, but it had no source-change
+# detection, so any cached dist (dev machine, persisted CI workspace, Docker
+# layer) silently shipped a stale bundle. Correctness over the rebuild cost.
+echo "Building packages (esbuild only, skipping type generation)..."
 
-    # Build each package using esbuild directly (skip gen:types which has
-    # upstream TS2717 duplicate-declaration errors we don't need to fix).
-    echo "  Building @excalidraw/common..."
-    (cd packages/common && rm -rf dist && node ../../scripts/buildBase.js)
+# Build each package using esbuild directly (skip gen:types which has
+# upstream TS2717 duplicate-declaration errors we don't need to fix).
+echo "  Building @excalidraw/common..."
+(cd packages/common && rm -rf dist && node ../../scripts/buildBase.js)
 
-    echo "  Building @excalidraw/math..."
-    (cd packages/math && rm -rf dist && node ../../scripts/buildBase.js)
+echo "  Building @excalidraw/math..."
+(cd packages/math && rm -rf dist && node ../../scripts/buildBase.js)
 
-    echo "  Building @excalidraw/element..."
-    (cd packages/element && rm -rf dist && node ../../scripts/buildBase.js)
+echo "  Building @excalidraw/element..."
+(cd packages/element && rm -rf dist && node ../../scripts/buildBase.js)
 
-    echo "  Building @excalidraw/excalidraw..."
-    (cd packages/excalidraw && rm -rf dist && node ../../scripts/buildPackage.js)
-else
-    echo "Using existing package build from packages/excalidraw/dist/prod/"
-fi
+echo "  Building @excalidraw/excalidraw..."
+(cd packages/excalidraw && rm -rf dist && node ../../scripts/buildPackage.js)
 
 # Create dist directory structure
 echo "Step 1: Creating dist directory structure..."
