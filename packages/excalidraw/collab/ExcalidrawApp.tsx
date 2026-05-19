@@ -18,6 +18,7 @@ import { ShareableLinkDialog } from "@excalidraw/excalidraw/components/Shareable
 import Trans from "@excalidraw/excalidraw/components/Trans";
 import {
   APP_NAME,
+  COLOR_PALETTE,
   EVENT,
   THEME,
   VERSION_TIMEOUT,
@@ -534,7 +535,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
             ...data.scene,
             appState: {
               ...data.scene?.appState,
-              viewBackgroundColor: "transparent",
+              viewBackgroundColor: COLOR_PALETTE.transparent,
             },
           }
         : data.scene;
