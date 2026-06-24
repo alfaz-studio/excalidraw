@@ -1,3 +1,7 @@
+// Side-effect import: installs the Object.fromEntries polyfill before the lazy
+// `import("@excalidraw/mermaid-to-excalidraw")` (paste-as-mermaid path) evaluates
+// on runtimes missing that ES2019 global (issue 019ecaf5).
+import "../polyfills/objectFromEntries";
 import clsx from "clsx";
 import throttle from "lodash.throttle";
 import React, { useContext } from "react";
