@@ -94,6 +94,19 @@ export const ToolPopover = ({
           aria-label={title}
           data-testid={dataTestId}
           onPointerDown={() => {
+            // A single click on the trigger both toggles the group popover AND
+            // activates the displayed (last-used) linear tool. Without the
+            // setActiveTool, clicking the Arrow/Line group only opened/closed the
+            // popover and never selected a tool, so users had to click twice (open
+            // popover, then pick the tool) just to start drawing an arrow — they
+            // reported "the arrow needs repeated clicks to activate" (issue
+            // 019ea26f). Selecting on click restores single-click activation while
+            // the popover still lets them switch between Arrow and Line.
+            if (app.state.activeTool.type !== displayedOption.type) {
+              trackEvent("toolbar", displayedOption.type, "ui");
+              app.setActiveTool({ type: displayedOption.type as any });
+              onToolChange?.(displayedOption.type);
+            }
             setIsPopupOpen((v) => !v);
           }}
         />

@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+// Side-effect import: installs the Object.fromEntries polyfill before the lazy
+// `import("@excalidraw/mermaid-to-excalidraw")` below evaluates (issue 019ecaf5).
+import "../../polyfills/objectFromEntries";
 import { useUIAppState } from "../../context/ui-appState";
 import { t } from "../../i18n";
 import { useApp } from "../App";
