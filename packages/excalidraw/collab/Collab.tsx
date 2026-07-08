@@ -592,7 +592,6 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     try {
       const { meetingDetails } = this.props;
-      this.portal.encryptionEnabled = this.props.collabEncryption === true;
       this.portal.socket = this.portal.open(
         await createSocket(),
         roomId,
@@ -605,10 +604,17 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               clientId: this.clientId,
             }
           : { clientId: this.clientId },
+        this.props.collabEncryption === true,
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
     } catch (error) {
+      // Unlike socketIOClient (which never throws synchronously — it
+      // reconnects), an injected collabSocketFactory can reject, so this
+      // path is reachable: roll back the collaboration state entered above,
+      // or local persistence would stay paused for the rest of the session.
+      LocalData.resumeSave("collaboration");
+      this.setIsCollaborating(false);
       console.error(error);
       this.setErrorDialog(
         error instanceof Error ? error.message : String(error),
@@ -672,10 +678,18 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
                 scrollToContent: true,
               });
 
-              // Initialized from a peer, not from storage — fold any
-              // persisted scene in as well (fire and forget; see
-              // mergePersistedScene for why this is needed and safe).
-              if (existingRoomLinkData && this.props.storageBackendUrl) {
+              // Initialized from a peer that had nothing to send — fold any
+              // persisted scene in (fire and forget; see mergePersistedScene
+              // for why this is needed and safe). Gated on an EMPTY INIT so
+              // the common established-room join doesn't stampede the
+              // storage backend with one GET per client: a peer with content
+              // is at least as fresh as storage, since members persist
+              // continuously.
+              if (
+                existingRoomLinkData &&
+                this.props.storageBackendUrl &&
+                remoteElements.length === 0
+              ) {
                 this.mergePersistedScene(existingRoomLinkData);
               }
             }

@@ -45,11 +45,18 @@ class Portal {
     this.collab = collab;
   }
 
-  open(socket: CollabSocket, id: string, key: string, metadata?: RoomMetadata) {
+  open(
+    socket: CollabSocket,
+    id: string,
+    key: string,
+    metadata?: RoomMetadata,
+    encryptionEnabled: boolean = false,
+  ) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
     this.roomMetadata = metadata ?? null;
+    this.encryptionEnabled = encryptionEnabled;
 
     // Remove any stale listeners to prevent duplicates on reconnection
     this.socket.off("init-room");
@@ -112,33 +119,26 @@ class Portal {
   ) {
     const broadcast = async () => {
       if (this.socket && this.roomId && this.roomKey) {
-        const json = JSON.stringify(data);
-        const encoded = new TextEncoder().encode(json);
+        const encoded = new TextEncoder().encode(JSON.stringify(data));
 
         // The IV length is the wire-level switch: receivers
         // (Collab.decryptPayload) treat a zero-length IV as plaintext and
         // decrypt anything with a real IV, so mixed rooms interoperate and
         // the toggle only has to gate the send side.
-        if (this.encryptionEnabled) {
-          const { encryptedBuffer, iv } = await encryptData(
-            this.roomKey,
-            encoded,
-          );
-
-          this.socket.emit(
-            volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
-            roomId ?? this.roomId,
-            encryptedBuffer,
-            iv,
-          );
-          return;
-        }
+        const { payload, iv } = this.encryptionEnabled
+          ? await encryptData(this.roomKey, encoded).then(
+              ({ encryptedBuffer, iv: realIV }) => ({
+                payload: encryptedBuffer,
+                iv: realIV,
+              }),
+            )
+          : { payload: encoded, iv: new Uint8Array(0) };
 
         this.socket.emit(
           volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
           roomId ?? this.roomId,
-          encoded,
-          new Uint8Array(0),
+          payload,
+          iv,
         );
       }
     };
