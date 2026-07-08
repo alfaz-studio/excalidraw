@@ -75,6 +75,37 @@ export class LaserTrails implements Trail {
 
   onFrame() {
     this.updateCollabTrails();
+
+    // Nothing is driving the collab trails (no collaborator currently holds
+    // the laser tool), so abort the frame loop instead of polling forever —
+    // an idle loop here forces the page to keep producing frames at 60fps.
+    // `resume()` restarts it when collaborator state changes; individual
+    // trails animate their decay via their own self-stopping loops.
+    if (!this.hasActiveCollabLaser()) {
+      return true;
+    }
+  }
+
+  /**
+   * Restart the collab-trail loop after `onFrame` aborted it. Safe to call on
+   * every collaborator update: it no-ops unless a collaborator is actually
+   * using the laser, and the AnimationFrameHandler ignores the call while the
+   * loop is already scheduled.
+   */
+  resume() {
+    if (this.container && this.hasActiveCollabLaser()) {
+      this.animationFrameHandler.start(this);
+    }
+  }
+
+  private hasActiveCollabLaser() {
+    for (const collaborator of this.app.state.collaborators.values()) {
+      if (collaborator.pointer?.tool === "laser") {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private updateCollabTrails() {

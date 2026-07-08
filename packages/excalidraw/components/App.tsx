@@ -3253,6 +3253,12 @@ class App extends React.Component<AppProps, AppState> {
       this.maybeUnfollowRemoteUser();
     }
 
+    // Collaborator updates arrive as a fresh Map; wake the (self-stopping)
+    // collab laser-trail loop when one of them is using the laser.
+    if (prevState.collaborators !== this.state.collaborators) {
+      this.laserTrails.resume();
+    }
+
     if (
       prevState.zoom.value !== this.state.zoom.value ||
       prevState.scrollX !== this.state.scrollX ||
