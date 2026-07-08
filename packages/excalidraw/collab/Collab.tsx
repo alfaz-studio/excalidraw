@@ -44,6 +44,7 @@ import type {
   BinaryFileData,
   SocketId,
   Collaborator,
+  CollabSocket,
   Gesture,
   ExcalidrawCollabProps,
 } from "@excalidraw/excalidraw/types";
@@ -551,9 +552,33 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.setIsCollaborating(true);
     LocalData.pauseSave("collaboration");
 
-    const { default: socketIOClient } = await import(
-      /* webpackChunkName: "socketIoClient" */ "socket.io-client"
-    );
+    const createSocket = async (): Promise<CollabSocket> => {
+      // Host-injected transport (e.g. LiveKit data channels in Sonacove
+      // Meets) — bypasses the socket.io relay entirely, so the socket.io
+      // client chunk is never even fetched.
+      if (this.props.collabSocketFactory) {
+        return await this.props.collabSocketFactory({ roomId });
+      }
+
+      const { default: socketIOClient } = await import(
+        /* webpackChunkName: "socketIoClient" */ "socket.io-client"
+      );
+
+      return socketIOClient(this.props.collabServerUrl || "", {
+        transports: ["websocket", "polling"],
+        // Keep reconnecting for the lifetime of the Collab instance.
+        // componentWillUnmount calls destroySocketClient(), which is what
+        // prevents the leaked-socket crash the old 5-attempt cap was
+        // guarding against. An attempt cap just strands real users on
+        // flaky networks.
+        reconnection: true,
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 5000,
+        query: {
+          roomId,
+        },
+      });
+    };
 
     const fallbackInitializationHandler = () => {
       this.initializeRoom({
@@ -567,21 +592,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     try {
       const { meetingDetails } = this.props;
+      this.portal.encryptionEnabled = this.props.collabEncryption === true;
       this.portal.socket = this.portal.open(
-        socketIOClient(this.props.collabServerUrl || "", {
-          transports: ["websocket", "polling"],
-          // Keep reconnecting for the lifetime of the Collab instance.
-          // componentWillUnmount calls destroySocketClient(), which is what
-          // prevents the leaked-socket crash the old 5-attempt cap was
-          // guarding against. An attempt cap just strands real users on
-          // flaky networks.
-          reconnection: true,
-          reconnectionDelay: 500,
-          reconnectionDelayMax: 5000,
-          query: {
-            roomId,
-          },
-        }),
+        await createSocket(),
         roomId,
         roomKey,
         meetingDetails
@@ -658,6 +671,13 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
                 elements: reconciledElements,
                 scrollToContent: true,
               });
+
+              // Initialized from a peer, not from storage — fold any
+              // persisted scene in as well (fire and forget; see
+              // mergePersistedScene for why this is needed and safe).
+              if (existingRoomLinkData && this.props.storageBackendUrl) {
+                this.mergePersistedScene(existingRoomLinkData);
+              }
             }
             break;
           }
@@ -812,11 +832,46 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         console.error(error);
       } finally {
         this.portal.socketInitialized = true;
+        this.portal.flushPendingBroadcasts();
       }
     } else {
       this.portal.socketInitialized = true;
+      this.portal.flushPendingBroadcasts();
     }
     return null;
+  };
+
+  /**
+   * Merge the HTTP-persisted scene into the local one via reconciliation
+   * (no scene reset — element id+version wins, so this is safe and
+   * idempotent at any time after initialization).
+   *
+   * Needed when initialization happened via a peer's SCENE_INIT rather than
+   * `first-in-room`: when several clients join within the same announce
+   * window (the norm — every participant mounts on the same metadata
+   * broadcast), none of them is "first", so none takes the
+   * `initializeRoom({ fetchScene: true })` path and a previously persisted
+   * scene would never load. Every client merging independently is cheap
+   * (one GET; empty store is a no-op) and converges regardless of timing.
+   */
+  private mergePersistedScene = async (roomLinkData: {
+    roomId: string;
+    roomKey: string;
+  }) => {
+    try {
+      const elements = await loadFromStorage(
+        roomLinkData.roomId,
+        roomLinkData.roomKey,
+        this.portal.socket,
+      );
+
+      if (elements?.length) {
+        this.handleRemoteSceneUpdate(this._reconcileElements(elements));
+      }
+    } catch (error) {
+      // Non-fatal: peers and the periodic full sync keep us converged.
+      console.error(error);
+    }
   };
 
   private _reconcileElements = (

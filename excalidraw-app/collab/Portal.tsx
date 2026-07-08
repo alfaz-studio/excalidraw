@@ -1,11 +1,13 @@
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
+import { encryptData } from "@excalidraw/excalidraw/data/encryption";
 import { newElementWith } from "@excalidraw/element";
 import throttle from "lodash.throttle";
 
 import type { UserIdleState } from "@excalidraw/common";
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
 import type {
+  CollabSocket,
   OnUserFollowedPayload,
   SocketId,
 } from "@excalidraw/excalidraw/types";
@@ -19,7 +21,6 @@ import type {
   SyncableExcalidrawElement,
 } from "../data";
 import type { TCollabClass } from "./Collab";
-import type { Socket } from "socket.io-client";
 
 export interface RoomMetadata {
   meetingId?: string;
@@ -30,11 +31,13 @@ export interface RoomMetadata {
 
 class Portal {
   collab: TCollabClass;
-  socket: Socket | null = null;
+  socket: CollabSocket | null = null;
   socketInitialized: boolean = false; // we don't want the socket to emit any updates until it is fully initialized
   roomId: string | null = null;
   roomKey: string | null = null;
   roomMetadata: RoomMetadata | null = null;
+  /** E2E-encrypt outgoing payloads with the room key (see _broadcastSocketData). */
+  encryptionEnabled: boolean = false;
   broadcastedElementVersions: Map<string, number> = new Map();
   pendingBroadcasts: Array<() => Promise<void>> = []; // queue broadcasts until socket is initialized
 
@@ -42,7 +45,7 @@ class Portal {
     this.collab = collab;
   }
 
-  open(socket: Socket, id: string, key: string, metadata?: RoomMetadata) {
+  open(socket: CollabSocket, id: string, key: string, metadata?: RoomMetadata) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
@@ -111,15 +114,31 @@ class Portal {
       if (this.socket && this.roomId && this.roomKey) {
         const json = JSON.stringify(data);
         const encoded = new TextEncoder().encode(json);
-        // Send plaintext with empty IV sentinel — server needs to read messages
-        // for scene persistence. Encryption is disabled.
-        const emptyIV = new Uint8Array(0);
+
+        // The IV length is the wire-level switch: receivers
+        // (Collab.decryptPayload) treat a zero-length IV as plaintext and
+        // decrypt anything with a real IV, so mixed rooms interoperate and
+        // the toggle only has to gate the send side.
+        if (this.encryptionEnabled) {
+          const { encryptedBuffer, iv } = await encryptData(
+            this.roomKey,
+            encoded,
+          );
+
+          this.socket.emit(
+            volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
+            roomId ?? this.roomId,
+            encryptedBuffer,
+            iv,
+          );
+          return;
+        }
 
         this.socket.emit(
           volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
           roomId ?? this.roomId,
           encoded,
-          emptyIV,
+          new Uint8Array(0),
         );
       }
     };
