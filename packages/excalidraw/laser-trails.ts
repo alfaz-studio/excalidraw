@@ -88,14 +88,20 @@ export class LaserTrails implements Trail {
 
   /**
    * Restart the collab-trail loop after `onFrame` aborted it. Safe to call on
-   * every collaborator update: it no-ops unless a collaborator is actually
-   * using the laser, and the AnimationFrameHandler ignores the call while the
-   * loop is already scheduled.
+   * every collaborator update: while the loop is already running (the steady
+   * state — collaborator updates arrive at cursor rate) it costs a WeakMap
+   * lookup, and otherwise it no-ops unless a collaborator is actually using
+   * the laser.
    */
   resume() {
-    if (this.container && this.hasActiveCollabLaser()) {
-      this.animationFrameHandler.start(this);
+    if (
+      !this.container ||
+      this.animationFrameHandler.isRunning(this) ||
+      !this.hasActiveCollabLaser()
+    ) {
+      return;
     }
+    this.animationFrameHandler.start(this);
   }
 
   private hasActiveCollabLaser() {

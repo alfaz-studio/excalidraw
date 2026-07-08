@@ -129,6 +129,8 @@ export interface CollabAPI {
 //   excalidrawAPI: ExcalidrawImperativeAPI;
 // }
 
+const textDecoder = new TextDecoder("utf-8");
+
 class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   portal: Portal;
   fileManager: FileManager;
@@ -457,10 +459,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     try {
       // Empty IV = plaintext (no encryption)
       if (iv.byteLength === 0) {
-        const decodedData = new TextDecoder("utf-8").decode(
-          new Uint8Array(encryptedData),
-        );
-        return JSON.parse(decodedData);
+        return JSON.parse(textDecoder.decode(new Uint8Array(encryptedData)));
       }
 
       const decrypted = await decryptData(
@@ -469,10 +468,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         decryptionKey,
       );
 
-      const decodedData = new TextDecoder("utf-8").decode(
-        new Uint8Array(decrypted),
-      );
-      return JSON.parse(decodedData);
+      return JSON.parse(textDecoder.decode(new Uint8Array(decrypted)));
     } catch (error) {
       window.alert(t("alerts.decryptFailed"));
       console.error(error);
@@ -845,12 +841,10 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {
-        this.portal.socketInitialized = true;
-        this.portal.flushPendingBroadcasts();
+        this.portal.markSocketInitialized();
       }
     } else {
-      this.portal.socketInitialized = true;
-      this.portal.flushPendingBroadcasts();
+      this.portal.markSocketInitialized();
     }
     return null;
   };

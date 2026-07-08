@@ -28,6 +28,10 @@ export class AnimationFrameHandler {
     this.scheduleFrame(key);
   }
 
+  isRunning(key: object) {
+    return this.rafIds.has(key);
+  }
+
   stop(key: object) {
     const target = this.targets.get(key);
     if (target && !target.stopped) {

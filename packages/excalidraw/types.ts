@@ -670,31 +670,30 @@ export type CollabSocketFactory = (opts: {
   roomId: string;
 }) => Promise<CollabSocket> | CollabSocket;
 
-export interface ExcalidrawCollabProps {
+/**
+ * Collab configuration passed through ExcalidrawApp down to the Collab
+ * component — one definition so the two prop surfaces can't drift.
+ */
+export interface CollabTransportProps {
   collabServerUrl?: string;
   collabDetails?: { roomId: string; roomKey: string };
   /** When provided, used instead of a socket.io connection to collabServerUrl. */
   collabSocketFactory?: CollabSocketFactory;
   /** E2E-encrypt outgoing collab payloads with the room key (default off). */
   collabEncryption?: boolean;
-  excalidrawAPI: ExcalidrawImperativeAPI;
-  useTestEnv?: boolean;
   storageBackendUrl?: string;
   meetingDetails?: IMeetingDetails;
 }
 
-export interface ExcalidrawAppProps {
-  collabServerUrl?: string;
-  collabDetails?: { roomId: string; roomKey: string };
-  /** When provided, used instead of a socket.io connection to collabServerUrl. */
-  collabSocketFactory?: CollabSocketFactory;
-  /** E2E-encrypt outgoing collab payloads with the room key (default off). */
-  collabEncryption?: boolean;
+export interface ExcalidrawCollabProps extends CollabTransportProps {
+  excalidrawAPI: ExcalidrawImperativeAPI;
+  useTestEnv?: boolean;
+}
+
+export interface ExcalidrawAppProps extends CollabTransportProps {
   excalidraw: ExcalidrawProps;
   getExcalidrawAPI?: Function;
   getCollabAPI?: Function;
-  storageBackendUrl?: string;
-  meetingDetails?: IMeetingDetails;
 }
 
 export interface IMeetingDetails {
