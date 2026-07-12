@@ -3,6 +3,8 @@ import throttle from "lodash.throttle";
 import React, { useContext } from "react";
 import { flushSync } from "react-dom";
 import rough from "roughjs/bin/rough";
+
+// SONACOVE: lockedViewport
 import { nanoid } from "nanoid";
 
 import {
@@ -288,6 +290,11 @@ import type {
 } from "@excalidraw/element/types";
 
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
+
+import {
+  getLockedViewportState,
+  lockedViewportNeedsUpdate,
+} from "../lockedViewport";
 
 import {
   actionAddToLibrary,
@@ -3236,7 +3243,38 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
+  // SONACOVE: lockedViewport — derived-viewport enforcement. Runs after every
+  // commit, so anything that slipped a scroll/zoom into state (updateScene from
+  // the host or collab, initialData/localStorage restore, a missed code path)
+  // converges before the browser paints. setState here triggers a synchronous
+  // re-render pre-paint; the epsilons in lockedViewportNeedsUpdate stop it from
+  // ping-ponging once converged. The zoom is deliberately unclamped — see
+  // lockedViewport.ts.
+  private maybeEnforceLockedViewport() {
+    const lock = this.props.lockedViewport;
+
+    if (!lock) {
+      return;
+    }
+
+    // A scroll/zoom animation started before (or despite) the lock — e.g. a
+    // search-match scroll or an element-link recenter mid-flight when the
+    // prop flips on — writes viewport values via raw setState every RAF
+    // frame, bypassing the translateCanvas guard. Cancel it instead of
+    // fighting it frame by frame.
+    this.cancelInProgressAnimation?.();
+
+    if (!lockedViewportNeedsUpdate(lock, this.state)) {
+      return;
+    }
+
+    this.setState(
+      getLockedViewportState(lock, this.state.width, this.state.height),
+    );
+  }
+
   componentDidUpdate(prevProps: AppProps, prevState: AppState) {
+    this.maybeEnforceLockedViewport();
     this.updateEmbeddables();
     const elements = this.scene.getElementsIncludingDeleted();
     const elementsMap = this.scene.getElementsMapIncludingDeleted();
@@ -4188,6 +4226,11 @@ class App extends React.Component<AppProps, AppState> {
       canvasOffsets?: Offsets;
     },
   ) => {
+    // SONACOVE: lockedViewport — the viewport is derived; ignore
+    // programmatic recenters (collab scene init, element links, follow mode).
+    if (this.props.lockedViewport) {
+      return;
+    }
     if (typeof target === "string") {
       let id: string | null;
       if (isElementLink(target)) {
@@ -4305,6 +4348,12 @@ class App extends React.Component<AppProps, AppState> {
   private translateCanvas: React.Component<any, AppState>["setState"] = (
     state,
   ) => {
+    // SONACOVE: lockedViewport — the viewport is derived; ignore every
+    // user-interaction pan/zoom (wheel, pinch, hand/space drag, edge
+    // autoscroll all route through here).
+    if (this.props.lockedViewport) {
+      return;
+    }
     this.cancelInProgressAnimation?.();
     this.maybeUnfollowRemoteUser();
     this.setState(state);
@@ -5471,6 +5520,12 @@ class App extends React.Component<AppProps, AppState> {
   // fires only on Safari
   private onGestureChange = withBatchedUpdates((event: GestureEvent) => {
     event.preventDefault();
+
+    // SONACOVE: lockedViewport — the viewport is derived; ignore trackpad
+    // pinch zoom (this Safari path bypasses translateCanvas).
+    if (this.props.lockedViewport) {
+      return;
+    }
 
     // onGestureChange only has zoom factor but not the center.
     // If we're on iPad or iPhone, then we recognize multi-touch and will
