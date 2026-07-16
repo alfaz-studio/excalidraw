@@ -86,19 +86,42 @@ export const fileOpen = async <M extends boolean | undefined = false>(opts: {
   return (await normalizeFile(files)) as RetType;
 };
 
-export const fileSave = (
-  blob: Blob | Promise<Blob>,
-  opts: {
-    /** supply without the extension */
-    name: string;
-    /** file extension */
-    extension: FILE_EXTENSION;
-    mimeTypes?: string[];
-    description: string;
-    /** existing FileSystemHandle */
-    fileHandle?: FileSystemHandle | null;
-  },
-) => {
+export type FileSaveOpts = {
+  /** supply without the extension */
+  name: string;
+  /** file extension */
+  extension: FILE_EXTENSION;
+  mimeTypes?: string[];
+  description: string;
+  /** existing FileSystemHandle */
+  fileHandle?: FileSystemHandle | null;
+};
+
+/**
+ * Host-app override for every native save. Image export (PNG/SVG) and scene
+ * "Save to disk" all funnel through {@link fileSave}, so a host (e.g. the
+ * Sonacove Electron app) can register one of these to redirect the blob to its
+ * own storage instead of the OS file picker. Return `null` to signal "no active
+ * file handle" (each save is independent).
+ */
+export type FileSaveOverride = (
+  blob: Blob,
+  opts: FileSaveOpts,
+) => Promise<FileSystemHandle | null>;
+
+let _fileSaveOverride: FileSaveOverride | null = null;
+
+/** Register (or clear, with `null`) the host save override — see {@link FileSaveOverride}. */
+export const setFileSaveOverride = (fn: FileSaveOverride | null) => {
+  _fileSaveOverride = fn;
+};
+
+export const fileSave = (blob: Blob | Promise<Blob>, opts: FileSaveOpts) => {
+  if (_fileSaveOverride) {
+    // Redirect to the host (await the blob first — the override needs the bytes).
+    return Promise.resolve(blob).then((resolved) => _fileSaveOverride!(resolved, opts));
+  }
+
   return _fileSave(
     blob,
     {

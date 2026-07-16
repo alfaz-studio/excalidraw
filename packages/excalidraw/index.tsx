@@ -250,6 +250,10 @@ export {
 } from "@excalidraw/utils/export";
 
 export { serializeAsJSON, serializeLibraryAsJSON } from "./data/json";
+// Host-app save redirection (Sonacove Electron auto-saves to a folder instead of
+// the OS picker) — every native image export + scene save funnels through fileSave.
+export { setFileSaveOverride } from "./data/filesystem";
+export type { FileSaveOverride, FileSaveOpts } from "./data/filesystem";
 export {
   loadFromBlob,
   loadSceneOrLibraryFromBlob,
