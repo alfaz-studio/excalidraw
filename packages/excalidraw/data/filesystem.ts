@@ -117,9 +117,15 @@ export const setFileSaveOverride = (fn: FileSaveOverride | null) => {
 };
 
 export const fileSave = (blob: Blob | Promise<Blob>, opts: FileSaveOpts) => {
-  if (_fileSaveOverride) {
-    // Redirect to the host (await the blob first — the override needs the bytes).
-    return Promise.resolve(blob).then((resolved) => _fileSaveOverride!(resolved, opts));
+  // Capture the override into a local BEFORE branching: `blob` may be a pending
+  // Promise (PNG/SVG export encoding), and the host can clear the override —
+  // setFileSaveOverride(null) on unmount — between this check and the resolve.
+  // Reading the module var again inside .then() could then call null; the local
+  // pins the function we actually validated.
+  const override = _fileSaveOverride;
+
+  if (override) {
+    return Promise.resolve(blob).then((resolved) => override(resolved, opts));
   }
 
   return _fileSave(
