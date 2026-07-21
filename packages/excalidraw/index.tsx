@@ -57,6 +57,8 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     showDeprecatedFonts,
     renderScrollbars,
     storageBackendUrl,
+    lockedViewport,
+    viewportRotation,
   } = props;
 
   const canvasActions = props.UIOptions?.canvasActions;
@@ -151,6 +153,8 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           showDeprecatedFonts={showDeprecatedFonts}
           renderScrollbars={renderScrollbars}
           storageBackendUrl={storageBackendUrl}
+          lockedViewport={lockedViewport}
+          viewportRotation={viewportRotation}
         >
           {children}
         </App>
