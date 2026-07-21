@@ -3,6 +3,8 @@ import throttle from "lodash.throttle";
 import React, { useContext } from "react";
 import { flushSync } from "react-dom";
 import rough from "roughjs/bin/rough";
+
+// SONACOVE: lockedViewport
 import { nanoid } from "nanoid";
 
 import {
@@ -288,6 +290,16 @@ import type {
 } from "@excalidraw/element/types";
 
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
+
+import {
+  getLockedViewportState,
+  lockedViewportNeedsUpdate,
+} from "../lockedViewport";
+
+import {
+  normalizeViewportRotation,
+  rotateClientPoint,
+} from "../viewportRotation";
 
 import {
   actionAddToLibrary,
@@ -657,6 +669,12 @@ class App extends React.Component<AppProps, AppState> {
   /** previous frame pointer coords */
   previousPointerMoveCoords: { x: number; y: number } | null = null;
   lastViewportPosition = { x: 0, y: 0 };
+
+  // SONACOVE: viewportRotation — lastViewportPosition is pseudo-client space
+  // (offset + local; see warpClientCoords), which is what the scene-math
+  // consumers need — but DOM APIs like document.elementFromPoint operate in
+  // TRUE client space, so they read this unwarped mirror instead.
+  lastRealViewportPosition = { x: 0, y: 0 };
 
   animationFrameHandler = new AnimationFrameHandler();
 
@@ -1262,19 +1280,14 @@ class App extends React.Component<AppProps, AppState> {
 
     const viewportClickStart_scenePoint = pointFrom(
       viewportCoordsToSceneCoords(
-        {
-          clientX: this.lastPointerDownEvent.clientX,
-          clientY: this.lastPointerDownEvent.clientY,
-        },
+        // SONACOVE: viewportRotation — stored events hold RAW client coords.
+        this.warpClientCoords(this.lastPointerDownEvent),
         this.state,
       ),
     );
     const viewportClickEnd_scenePoint = pointFrom(
       viewportCoordsToSceneCoords(
-        {
-          clientX: this.lastPointerUpEvent.clientX,
-          clientY: this.lastPointerUpEvent.clientY,
-        },
+        this.warpClientCoords(this.lastPointerUpEvent),
         this.state,
       ),
     );
@@ -1768,14 +1781,24 @@ class App extends React.Component<AppProps, AppState> {
 
         if (frameNameDiv) {
           const box = frameNameDiv.getBoundingClientRect();
-          const boxSceneTopLeft = viewportCoordsToSceneCoords(
-            { clientX: box.x, clientY: box.y },
+          // SONACOVE: viewportRotation — a child's gBCR is true client space;
+          // under rotation the warped corners may swap roles, so normalize.
+          const boxCornerA = viewportCoordsToSceneCoords(
+            this.warpClientCoords({ clientX: box.x, clientY: box.y }),
             this.state,
           );
-          const boxSceneBottomRight = viewportCoordsToSceneCoords(
-            { clientX: box.right, clientY: box.bottom },
+          const boxCornerB = viewportCoordsToSceneCoords(
+            this.warpClientCoords({ clientX: box.right, clientY: box.bottom }),
             this.state,
           );
+          const boxSceneTopLeft = {
+            x: Math.min(boxCornerA.x, boxCornerB.x),
+            y: Math.min(boxCornerA.y, boxCornerB.y),
+          };
+          const boxSceneBottomRight = {
+            x: Math.max(boxCornerA.x, boxCornerB.x),
+            y: Math.max(boxCornerA.y, boxCornerB.y),
+          };
 
           bounds = {
             x: boxSceneTopLeft.x,
@@ -3236,7 +3259,69 @@ class App extends React.Component<AppProps, AppState> {
     }
   }
 
+  // SONACOVE: lockedViewport — derived-viewport enforcement. Runs after every
+  // commit, so anything that slipped a scroll/zoom into state (updateScene from
+  // the host or collab, initialData/localStorage restore, a missed code path)
+  // converges before the browser paints. setState here triggers a synchronous
+  // re-render pre-paint; the epsilons in lockedViewportNeedsUpdate stop it from
+  // ping-ponging once converged. The zoom is deliberately unclamped — see
+  // lockedViewport.ts.
+  // SONACOVE: viewportRotation — warp a REAL pointer/mouse event's client
+  // coords into the app's pseudo-client space (`offset + local`), inverting
+  // the host ancestor's CSS rotation. Must wrap every place raw event coords
+  // enter coordinate math; synthetic "client" values the code fabricates
+  // (paste-at-center, viewport-culling corners, scroll-center math) already
+  // live in that space and must NOT pass through here. Identity when the
+  // host isn't rotated. See viewportRotation.ts.
+  private warpClientCoords = <T extends { clientX: number; clientY: number }>(
+    point: T,
+  ): { clientX: number; clientY: number } => {
+    const rotation = normalizeViewportRotation(this.props.viewportRotation);
+
+    if (!rotation) {
+      return point;
+    }
+
+    return rotateClientPoint(
+      point.clientX,
+      point.clientY,
+      rotation,
+      this.state,
+    );
+  };
+
+  private maybeEnforceLockedViewport() {
+    const lock = this.props.lockedViewport;
+
+    if (!lock) {
+      return;
+    }
+
+    // A scroll/zoom animation started before (or despite) the lock — e.g. a
+    // search-match scroll or an element-link recenter mid-flight when the
+    // prop flips on — writes viewport values via raw setState every RAF
+    // frame, bypassing the translateCanvas guard. Cancel it instead of
+    // fighting it frame by frame.
+    this.cancelInProgressAnimation?.();
+
+    if (!lockedViewportNeedsUpdate(lock, this.state)) {
+      return;
+    }
+
+    this.setState(
+      getLockedViewportState(lock, this.state.width, this.state.height),
+    );
+  }
+
   componentDidUpdate(prevProps: AppProps, prevState: AppState) {
+    this.maybeEnforceLockedViewport();
+
+    // SONACOVE: viewportRotation — a rotation change flips the meaning of the
+    // container's gBCR (AABB vs local dims), so re-measure even if no resize
+    // fired (a 180° flip changes no layout box at all).
+    if (prevProps.viewportRotation !== this.props.viewportRotation) {
+      this.updateDOMRect();
+    }
     this.updateEmbeddables();
     const elements = this.scene.getElementsIncludingDeleted();
     const elementsMap = this.scene.getElementsMapIncludingDeleted();
@@ -3696,9 +3781,10 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
+      // SONACOVE: viewportRotation — elementFromPoint needs TRUE client coords.
       const elementUnderCursor = document.elementFromPoint(
-        this.lastViewportPosition.x,
-        this.lastViewportPosition.y,
+        this.lastRealViewportPosition.x,
+        this.lastRealViewportPosition.y,
       );
       if (
         event &&
@@ -4194,6 +4280,11 @@ class App extends React.Component<AppProps, AppState> {
       canvasOffsets?: Offsets;
     },
   ) => {
+    // SONACOVE: lockedViewport — the viewport is derived; ignore
+    // programmatic recenters (collab scene init, element links, follow mode).
+    if (this.props.lockedViewport) {
+      return;
+    }
     if (typeof target === "string") {
       let id: string | null;
       if (isElementLink(target)) {
@@ -4311,6 +4402,12 @@ class App extends React.Component<AppProps, AppState> {
   private translateCanvas: React.Component<any, AppState>["setState"] = (
     state,
   ) => {
+    // SONACOVE: lockedViewport — the viewport is derived; ignore every
+    // user-interaction pan/zoom (wheel, pinch, hand/space drag, edge
+    // autoscroll all route through here).
+    if (this.props.lockedViewport) {
+      return;
+    }
     this.cancelInProgressAnimation?.();
     this.maybeUnfollowRemoteUser();
     this.setState(state);
@@ -4527,8 +4624,15 @@ class App extends React.Component<AppProps, AppState> {
 
   private updateCurrentCursorPosition = withBatchedUpdates(
     (event: MouseEvent) => {
-      this.lastViewportPosition.x = event.clientX;
-      this.lastViewportPosition.y = event.clientY;
+      // SONACOVE: viewportRotation — stored in pseudo-client space so every
+      // consumer (paste-at-cursor, zoom-to-cursor) stays rotation-correct;
+      // DOM-API consumers use the raw mirror.
+      const { clientX, clientY } = this.warpClientCoords(event);
+
+      this.lastViewportPosition.x = clientX;
+      this.lastViewportPosition.y = clientY;
+      this.lastRealViewportPosition.x = event.clientX;
+      this.lastRealViewportPosition.y = event.clientY;
     },
   );
 
@@ -5195,10 +5299,7 @@ class App extends React.Component<AppProps, AppState> {
       // Restart the timer if we're creating/editing a linear element and hovering over an element
       if (this.lastPointerMoveEvent && getFeatureFlag("COMPLEX_BINDINGS")) {
         const scenePointer = viewportCoordsToSceneCoords(
-          {
-            clientX: this.lastPointerMoveEvent.clientX,
-            clientY: this.lastPointerMoveEvent.clientY,
-          },
+          this.warpClientCoords(this.lastPointerMoveEvent),
           this.state,
         );
 
@@ -5477,6 +5578,12 @@ class App extends React.Component<AppProps, AppState> {
   // fires only on Safari
   private onGestureChange = withBatchedUpdates((event: GestureEvent) => {
     event.preventDefault();
+
+    // SONACOVE: lockedViewport — the viewport is derived; ignore trackpad
+    // pinch zoom (this Safari path bypasses translateCanvas).
+    if (this.props.lockedViewport) {
+      return;
+    }
 
     // onGestureChange only has zoom factor but not the center.
     // If we're on iPad or iPhone, then we recognize multi-touch and will
@@ -6066,7 +6173,7 @@ class App extends React.Component<AppProps, AppState> {
     const selectedElements = this.scene.getSelectedElements(this.state);
 
     let { x: sceneX, y: sceneY } = viewportCoordsToSceneCoords(
-      event,
+      this.warpClientCoords(event),
       this.state,
     );
 
@@ -6292,7 +6399,7 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
     const lastPointerDownCoords = viewportCoordsToSceneCoords(
-      this.lastPointerDownEvent!,
+      this.warpClientCoords(this.lastPointerDownEvent!),
       this.state,
     );
     const elementsMap = this.scene.getNonDeletedElementsMap();
@@ -6304,7 +6411,7 @@ class App extends React.Component<AppProps, AppState> {
       this.editorInterface.formFactor === "phone",
     );
     const lastPointerUpCoords = viewportCoordsToSceneCoords(
-      this.lastPointerUpEvent!,
+      this.warpClientCoords(this.lastPointerUpEvent!),
       this.state,
     );
     const lastPointerUpHittingLinkIcon = isPointHittingLink(
@@ -6363,7 +6470,11 @@ class App extends React.Component<AppProps, AppState> {
   ) => {
     this.savePointer(event.clientX, event.clientY, this.state.cursorButton);
     this.lastPointerMoveEvent = event.nativeEvent;
-    const scenePointer = viewportCoordsToSceneCoords(event, this.state);
+    const scenePointer = viewportCoordsToSceneCoords(
+      // SONACOVE: viewportRotation
+      this.warpClientCoords(event),
+      this.state,
+    );
     const { x: scenePointerX, y: scenePointerY } = scenePointer;
     this.lastPointerMoveCoords = {
       x: scenePointerX,
@@ -7141,7 +7252,11 @@ class App extends React.Component<AppProps, AppState> {
   private handleCanvasPointerDown = (
     event: React.PointerEvent<HTMLElement>,
   ) => {
-    const scenePointer = viewportCoordsToSceneCoords(event, this.state);
+    const scenePointer = viewportCoordsToSceneCoords(
+      // SONACOVE: viewportRotation
+      this.warpClientCoords(event),
+      this.state,
+    );
     const { x: scenePointerX, y: scenePointerY } = scenePointer;
     this.lastPointerMoveCoords = {
       x: scenePointerX,
@@ -7585,7 +7700,7 @@ class App extends React.Component<AppProps, AppState> {
     this.lastPointerUpEvent = event;
 
     const scenePointer = viewportCoordsToSceneCoords(
-      { clientX: event.clientX, clientY: event.clientY },
+      this.warpClientCoords(event),
       this.state,
     );
     const { x: scenePointerX, y: scenePointerY } = scenePointer;
@@ -7802,7 +7917,10 @@ class App extends React.Component<AppProps, AppState> {
   private initialPointerDownState(
     event: React.PointerEvent<HTMLElement>,
   ): PointerDownState {
-    const origin = viewportCoordsToSceneCoords(event, this.state);
+    const origin = viewportCoordsToSceneCoords(
+      this.warpClientCoords(event),
+      this.state,
+    );
     const selectedElements = this.scene.getSelectedElements(this.state);
     const [minX, minY, maxX, maxY] = getCommonBounds(selectedElements);
     const isElbowArrowOnly = selectedElements.findIndex(isElbowArrow) === 0;
@@ -9102,7 +9220,10 @@ class App extends React.Component<AppProps, AppState> {
       if (this.state.openDialog?.name === "elementLinkSelector") {
         return;
       }
-      const pointerCoords = viewportCoordsToSceneCoords(event, this.state);
+      const pointerCoords = viewportCoordsToSceneCoords(
+        this.warpClientCoords(event),
+        this.state,
+      );
 
       if (this.state.activeLockedId) {
         this.setState({
@@ -9715,7 +9836,7 @@ class App extends React.Component<AppProps, AppState> {
               // update drag origin to the position at which we started
               // the duplication so that the drag offset is correct
               pointerDownState.drag.origin = viewportCoordsToSceneCoords(
-                event,
+                this.warpClientCoords(event),
                 this.state,
               );
 
@@ -10051,7 +10172,7 @@ class App extends React.Component<AppProps, AppState> {
       const hitElements = pointerDownState.hit.allHitElements;
 
       const sceneCoords = viewportCoordsToSceneCoords(
-        { clientX: childEvent.clientX, clientY: childEvent.clientY },
+        this.warpClientCoords(childEvent),
         this.state,
       );
 
@@ -10241,7 +10362,7 @@ class App extends React.Component<AppProps, AppState> {
 
       if (newElement?.type === "freedraw") {
         const pointerCoords = viewportCoordsToSceneCoords(
-          childEvent,
+          this.warpClientCoords(childEvent),
           this.state,
         );
 
@@ -10278,7 +10399,7 @@ class App extends React.Component<AppProps, AppState> {
           this.store.scheduleCapture();
         }
         const pointerCoords = viewportCoordsToSceneCoords(
-          childEvent,
+          this.warpClientCoords(childEvent),
           this.state,
         );
 
@@ -10441,7 +10562,10 @@ class App extends React.Component<AppProps, AppState> {
       }
 
       if (pointerDownState.drag.hasOccurred) {
-        const sceneCoords = viewportCoordsToSceneCoords(childEvent, this.state);
+        const sceneCoords = viewportCoordsToSceneCoords(
+          this.warpClientCoords(childEvent),
+          this.state,
+        );
 
         // when editing the points of a linear element, we check if the
         // linear element still is in the frame afterwards
@@ -10663,10 +10787,7 @@ class App extends React.Component<AppProps, AppState> {
 
         if (draggedDistance === 0) {
           const scenePointer = viewportCoordsToSceneCoords(
-            {
-              clientX: pointerEnd.clientX,
-              clientY: pointerEnd.clientY,
-            },
+            this.warpClientCoords(pointerEnd),
             this.state,
           );
           const hitElements = this.getElementsAtPosition(
@@ -11464,7 +11585,7 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
     const { x: sceneX, y: sceneY } = viewportCoordsToSceneCoords(
-      event,
+      this.warpClientCoords(event),
       this.state,
     );
     const dataTransferList = await parseDataTransferEvent(event);
@@ -11546,7 +11667,9 @@ class App extends React.Component<AppProps, AppState> {
 
           this.addElementsFromPasteOrLibrary({
             elements: distributeLibraryItemsOnSquareGrid(libraryItems),
-            position: event,
+            // SONACOVE: viewportRotation — a real event's raw coords must not
+            // enter coordinate math unwarped.
+            position: this.warpClientCoords(event),
             files: null,
           });
         }
@@ -11683,7 +11806,10 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    const { x, y } = viewportCoordsToSceneCoords(event, this.state);
+    const { x, y } = viewportCoordsToSceneCoords(
+      this.warpClientCoords(event),
+      this.state,
+    );
     const element = this.getElementAtPosition(x, y, {
       preferSelected: true,
       includeLockedElements: true,
@@ -11701,8 +11827,11 @@ class App extends React.Component<AppProps, AppState> {
     const container = this.excalidrawContainerRef.current!;
     const { top: offsetTop, left: offsetLeft } =
       container.getBoundingClientRect();
-    const left = event.clientX - offsetLeft;
-    const top = event.clientY - offsetTop;
+    // SONACOVE: viewportRotation — the menu is a DOM child of the (rotated)
+    // container, positioned in LOCAL coords, so warp the raw event first.
+    const { clientX, clientY } = this.warpClientCoords(event);
+    const left = clientX - offsetLeft;
+    const top = clientY - offsetTop;
 
     trackEvent("contextMenu", "openContextMenu", type);
 
@@ -12295,8 +12424,9 @@ class App extends React.Component<AppProps, AppState> {
     if (!x || !y) {
       return;
     }
+    // SONACOVE: viewportRotation — callers pass raw event coords.
     const { x: sceneX, y: sceneY } = viewportCoordsToSceneCoords(
-      { clientX: x, clientY: y },
+      this.warpClientCoords({ clientX: x, clientY: y }),
       this.state,
     );
 
@@ -12326,12 +12456,21 @@ class App extends React.Component<AppProps, AppState> {
   private updateDOMRect = (cb?: () => void) => {
     if (this.excalidrawContainerRef?.current) {
       const excalidrawContainer = this.excalidrawContainerRef.current;
-      const {
+      let {
         width,
         height,
         left: offsetLeft,
         top: offsetTop,
       } = excalidrawContainer.getBoundingClientRect();
+
+      // SONACOVE: viewportRotation — under a rotated ancestor the gBCR is
+      // the rotated AABB (width/height swapped at 90°/270°); the canvases and
+      // all coordinate math need the LOCAL layout dims. offsetLeft/offsetTop
+      // stay the AABB origin — that's rotateClientPoint's reference frame.
+      if (normalizeViewportRotation(this.props.viewportRotation)) {
+        width = excalidrawContainer.offsetWidth;
+        height = excalidrawContainer.offsetHeight;
+      }
       const {
         width: currentWidth,
         height: currentHeight,

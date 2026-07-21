@@ -23,11 +23,18 @@ export const actionGoToCollaborator = register<Collaborator>({
   label: "Go to a collaborator",
   viewMode: true,
   trackEvent: { category: "collab" },
-  perform: (_elements, appState, collaborator) => {
+  perform: (_elements, appState, collaborator, app) => {
     invariant(
       collaborator,
       "actionGoToCollaborator: collaborator should be defined when actionGoToCollaborator is called",
     );
+
+    // SONACOVE: lockedViewport — following pans/zooms the viewport on every
+    // remote broadcast; with a derived viewport that would be a standing
+    // tug-of-war against the lock, so don't enter follow mode at all.
+    if (app.props.lockedViewport) {
+      return false;
+    }
 
     if (
       !collaborator.socketId ||
