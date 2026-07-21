@@ -140,6 +140,10 @@ export const actionZoomIn = register({
   icon: ZoomInIcon,
   trackEvent: { category: "canvas" },
   perform: (_elements, appState, _, app) => {
+    // SONACOVE: lockedViewport — zoom is derived; shortcut/button no-ops.
+    if (app.props.lockedViewport) {
+      return false;
+    }
     return {
       appState: {
         ...appState,
@@ -183,6 +187,10 @@ export const actionZoomOut = register({
   viewMode: true,
   trackEvent: { category: "canvas" },
   perform: (_elements, appState, _, app) => {
+    // SONACOVE: lockedViewport — zoom is derived; shortcut/button no-ops.
+    if (app.props.lockedViewport) {
+      return false;
+    }
     return {
       appState: {
         ...appState,
@@ -226,6 +234,10 @@ export const actionResetZoom = register({
   viewMode: true,
   trackEvent: { category: "canvas" },
   perform: (_elements, appState, _, app) => {
+    // SONACOVE: lockedViewport — zoom is derived; shortcut/button no-ops.
+    if (app.props.lockedViewport) {
+      return false;
+    }
     return {
       appState: {
         ...appState,
@@ -403,6 +415,10 @@ export const actionZoomToFitSelectionInViewport = register({
   icon: zoomAreaIcon,
   trackEvent: { category: "canvas" },
   perform: (elements, appState, _, app) => {
+    // SONACOVE: lockedViewport — zoom is derived; shortcut no-ops.
+    if (app.props.lockedViewport) {
+      return false;
+    }
     const selectedElements = app.scene.getSelectedElements(appState);
     return zoomToFit({
       targetElements: selectedElements.length ? selectedElements : elements,
@@ -429,6 +445,10 @@ export const actionZoomToFitSelection = register({
   icon: zoomAreaIcon,
   trackEvent: { category: "canvas" },
   perform: (elements, appState, _, app) => {
+    // SONACOVE: lockedViewport — zoom is derived; shortcut no-ops.
+    if (app.props.lockedViewport) {
+      return false;
+    }
     const selectedElements = app.scene.getSelectedElements(appState);
     return zoomToFit({
       targetElements: selectedElements.length ? selectedElements : elements,
@@ -454,8 +474,12 @@ export const actionZoomToFit = register({
   icon: zoomAreaIcon,
   viewMode: true,
   trackEvent: { category: "canvas" },
-  perform: (elements, appState, _, app) =>
-    zoomToFit({
+  perform: (elements, appState, _, app) => {
+    // SONACOVE: lockedViewport — zoom is derived; shortcut no-ops.
+    if (app.props.lockedViewport) {
+      return false;
+    }
+    return zoomToFit({
       targetElements: elements,
       appState: {
         ...appState,
@@ -463,7 +487,8 @@ export const actionZoomToFit = register({
       },
       fitToViewport: false,
       canvasOffsets: app.getEditorUIOffsets(),
-    }),
+    });
+  },
   keyTest: (event) =>
     event.code === CODES.ONE &&
     event.shiftKey &&

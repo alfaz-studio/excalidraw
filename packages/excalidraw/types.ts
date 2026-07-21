@@ -642,6 +642,24 @@ export interface ExcalidrawProps {
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
   storageBackendUrl?: string;
+
+  // SONACOVE: lockedViewport — when set, scrollX/scrollY/zoom are fully
+  // derived (the scene box [0,width]×[0,height] aspect-fit + centered into
+  // the canvas) and all user/programmatic viewport mutations are ignored.
+  // Editing tools are unaffected. Pass a memoized object — the component's
+  // memo comparator is shallow. See lockedViewport.ts.
+  lockedViewport?: { width: number; height: number };
+
+  // SONACOVE: viewportRotation — the CSS rotation (degrees, 90° steps;
+  // accumulated angles are normalized) applied by an ANCESTOR of the
+  // Excalidraw container. Canvas sizing switches to layout dims and real
+  // pointer coords are inverse-rotated at entry, so drawing keeps working
+  // while the host rotates the whole surface (Sonacove's mobile stage
+  // rotate). Only supported together with `lockedViewport` — the pan/zoom
+  // input paths are rotation-naive, but the lock makes them no-ops. A
+  // primitive on purpose: the memo comparator is shallow. See
+  // viewportRotation.ts.
+  viewportRotation?: number;
 }
 
 export interface ExcalidrawCollabProps {
