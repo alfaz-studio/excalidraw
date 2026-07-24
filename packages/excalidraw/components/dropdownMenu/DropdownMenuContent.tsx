@@ -89,6 +89,7 @@ const MenuContent = ({
           className={classNames}
           style={style}
           data-testid="dropdown-menu"
+          side="top"
           align={align}
           sideOffset={8}
           collisionBoundary={container ?? undefined}
