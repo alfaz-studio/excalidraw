@@ -112,35 +112,38 @@ export const ToolPopover = ({
         />
       </Popover.Trigger>
 
-      <Popover.Content
-        className="tool-popover-content"
-        sideOffset={SIDE_OFFSET}
-        collisionBoundary={container ?? undefined}
-      >
-        {options.map(({ type, icon, title }) => (
-          <ToolButton
-            className={clsx(className, {
-              active: currentType === type,
-            })}
-            key={type}
-            type="radio"
-            icon={icon}
-            checked={currentType === type}
-            name={`${namePrefix}-option`}
-            title={title || capitalizeString(type)}
-            keyBindingLabel=""
-            aria-label={title || capitalizeString(type)}
-            data-testid={`toolbar-${type}`}
-            onChange={() => {
-              if (app.state.activeTool.type !== type) {
-                trackEvent("toolbar", type, "ui");
-              }
-              app.setActiveTool({ type: type as any });
-              onToolChange?.(type);
-            }}
-          />
-        ))}
-      </Popover.Content>
+      <Popover.Portal container={container}>
+        <Popover.Content
+          className="tool-popover-content"
+          sideOffset={SIDE_OFFSET}
+          collisionBoundary={container ?? undefined}
+          collisionPadding={8}
+        >
+          {options.map(({ type, icon, title }) => (
+            <ToolButton
+              className={clsx(className, {
+                active: currentType === type,
+              })}
+              key={type}
+              type="radio"
+              icon={icon}
+              checked={currentType === type}
+              name={`${namePrefix}-option`}
+              title={title || capitalizeString(type)}
+              keyBindingLabel=""
+              aria-label={title || capitalizeString(type)}
+              data-testid={`toolbar-${type}`}
+              onChange={() => {
+                if (app.state.activeTool.type !== type) {
+                  trackEvent("toolbar", type, "ui");
+                }
+                app.setActiveTool({ type: type as any });
+                onToolChange?.(type);
+              }}
+            />
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
     </Popover.Root>
   );
 
