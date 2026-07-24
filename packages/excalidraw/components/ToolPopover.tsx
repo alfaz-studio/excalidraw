@@ -115,6 +115,7 @@ export const ToolPopover = ({
       <Popover.Portal container={container}>
         <Popover.Content
           className="tool-popover-content"
+          side="top"
           sideOffset={SIDE_OFFSET}
           collisionBoundary={container ?? undefined}
           collisionPadding={8}
