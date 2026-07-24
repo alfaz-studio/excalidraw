@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import React, { useCallback, useEffect, useRef } from "react";
 
-import { CLASSES, EVENT, KEYS } from "@excalidraw/common";
+import { EVENT, KEYS } from "@excalidraw/common";
 
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 
@@ -21,6 +21,7 @@ const MenuContent = ({
   open = true,
   align = "end",
   style,
+  eventWrapperRef,
 }: {
   children?: React.ReactNode;
   onClickOutside?: () => void;
@@ -32,6 +33,12 @@ const MenuContent = ({
   open?: boolean;
   style?: React.CSSProperties;
   align?: "start" | "center" | "end";
+  /**
+   * The DropdownMenu event-wrapper node (trigger + content), passed by ref so
+   * the outside-click check can be scoped to THIS instance even though the
+   * content is portaled out of the wrapper's subtree.
+   */
+  eventWrapperRef?: React.RefObject<HTMLDivElement | null>;
 }) => {
   const editorInterface = useEditorInterface();
   const { container } = useExcalidrawContainer();
@@ -43,14 +50,17 @@ const MenuContent = ({
     menuRef,
     useCallback(
       (event) => {
-        // prevents closing if clicking on the trigger button — read from the
-        // event target (not the menu node) so it still holds when the content is
-        // portaled out of the trigger's DOM subtree.
-        if (!event.target?.closest(`.${CLASSES.DROPDOWN_MENU_EVENT_WRAPPER}`)) {
+        // Close on clicks outside this menu, but NOT on its own trigger. The
+        // content is portaled out of the trigger's subtree, so it can't reach
+        // its wrapper by walking up from the menu node; matching the shared
+        // DROPDOWN_MENU_EVENT_WRAPPER class on the event target would in turn
+        // match every OTHER dropdown's wrapper and wrongly keep this one open.
+        // Scope to this instance's wrapper node (passed down by ref).
+        if (!eventWrapperRef?.current?.contains(event.target)) {
           callbacksRef.onClickOutside?.();
         }
       },
-      [callbacksRef],
+      [callbacksRef, eventWrapperRef],
     ),
   );
 

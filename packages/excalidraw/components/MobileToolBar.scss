@@ -50,7 +50,11 @@
     }
   }
 
-  .mobile-toolbar .App-toolbar__extra-tools-dropdown {
+  // The extra-tools dropdown portals to the editor container (out of
+  // .mobile-toolbar), so it's targeted by its own mobile marker class rather
+  // than a .mobile-toolbar ancestor — otherwise it falls back to the desktop
+  // min-width/z-index from Toolbar.scss.
+  .App-toolbar__extra-tools-dropdown.dropdown-menu--mobile {
     min-width: 160px;
     z-index: var(--zIndex-layerUI);
   }
