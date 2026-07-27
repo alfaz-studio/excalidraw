@@ -27,6 +27,10 @@ const DropdownMenu = ({
   children?: React.ReactNode;
   open: boolean;
 }) => {
+  // Scopes the content's outside-click check to THIS instance. The content
+  // portals out of this subtree, so it can't locate its own wrapper by walking
+  // up the DOM — hand the wrapper node down by ref instead.
+  const eventWrapperRef = React.useRef<HTMLDivElement>(null);
   const MenuTriggerComp = getMenuTriggerComponent(children);
   const MenuContentComp = getMenuContentComponent(children);
   const MenuContentWithState =
@@ -35,13 +39,14 @@ const DropdownMenu = ({
           MenuContentComp as React.ReactElement<
             React.ComponentProps<typeof DropdownMenuContent>
           >,
-          { open },
+          { open, eventWrapperRef },
         )
       : MenuContentComp;
 
   return (
     <DropdownMenuPrimitive.Root open={open} modal={false}>
       <div
+        ref={eventWrapperRef}
         className={CLASSES.DROPDOWN_MENU_EVENT_WRAPPER}
         style={{
           // remove this div from box layout
