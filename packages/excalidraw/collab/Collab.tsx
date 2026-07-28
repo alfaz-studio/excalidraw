@@ -600,7 +600,6 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               clientId: this.clientId,
             }
           : { clientId: this.clientId },
-        this.props.collabEncryption === true,
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);

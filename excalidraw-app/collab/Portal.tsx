@@ -1,9 +1,5 @@
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
-import {
-  encryptData,
-  getCryptoKey,
-} from "@excalidraw/excalidraw/data/encryption";
 import { newElementWith } from "@excalidraw/element";
 import throttle from "lodash.throttle";
 
@@ -42,11 +38,6 @@ class Portal {
   roomId: string | null = null;
   roomKey: string | null = null;
   roomMetadata: RoomMetadata | null = null;
-  /** E2E-encrypt outgoing payloads with the room key (see _broadcastSocketData). */
-  encryptionEnabled: boolean = false;
-  /** Room key imported once as a CryptoKey — importing per message would
-   * re-run crypto.subtle.importKey at cursor rate. */
-  private cryptoKeyPromise: Promise<CryptoKey> | null = null;
   broadcastedElementVersions: Map<string, number> = new Map();
   pendingBroadcasts: Array<() => Promise<void>> = []; // queue broadcasts until socket is initialized
 
@@ -54,19 +45,11 @@ class Portal {
     this.collab = collab;
   }
 
-  open(
-    socket: CollabSocket,
-    id: string,
-    key: string,
-    metadata?: RoomMetadata,
-    encryptionEnabled: boolean = false,
-  ) {
+  open(socket: CollabSocket, id: string, key: string, metadata?: RoomMetadata) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
-    this.cryptoKeyPromise = null;
     this.roomMetadata = metadata ?? null;
-    this.encryptionEnabled = encryptionEnabled;
 
     // Remove any stale listeners to prevent duplicates on reconnection
     this.socket.off("init-room");
@@ -107,7 +90,6 @@ class Portal {
     this.socket = null;
     this.roomId = null;
     this.roomKey = null;
-    this.cryptoKeyPromise = null;
     this.roomMetadata = null;
     this.socketInitialized = false;
     this.broadcastedElementVersions = new Map();
@@ -138,29 +120,13 @@ class Portal {
       if (this.socket && this.roomId && this.roomKey) {
         const encoded = textEncoder.encode(JSON.stringify(data));
 
-        // The IV length is the wire-level switch: receivers
-        // (Collab.decryptPayload) treat a zero-length IV as plaintext and
-        // decrypt anything with a real IV, so mixed rooms interoperate and
-        // the toggle only has to gate the send side.
-        let payload: ArrayBuffer | Uint8Array = encoded;
-        let iv = EMPTY_IV;
-
-        if (this.encryptionEnabled) {
-          this.cryptoKeyPromise ??= getCryptoKey(this.roomKey, "encrypt");
-          const encrypted = await encryptData(
-            await this.cryptoKeyPromise,
-            encoded,
-          );
-
-          payload = encrypted.encryptedBuffer;
-          iv = encrypted.iv;
-        }
-
+        // Payloads are sent plaintext with a zero-length IV sentinel;
+        // receivers (Collab.decryptPayload) treat an empty IV as plaintext.
         this.socket.emit(
           volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
           roomId ?? this.roomId,
-          payload,
-          iv,
+          encoded,
+          EMPTY_IV,
         );
       }
     };

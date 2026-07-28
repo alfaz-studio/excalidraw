@@ -697,8 +697,6 @@ export interface CollabTransportProps {
   collabDetails?: { roomId: string; roomKey: string };
   /** When provided, used instead of a socket.io connection to collabServerUrl. */
   collabSocketFactory?: CollabSocketFactory;
-  /** E2E-encrypt outgoing collab payloads with the room key (default off). */
-  collabEncryption?: boolean;
   storageBackendUrl?: string;
   meetingDetails?: IMeetingDetails;
 }
