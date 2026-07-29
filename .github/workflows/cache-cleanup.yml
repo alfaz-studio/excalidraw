@@ -1,0 +1,45 @@
+name: Cache Cleanup
+
+# Deletes the Actions caches scoped to a PR's merge ref once it closes. CI runs
+# on pull_request and caches yarn (~1.4 GB per run) under refs/pull/<PR>/merge;
+# nothing else prunes them (GitHub only LRU-evicts at the 10 GB/repo cap), so
+# they otherwise accumulate one per PR. Can also be dispatched by PR number.
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number whose caches to remove (e.g. 5)"
+        required: true
+        type: string
+
+permissions:
+  actions: write
+
+concurrency:
+  group: cache-cleanup-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  caches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete this PR's Actions caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+        run: |
+          set -euo pipefail
+          case "$PR" in
+            ''|*[!0-9]*) echo "PR must be a number, got '$PR'"; exit 1 ;;
+          esac
+          REF="refs/pull/$PR/merge"
+          ids=$(gh api "/repos/$REPO/actions/caches?ref=$REF&per_page=100" \
+            --jq '.actions_caches[].id')
+          n=0
+          for id in $ids; do
+            gh api -X DELETE "/repos/$REPO/actions/caches/$id" && n=$((n+1)) || true
+          done
+          echo "Deleted $n cache(s) for $REF"
