@@ -661,9 +661,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           case WS_SUBTYPES.INVALID_RESPONSE:
             return;
           case WS_SUBTYPES.INIT: {
+            const remoteElements = decryptedData.payload.elements;
             if (!this.portal.socketInitialized) {
               this.initializeRoom({ fetchScene: false });
-              const remoteElements = decryptedData.payload.elements;
               const reconciledElements =
                 this._reconcileElements(remoteElements);
               this.handleRemoteSceneUpdate(reconciledElements);
@@ -687,6 +687,19 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               ) {
                 this.mergePersistedScene(existingRoomLinkData);
               }
+            } else if (this.excalidrawAPI.getSceneElements().length === 0) {
+              // A SCENE_INIT that arrives AFTER the socket was already marked
+              // initialized would otherwise be silently dropped. On a quick
+              // rejoin the INITIAL_SCENE_UPDATE_TIMEOUT (5s) fallback can flip
+              // socketInitialized to true with an empty scene before a peer's
+              // re-broadcast lands, stranding the rejoiner on a blank board.
+              // Applying the late INIT when the local board is empty recovers
+              // it. Reconciliation is version-based and idempotent (the same
+              // path UPDATE takes unguarded), and this branch only runs with no
+              // local elements, so there is nothing to clobber.
+              this.handleRemoteSceneUpdate(
+                this._reconcileElements(remoteElements),
+              );
             }
             break;
           }
