@@ -32,9 +32,9 @@ import type {
 
 import type { RemoteExcalidrawElement } from "@excalidraw/excalidraw/data/reconcile";
 
-import { getSyncableElements } from ".";
+import type { CollabSocket } from "@excalidraw/excalidraw/types";
 
-import type { Socket } from "socket.io-client";
+import { getSyncableElements } from ".";
 
 import type { SyncableExcalidrawElement } from ".";
 import type Portal from "../collab/Portal";
@@ -299,12 +299,12 @@ const decryptElements = async (
 };
 
 class StorageSceneVersionCache {
-  private static cache = new WeakMap<Socket, number>();
-  static get = (socket: Socket) => {
+  private static cache = new WeakMap<CollabSocket, number>();
+  static get = (socket: CollabSocket) => {
     return StorageSceneVersionCache.cache.get(socket);
   };
   static set = (
-    socket: Socket,
+    socket: CollabSocket,
     elements: readonly SyncableExcalidrawElement[],
   ) => {
     StorageSceneVersionCache.cache.set(socket, getSceneVersion(elements));
@@ -453,7 +453,7 @@ export const saveToStorage = async (
 export const loadFromStorage = async (
   roomId: string,
   roomKey: string,
-  socket: Socket | null,
+  socket: CollabSocket | null,
 ): Promise<readonly SyncableExcalidrawElement[] | null> => {
   const storedScene = await getBackendDocument(roomId);
 

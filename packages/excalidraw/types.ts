@@ -662,23 +662,54 @@ export interface ExcalidrawProps {
   viewportRotation?: number;
 }
 
-export interface ExcalidrawCollabProps {
+/**
+ * Minimal transport surface the collab layer needs from a "socket". The
+ * socket.io client satisfies it structurally; hosts can inject any other
+ * transport (e.g. a LiveKit data-channel adapter) via
+ * {@link ExcalidrawAppProps.collabSocketFactory}.
+ *
+ * Expected event contract (mirrors the socket.io relay protocol):
+ * - incoming: `init-room`, `first-in-room`, `new-user` (socketId),
+ *   `room-user-change` (SocketId[]), `client-broadcast` (data, iv),
+ *   `user-follow-room-change` (SocketId[]), `connect_error`
+ * - outgoing: `join-room` (roomId, metadata), `server-broadcast` /
+ *   `server-volatile-broadcast` (roomId, data, iv), `user-follow` (payload)
+ */
+export interface CollabSocket {
+  id?: string;
+  on(event: string, listener: (...args: any[]) => void): unknown;
+  once(event: string, listener: (...args: any[]) => void): unknown;
+  off(event: string, listener?: (...args: any[]) => void): unknown;
+  emit(event: string, ...args: any[]): unknown;
+  close(): unknown;
+}
+
+export type CollabSocketFactory = (opts: {
+  roomId: string;
+}) => Promise<CollabSocket> | CollabSocket;
+
+/**
+ * Collab configuration passed through ExcalidrawApp down to the Collab
+ * component — one definition so the two prop surfaces can't drift.
+ */
+export interface CollabTransportProps {
   collabServerUrl?: string;
   collabDetails?: { roomId: string; roomKey: string };
-  excalidrawAPI: ExcalidrawImperativeAPI;
-  useTestEnv?: boolean;
+  /** When provided, used instead of a socket.io connection to collabServerUrl. */
+  collabSocketFactory?: CollabSocketFactory;
   storageBackendUrl?: string;
   meetingDetails?: IMeetingDetails;
 }
 
-export interface ExcalidrawAppProps {
-  collabServerUrl?: string;
-  collabDetails?: { roomId: string; roomKey: string };
+export interface ExcalidrawCollabProps extends CollabTransportProps {
+  excalidrawAPI: ExcalidrawImperativeAPI;
+  useTestEnv?: boolean;
+}
+
+export interface ExcalidrawAppProps extends CollabTransportProps {
   excalidraw: ExcalidrawProps;
   getExcalidrawAPI?: Function;
   getCollabAPI?: Function;
-  storageBackendUrl?: string;
-  meetingDetails?: IMeetingDetails;
 }
 
 export interface IMeetingDetails {

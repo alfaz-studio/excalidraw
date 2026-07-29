@@ -952,6 +952,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
           <Collab
             collabServerUrl={props.collabServerUrl}
             collabDetails={props.collabDetails}
+            collabSocketFactory={props.collabSocketFactory}
             excalidrawAPI={excalidrawAPI}
             storageBackendUrl={props.storageBackendUrl}
             meetingDetails={props.meetingDetails}

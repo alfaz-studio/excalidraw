@@ -6,6 +6,7 @@ import throttle from "lodash.throttle";
 import type { UserIdleState } from "@excalidraw/common";
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
 import type {
+  CollabSocket,
   OnUserFollowedPayload,
   SocketId,
 } from "@excalidraw/excalidraw/types";
@@ -19,7 +20,6 @@ import type {
   SyncableExcalidrawElement,
 } from "../data";
 import type { TCollabClass } from "./Collab";
-import type { Socket } from "socket.io-client";
 
 export interface RoomMetadata {
   meetingId?: string;
@@ -28,9 +28,12 @@ export interface RoomMetadata {
   clientId?: string;
 }
 
+const textEncoder = new TextEncoder();
+const EMPTY_IV = new Uint8Array(0);
+
 class Portal {
   collab: TCollabClass;
-  socket: Socket | null = null;
+  socket: CollabSocket | null = null;
   socketInitialized: boolean = false; // we don't want the socket to emit any updates until it is fully initialized
   roomId: string | null = null;
   roomKey: string | null = null;
@@ -42,7 +45,7 @@ class Portal {
     this.collab = collab;
   }
 
-  open(socket: Socket, id: string, key: string, metadata?: RoomMetadata) {
+  open(socket: CollabSocket, id: string, key: string, metadata?: RoomMetadata) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
@@ -102,6 +105,12 @@ class Portal {
     );
   }
 
+  /** Completes socket initialization and drains the queued broadcasts. */
+  markSocketInitialized() {
+    this.socketInitialized = true;
+    this.flushPendingBroadcasts();
+  }
+
   async _broadcastSocketData(
     data: SocketUpdateData,
     volatile: boolean = false,
@@ -109,17 +118,15 @@ class Portal {
   ) {
     const broadcast = async () => {
       if (this.socket && this.roomId && this.roomKey) {
-        const json = JSON.stringify(data);
-        const encoded = new TextEncoder().encode(json);
-        // Send plaintext with empty IV sentinel — server needs to read messages
-        // for scene persistence. Encryption is disabled.
-        const emptyIV = new Uint8Array(0);
+        const encoded = textEncoder.encode(JSON.stringify(data));
 
+        // Payloads are sent plaintext with a zero-length IV sentinel;
+        // receivers (Collab.decryptPayload) treat an empty IV as plaintext.
         this.socket.emit(
           volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
           roomId ?? this.roomId,
           encoded,
-          emptyIV,
+          EMPTY_IV,
         );
       }
     };

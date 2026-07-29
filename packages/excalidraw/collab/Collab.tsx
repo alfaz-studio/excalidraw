@@ -44,6 +44,7 @@ import type {
   BinaryFileData,
   SocketId,
   Collaborator,
+  CollabSocket,
   Gesture,
   ExcalidrawCollabProps,
 } from "@excalidraw/excalidraw/types";
@@ -127,6 +128,8 @@ export interface CollabAPI {
 // interface CollabProps {
 //   excalidrawAPI: ExcalidrawImperativeAPI;
 // }
+
+const textDecoder = new TextDecoder("utf-8");
 
 class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   portal: Portal;
@@ -456,10 +459,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     try {
       // Empty IV = plaintext (no encryption)
       if (iv.byteLength === 0) {
-        const decodedData = new TextDecoder("utf-8").decode(
-          new Uint8Array(encryptedData),
-        );
-        return JSON.parse(decodedData);
+        return JSON.parse(textDecoder.decode(new Uint8Array(encryptedData)));
       }
 
       const decrypted = await decryptData(
@@ -468,10 +468,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         decryptionKey,
       );
 
-      const decodedData = new TextDecoder("utf-8").decode(
-        new Uint8Array(decrypted),
-      );
-      return JSON.parse(decodedData);
+      return JSON.parse(textDecoder.decode(new Uint8Array(decrypted)));
     } catch (error) {
       window.alert(t("alerts.decryptFailed"));
       console.error(error);
@@ -551,9 +548,33 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.setIsCollaborating(true);
     LocalData.pauseSave("collaboration");
 
-    const { default: socketIOClient } = await import(
-      /* webpackChunkName: "socketIoClient" */ "socket.io-client"
-    );
+    const createSocket = async (): Promise<CollabSocket> => {
+      // Host-injected transport (e.g. LiveKit data channels in Sonacove
+      // Meets) — bypasses the socket.io relay entirely, so the socket.io
+      // client chunk is never even fetched.
+      if (this.props.collabSocketFactory) {
+        return await this.props.collabSocketFactory({ roomId });
+      }
+
+      const { default: socketIOClient } = await import(
+        /* webpackChunkName: "socketIoClient" */ "socket.io-client"
+      );
+
+      return socketIOClient(this.props.collabServerUrl || "", {
+        transports: ["websocket", "polling"],
+        // Keep reconnecting for the lifetime of the Collab instance.
+        // componentWillUnmount calls destroySocketClient(), which is what
+        // prevents the leaked-socket crash the old 5-attempt cap was
+        // guarding against. An attempt cap just strands real users on
+        // flaky networks.
+        reconnection: true,
+        reconnectionDelay: 500,
+        reconnectionDelayMax: 5000,
+        query: {
+          roomId,
+        },
+      });
+    };
 
     const fallbackInitializationHandler = () => {
       this.initializeRoom({
@@ -568,20 +589,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     try {
       const { meetingDetails } = this.props;
       this.portal.socket = this.portal.open(
-        socketIOClient(this.props.collabServerUrl || "", {
-          transports: ["websocket", "polling"],
-          // Keep reconnecting for the lifetime of the Collab instance.
-          // componentWillUnmount calls destroySocketClient(), which is what
-          // prevents the leaked-socket crash the old 5-attempt cap was
-          // guarding against. An attempt cap just strands real users on
-          // flaky networks.
-          reconnection: true,
-          reconnectionDelay: 500,
-          reconnectionDelayMax: 5000,
-          query: {
-            roomId,
-          },
-        }),
+        await createSocket(),
         roomId,
         roomKey,
         meetingDetails
@@ -596,6 +604,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
     } catch (error) {
+      // Unlike socketIOClient (which never throws synchronously — it
+      // reconnects), an injected collabSocketFactory can reject, so this
+      // path is reachable: roll back the collaboration state entered above,
+      // or local persistence would stay paused for the rest of the session.
+      LocalData.resumeSave("collaboration");
+      this.setIsCollaborating(false);
       console.error(error);
       this.setErrorDialog(
         error instanceof Error ? error.message : String(error),
@@ -647,9 +661,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           case WS_SUBTYPES.INVALID_RESPONSE:
             return;
           case WS_SUBTYPES.INIT: {
+            const remoteElements = decryptedData.payload.elements;
             if (!this.portal.socketInitialized) {
               this.initializeRoom({ fetchScene: false });
-              const remoteElements = decryptedData.payload.elements;
               const reconciledElements =
                 this._reconcileElements(remoteElements);
               this.handleRemoteSceneUpdate(reconciledElements);
@@ -658,6 +672,34 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
                 elements: reconciledElements,
                 scrollToContent: true,
               });
+
+              // Initialized from a peer that had nothing to send — fold any
+              // persisted scene in (fire and forget; see mergePersistedScene
+              // for why this is needed and safe). Gated on an EMPTY INIT so
+              // the common established-room join doesn't stampede the
+              // storage backend with one GET per client: a peer with content
+              // is at least as fresh as storage, since members persist
+              // continuously.
+              if (
+                existingRoomLinkData &&
+                this.props.storageBackendUrl &&
+                remoteElements.length === 0
+              ) {
+                this.mergePersistedScene(existingRoomLinkData);
+              }
+            } else if (this.excalidrawAPI.getSceneElements().length === 0) {
+              // A SCENE_INIT that arrives AFTER the socket was already marked
+              // initialized would otherwise be silently dropped. On a quick
+              // rejoin the INITIAL_SCENE_UPDATE_TIMEOUT (5s) fallback can flip
+              // socketInitialized to true with an empty scene before a peer's
+              // re-broadcast lands, stranding the rejoiner on a blank board.
+              // Applying the late INIT when the local board is empty recovers
+              // it. Reconciliation is version-based and idempotent (the same
+              // path UPDATE takes unguarded), and this branch only runs with no
+              // local elements, so there is nothing to clobber.
+              this.handleRemoteSceneUpdate(
+                this._reconcileElements(remoteElements),
+              );
             }
             break;
           }
@@ -811,12 +853,45 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {
-        this.portal.socketInitialized = true;
+        this.portal.markSocketInitialized();
       }
     } else {
-      this.portal.socketInitialized = true;
+      this.portal.markSocketInitialized();
     }
     return null;
+  };
+
+  /**
+   * Merge the HTTP-persisted scene into the local one via reconciliation
+   * (no scene reset — element id+version wins, so this is safe and
+   * idempotent at any time after initialization).
+   *
+   * Needed when initialization happened via a peer's SCENE_INIT rather than
+   * `first-in-room`: when several clients join within the same announce
+   * window (the norm — every participant mounts on the same metadata
+   * broadcast), none of them is "first", so none takes the
+   * `initializeRoom({ fetchScene: true })` path and a previously persisted
+   * scene would never load. Every client merging independently is cheap
+   * (one GET; empty store is a no-op) and converges regardless of timing.
+   */
+  private mergePersistedScene = async (roomLinkData: {
+    roomId: string;
+    roomKey: string;
+  }) => {
+    try {
+      const elements = await loadFromStorage(
+        roomLinkData.roomId,
+        roomLinkData.roomKey,
+        this.portal.socket,
+      );
+
+      if (elements?.length) {
+        this.handleRemoteSceneUpdate(this._reconcileElements(elements));
+      }
+    } catch (error) {
+      // Non-fatal: peers and the periodic full sync keep us converged.
+      console.error(error);
+    }
   };
 
   private _reconcileElements = (
