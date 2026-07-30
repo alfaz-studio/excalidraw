@@ -5,6 +5,7 @@ import { canEditElement, stampElementAuthors } from "../elementOwnership";
 import { Excalidraw } from "../index";
 
 import { API } from "./helpers/api";
+import { Keyboard, UI } from "./helpers/ui";
 import { render, waitFor } from "./test-utils";
 
 const { h } = window;
@@ -126,6 +127,46 @@ describe("elementOwnership", () => {
 
       expect(byId.get("mine")!.isDeleted).toBe(true);
       expect(byId.get("theirs")!.isDeleted).toBe(false);
+    });
+
+    it("undo after a clear cannot resurrect a foreign element", async () => {
+      // Mirrors the real shape: the caller DREW their element (so it is in local
+      // history), while the foreign one arrived over collab — applied with
+      // CaptureUpdateAction.NEVER (collab/Collab.tsx), so it never enters history
+      // and no undo can bring it back or take it away.
+      await render(
+        <Excalidraw elementAuthorId={STUDENT} protectForeignElements={true} />,
+      );
+
+      UI.createElement("freedraw", { x: 0, y: 0, width: 50, height: 50 });
+
+      const ownId = h.elements[0].id;
+
+      API.setElements([...h.elements, elementBy("theirs", TEACHER)]);
+      await waitFor(() => {
+        expect(h.elements.length).toBe(2);
+      });
+
+      API.executeAction(actionClearCanvas);
+
+      const clearedById = new Map(h.elements.map((el) => [el.id, el]));
+
+      expect(clearedById.get(ownId)!.isDeleted).toBe(true);
+      expect(clearedById.get("theirs")!.isDeleted).toBe(false);
+
+      Keyboard.undo();
+
+      const undoneById = new Map(h.elements.map((el) => [el.id, el]));
+
+      // The security property: undo is not a bypass. It cannot delete a foreign
+      // element, nor resurrect one the presenter removed.
+      //
+      // Whether the caller's OWN element comes back is deliberately not asserted:
+      // API.setElements replaces the scene without a history entry, so the chain
+      // between the draw and the clear is broken in the harness in a way it is not
+      // in the app.
+      expect(undoneById.get("theirs")!.isDeleted).toBe(false);
+      expect(undoneById.has(ownId)).toBe(true);
     });
 
     it("clears everything once protection is toggled off", async () => {
