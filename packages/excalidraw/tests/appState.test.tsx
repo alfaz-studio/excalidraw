@@ -4,6 +4,7 @@ import { EXPORT_DATA_TYPES, MIME_TYPES } from "@excalidraw/common";
 
 import type { ExcalidrawTextElement } from "@excalidraw/element/types";
 
+import { actionClearCanvas } from "../actions";
 import { getDefaultAppState } from "../appState";
 import { Excalidraw } from "../index";
 
@@ -84,5 +85,32 @@ describe("appState", () => {
     mouse.clickAt(100, 100);
 
     expect((h.elements[0] as ExcalidrawTextElement).fontSize).toBe(16);
+  });
+
+  it("clearing the canvas keeps the item preferences", async () => {
+    await render(
+      <Excalidraw
+        initialData={{
+          appState: {
+            currentItemFontSize: 16,
+            currentItemStrokeColor: "#c92a2a",
+            currentItemStrokeWidth: 4,
+          },
+        }}
+      />,
+    );
+
+    API.setElements([API.createElement({ type: "rectangle", id: "A" })]);
+
+    await waitFor(() => {
+      expect(h.elements).toEqual([expect.objectContaining({ id: "A" })]);
+    });
+
+    API.executeAction(actionClearCanvas);
+
+    expect(h.elements.every((element) => element.isDeleted)).toBe(true);
+    expect(h.state.currentItemFontSize).toBe(16);
+    expect(h.state.currentItemStrokeColor).toBe("#c92a2a");
+    expect(h.state.currentItemStrokeWidth).toBe(4);
   });
 });

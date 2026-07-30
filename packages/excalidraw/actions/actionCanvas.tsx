@@ -89,6 +89,22 @@ export const actionChangeViewBackgroundColor = register<Partial<AppState>>({
   },
 });
 
+/**
+ * The `currentItem*` keys hold the user's tool preferences — stroke colour,
+ * font size, stroke width, and so on. `APP_STATE_STORAGE_CONF` marks every one
+ * of them `browser: true`, i.e. they are meant to outlive a session, so
+ * clearing the canvas should drop the drawing and leave the toolbar alone.
+ * Matched on the prefix rather than enumerated so a newly added preference is
+ * carried over without having to remember this spot.
+ */
+const getCurrentItemPrefs = (appState: AppState): Partial<AppState> =>
+  (Object.keys(appState) as (keyof AppState)[])
+    .filter((key) => key.startsWith("currentItem"))
+    .reduce(
+      (prefs, key) => Object.assign(prefs, { [key]: appState[key] }),
+      {} as Partial<AppState>,
+    );
+
 export const actionClearCanvas = register({
   name: "clearCanvas",
   label: "labels.clearCanvas",
@@ -109,6 +125,7 @@ export const actionClearCanvas = register({
       ),
       appState: {
         ...getDefaultAppState(),
+        ...getCurrentItemPrefs(appState),
         files: {},
         theme: appState.theme,
         penMode: appState.penMode,
