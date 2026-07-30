@@ -40,6 +40,20 @@ describe("elementOwnership", () => {
       expect(canEditElement(elementBy("b", STUDENT), ownership)).toBe(true);
     });
 
+    it("allows an element whose author opted their own strokes out", () => {
+      // Per-author, not a room policy: opting out releases only that author's work.
+      const ownership = {
+        elementAuthorId: STUDENT,
+        protectForeignElements: true,
+        unprotectedAuthorIds: [TEACHER],
+      };
+
+      expect(canEditElement(elementBy("a", TEACHER), ownership)).toBe(true);
+      expect(canEditElement(elementBy("b", "other-student"), ownership)).toBe(
+        false,
+      );
+    });
+
     it("treats untagged elements as editable", () => {
       // Drawn before the feature shipped — locking these out would take away a
       // participant's own earlier strokes.
