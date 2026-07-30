@@ -220,7 +220,7 @@ class Portal {
     const authoredElements = stampElementAuthors(
       syncableElements,
       this.collab.getElementAuthorId(),
-    ) as SyncableExcalidrawElement[];
+    );
 
     const data: SocketUpdateDataSource[typeof updateType] = {
       type: updateType,

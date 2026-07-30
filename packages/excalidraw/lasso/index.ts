@@ -204,6 +204,7 @@ export class LassoTrail extends AnimatedTrail {
         intersectedElements: this.intersectedElements,
         enclosedElements: this.enclosedElements,
         simplifyDistance: 5 / this.app.state.zoom.value,
+        ownership: this.app.props,
       });
 
       this.selectElementsFromIds(selectedElementIds);

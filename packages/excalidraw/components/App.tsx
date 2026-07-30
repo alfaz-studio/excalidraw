@@ -296,7 +296,7 @@ import {
   lockedViewportNeedsUpdate,
 } from "../lockedViewport";
 
-import { isElementEditable } from "../elementOwnership";
+import { canEditElement } from "../elementOwnership";
 
 import {
   normalizeViewportRotation,
@@ -5851,14 +5851,19 @@ class App extends React.Component<AppProps, AppState> {
     const elements = (
       opts?.includeBoundTextElement && opts?.includeLockedElements
         ? this.scene.getNonDeletedElements()
-        : this.scene
-            .getNonDeletedElements()
-            .filter(
-              (element) =>
-                (opts?.includeLockedElements || !element.locked) &&
-                (opts?.includeBoundTextElement ||
-                  !(isTextElement(element) && element.containerId)),
-            )
+        : this.scene.getNonDeletedElements().filter(
+            (element) =>
+              (opts?.includeLockedElements || !element.locked) &&
+              // SONACOVE: ownership is NOT covered by includeLockedElements —
+              // that opt exists so callers can surface the lock affordance, and a
+              // foreign element must stay unhittable even then. Filtering here
+              // rather than at the call sites covers every hit-test path (drag,
+              // right-click, double-click-to-edit, links) from one place. See
+              // elementOwnership.ts.
+              canEditElement(element, this.props) &&
+              (opts?.includeBoundTextElement ||
+                !(isTextElement(element) && element.containerId)),
+          )
     )
       .filter((el) => this.hitElement(x, y, el))
       .filter((element) => {
@@ -8188,12 +8193,7 @@ class App extends React.Component<AppProps, AppState> {
             includeLockedElements: true,
           },
         );
-        // SONACOVE: treat foreign-authored elements like locked ones — excluding
-        // them here takes away selection, and with it delete, cut, move and
-        // restyle. See elementOwnership.ts.
-        const unlockedHitElements = allHitElements.filter((e) =>
-          isElementEditable(e, this.props),
-        );
+        const unlockedHitElements = allHitElements.filter((e) => !e.locked);
 
         // Cannot set preferSelected in getElementAtPosition as we do in pointer move; consider:
         // A & B: both unlocked, A selected, B on top, A & B overlaps in some way
@@ -10034,6 +10034,7 @@ class App extends React.Component<AppProps, AppState> {
                 this.state.selectionElement,
                 this.scene.getNonDeletedElementsMap(),
                 false,
+                (element) => canEditElement(element, this.props),
               )
             : [];
 

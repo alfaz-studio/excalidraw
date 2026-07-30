@@ -60,6 +60,11 @@ export const getElementsWithinSelection = (
   selection: NonDeletedExcalidrawElement,
   elementsMap: ElementsMap,
   excludeElementsInFrames: boolean = true,
+  // SONACOVE: extra editability test, so a marquee drag can't select (and then
+  // delete) elements the caller doesn't own. A predicate rather than the ownership
+  // props themselves — this package must not depend on @excalidraw/excalidraw.
+  // Defaults to allow-all so every other caller is unaffected.
+  canEdit: (element: NonDeletedExcalidrawElement) => boolean = () => true,
 ) => {
   const [selectionX1, selectionY1, selectionX2, selectionY2] =
     getElementAbsoluteCoords(selection, elementsMap);
@@ -85,6 +90,7 @@ export const getElementsWithinSelection = (
 
     return (
       element.locked === false &&
+      canEdit(element) &&
       element.type !== "selection" &&
       !isBoundToContainer(element) &&
       selectionX1 <= elementX1 &&

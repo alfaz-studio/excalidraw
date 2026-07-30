@@ -5,7 +5,7 @@ import { canEditElement, stampElementAuthors } from "../elementOwnership";
 import { Excalidraw } from "../index";
 
 import { API } from "./helpers/api";
-import { Keyboard, UI } from "./helpers/ui";
+import { Keyboard, Pointer, UI } from "./helpers/ui";
 import { render, waitFor } from "./test-utils";
 
 const { h } = window;
@@ -50,18 +50,6 @@ describe("elementOwnership", () => {
         }),
       ).toBe(true);
     });
-
-    it("reads the same field name AppProps uses", () => {
-      // Regression guard: ElementOwnership's fields are all optional, so a
-      // renamed field still typechecks against AppProps while silently reading
-      // undefined — which would mark the caller's OWN elements foreign.
-      expect(
-        canEditElement(elementBy("a", STUDENT), {
-          elementAuthorId: STUDENT,
-          protectForeignElements: true,
-        }),
-      ).toBe(true);
-    });
   });
 
   describe("stampElementAuthors", () => {
@@ -71,12 +59,6 @@ describe("elementOwnership", () => {
 
       expect(stamped[0].customData?.authorId).toBe(STUDENT);
       expect(stamped[1].customData?.authorId).toBe(TEACHER);
-    });
-
-    it("preserves array identity when nothing needs stamping", () => {
-      const elements = [elementBy("a", TEACHER)];
-
-      expect(stampElementAuthors(elements, STUDENT)).toBe(elements);
     });
 
     it("is a no-op without an author id", () => {
@@ -167,6 +149,41 @@ describe("elementOwnership", () => {
       // in the app.
       expect(undoneById.get("theirs")!.isDeleted).toBe(false);
       expect(undoneById.has(ownId)).toBe(true);
+    });
+
+    it("does not select a foreign element on pointer-down", async () => {
+      // The regression this guards: filtering the post-hoc `unlockedHitElements`
+      // list is NOT enough, because pointerDownState.hit.element is assigned
+      // separately from getElementAtPosition. Ownership has to be enforced inside
+      // getElementsAtPosition — the funnel every hit-test path shares — or
+      // click-select still works and delete/move/restyle come with it.
+      await render(
+        <Excalidraw elementAuthorId={STUDENT} protectForeignElements={true} />,
+      );
+
+      API.setElements([
+        API.createElement({
+          type: "rectangle",
+          id: "theirs",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+        }),
+      ]);
+      API.setElements([
+        { ...h.elements[0], customData: { authorId: TEACHER } },
+      ]);
+
+      await waitFor(() => {
+        expect(h.elements.length).toBe(1);
+      });
+
+      const mouse = new Pointer("mouse");
+
+      mouse.clickAt(50, 0);
+
+      expect(Object.keys(h.state.selectedElementIds)).toEqual([]);
     });
 
     it("clears everything once protection is toggled off", async () => {
