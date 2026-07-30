@@ -148,6 +148,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private staleCollaboratorTimerId: number | null = null;
   private clientId = crypto.randomUUID();
 
+  /**
+   * SONACOVE: identity stamped onto this client's elements by Portal. The
+   * standalone app has no host-supplied participant id, so it always uses
+   * `clientId`. See @excalidraw/excalidraw/elementOwnership.
+   */
+  getElementAuthorId = (): string => this.clientId;
+
   constructor(props: CollabProps) {
     super(props);
     this.state = {

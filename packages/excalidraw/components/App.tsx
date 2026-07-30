@@ -296,6 +296,8 @@ import {
   lockedViewportNeedsUpdate,
 } from "../lockedViewport";
 
+import { isElementEditable } from "../elementOwnership";
+
 import {
   normalizeViewportRotation,
   rotateClientPoint,
@@ -8186,7 +8188,12 @@ class App extends React.Component<AppProps, AppState> {
             includeLockedElements: true,
           },
         );
-        const unlockedHitElements = allHitElements.filter((e) => !e.locked);
+        // SONACOVE: treat foreign-authored elements like locked ones — excluding
+        // them here takes away selection, and with it delete, cut, move and
+        // restyle. See elementOwnership.ts.
+        const unlockedHitElements = allHitElements.filter((e) =>
+          isElementEditable(e, this.props),
+        );
 
         // Cannot set preferSelected in getElementAtPosition as we do in pointer move; consider:
         // A & B: both unlocked, A selected, B on top, A & B overlaps in some way

@@ -25,6 +25,7 @@ import {
   isEraserActive,
   isHandToolActive,
 } from "../appState";
+import { canEditElement } from "../elementOwnership";
 import { ColorPicker } from "../components/ColorPicker/ColorPicker";
 import { ToolButton } from "../components/ToolButton";
 import { Tooltip } from "../components/Tooltip";
@@ -120,8 +121,14 @@ export const actionClearCanvas = register({
   perform: (elements, appState, _, app) => {
     app.imageCache.clear();
     return {
+      // SONACOVE: leave foreign-authored elements standing. Unlike the eraser and
+      // the selection paths, clear-canvas has no `locked` check to compose with,
+      // so without this the trash button erases the whole guard. See
+      // elementOwnership.ts.
       elements: elements.map((element) =>
-        newElementWith(element, { isDeleted: true }),
+        canEditElement(element, app.props)
+          ? newElementWith(element, { isDeleted: true })
+          : element,
       ),
       appState: {
         ...getDefaultAppState(),

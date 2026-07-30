@@ -33,6 +33,8 @@ import type { Bounds } from "@excalidraw/common";
 import type { GlobalPoint, LineSegment } from "@excalidraw/math/types";
 import type { ElementsMap, ExcalidrawElement } from "@excalidraw/element/types";
 
+import { isElementEditable } from "../elementOwnership";
+
 import { AnimatedTrail } from "../animated-trail";
 
 import type { AnimationFrameHandler } from "../animation-frame-handler";
@@ -100,8 +102,10 @@ export class EraserTrail extends AnimatedTrail {
       eraserPath[eraserPath.length - 2],
     );
 
-    const candidateElements = this.app.visibleElements.filter(
-      (el) => !el.locked,
+    // SONACOVE: foreign-authored elements are not erasable when the host passes
+    // protectForeignElements. See elementOwnership.ts.
+    const candidateElements = this.app.visibleElements.filter((el) =>
+      isElementEditable(el, this.app.props),
     );
 
     const candidateElementsMap = arrayToMap(candidateElements);
