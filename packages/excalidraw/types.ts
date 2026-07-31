@@ -670,18 +670,12 @@ export interface ExcalidrawProps {
   // per-author protection at all. When set, elements authored by someone else are
   // read-only here: not erasable, not hit-testable, excluded from marquee/lasso
   // selection and select-all, and skipped by clear-canvas. Pass false for an
-  // exempt surface (the presenter's own overlay, or a moderator). Deliberately NOT
+  // exempt surface (the presenter's own overlay). Deliberately NOT
   // implemented via `locked`, which any participant can undo
   // (actionUnlockAllElements / Cmd+Shift+L) and which syncs, so one participant
   // would unprotect everyone. Elements with no authorId predate the feature and
   // stay editable. See elementOwnership.ts.
   protectForeignElements?: boolean;
-
-  // SONACOVE: unprotectedAuthorIds — authors who have opted their OWN strokes out
-  // of protection, so anyone may edit them. Read per check rather than stamped on
-  // the element, which is what makes the choice retroactive: opting out releases
-  // strokes already drawn. Pass a memoized array — the memo comparator is shallow.
-  unprotectedAuthorIds?: readonly string[];
 }
 
 /**

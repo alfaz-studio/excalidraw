@@ -48,19 +48,15 @@ const getElementAuthorId = (
  */
 export type ElementOwnership = Pick<
   AppProps,
-  "elementAuthorId" | "protectForeignElements" | "unprotectedAuthorIds"
+  "elementAuthorId" | "protectForeignElements"
 >;
 
 /**
  * Whether this client may edit (erase, select, move, restyle) an element.
  *
- * Protection is the baseline: everyone's strokes are theirs alone. An author opts
- * their OWN strokes out by appearing in `unprotectedAuthorIds`, which affects
- * nobody else's. Because that list is consulted per check rather than baked into
- * the element, flipping the choice also releases strokes already on the canvas.
- *
- * Exempt surfaces — the presenter's own overlay, or a moderator — pass
- * `protectForeignElements: false` and may edit anything.
+ * The presenter's own surface passes `protectForeignElements: false` and may edit
+ * anything. On a protected surface a participant may touch only their own strokes
+ * — not the presenter's, and not another viewer's.
  *
  * Untagged elements stay editable: they were drawn before the feature shipped, and
  * treating them as foreign would lock participants out of their own earlier work.
@@ -75,11 +71,7 @@ export const canEditElement = (
 
   const authorId = getElementAuthorId(element);
 
-  if (authorId === null || authorId === ownership.elementAuthorId) {
-    return true;
-  }
-
-  return ownership.unprotectedAuthorIds?.includes(authorId) ?? false;
+  return authorId === null || authorId === ownership.elementAuthorId;
 };
 
 /** Convenience predicate for the `!el.locked` filters this composes with. */
