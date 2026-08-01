@@ -660,6 +660,22 @@ export interface ExcalidrawProps {
   // primitive on purpose: the memo comparator is shallow. See
   // viewportRotation.ts.
   viewportRotation?: number;
+
+  // SONACOVE: elementAuthorId — identity stamped onto this client's elements
+  // (customData.authorId) as they leave the collab broadcast choke point, so
+  // every participant can tell who drew what. Unset → nothing is stamped.
+  elementAuthorId?: string;
+
+  // SONACOVE: protectForeignElements — whether this surface is subject to
+  // per-author protection at all. When set, elements authored by someone else are
+  // read-only here: not erasable, not hit-testable, excluded from marquee/lasso
+  // selection and select-all, and skipped by clear-canvas. Pass false for an
+  // exempt surface (the presenter's own overlay). Deliberately NOT
+  // implemented via `locked`, which any participant can undo
+  // (actionUnlockAllElements / Cmd+Shift+L) and which syncs, so one participant
+  // would unprotect everyone. Elements with no authorId predate the feature and
+  // stay editable. See elementOwnership.ts.
+  protectForeignElements?: boolean;
 }
 
 /**
@@ -704,6 +720,10 @@ export interface CollabTransportProps {
 export interface ExcalidrawCollabProps extends CollabTransportProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
   useTestEnv?: boolean;
+
+  // SONACOVE: mirrors ExcalidrawProps.elementAuthorId — the collab layer stamps
+  // it onto outgoing elements. See elementOwnership.ts.
+  elementAuthorId?: string;
 }
 
 export interface ExcalidrawAppProps extends CollabTransportProps {

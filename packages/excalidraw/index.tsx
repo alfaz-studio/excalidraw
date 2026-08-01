@@ -59,6 +59,8 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     storageBackendUrl,
     lockedViewport,
     viewportRotation,
+    elementAuthorId,
+    protectForeignElements,
   } = props;
 
   const canvasActions = props.UIOptions?.canvasActions;
@@ -155,6 +157,8 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           storageBackendUrl={storageBackendUrl}
           lockedViewport={lockedViewport}
           viewportRotation={viewportRotation}
+          elementAuthorId={elementAuthorId}
+          protectForeignElements={protectForeignElements}
         >
           {children}
         </App>

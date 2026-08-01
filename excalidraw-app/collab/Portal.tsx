@@ -1,5 +1,6 @@
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
+import { stampElementAuthors } from "@excalidraw/excalidraw/elementOwnership";
 import { newElementWith } from "@excalidraw/element";
 import throttle from "lodash.throttle";
 
@@ -211,10 +212,20 @@ class Portal {
       return acc;
     }, [] as SyncableExcalidrawElement[]);
 
+    // SONACOVE: tag this client's elements with their author on the way out.
+    // Every outbound path funnels through here — the UPDATE delta and the
+    // periodic syncAll resync — so an element is stamped once regardless of
+    // which tool drew it, and the resync can't push an untagged copy that would
+    // strip a peer's edit protection. See elementOwnership.ts.
+    const authoredElements = stampElementAuthors(
+      syncableElements,
+      this.collab.getElementAuthorId(),
+    );
+
     const data: SocketUpdateDataSource[typeof updateType] = {
       type: updateType,
       payload: {
-        elements: syncableElements,
+        elements: authoredElements,
       },
     };
 

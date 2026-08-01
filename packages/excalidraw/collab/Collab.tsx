@@ -145,6 +145,16 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private staleCollaboratorTimerId: number | null = null;
   private clientId = crypto.randomUUID();
 
+  /**
+   * SONACOVE: the identity stamped onto this client's elements. Prefers the
+   * host-supplied id (a Sonacove participant id, stable across a reconnect) and
+   * falls back to `clientId` so ownership still works standalone — but note the
+   * fallback is regenerated per Collab instance, so a reconnect would orphan
+   * earlier strokes. See elementOwnership.ts.
+   */
+  getElementAuthorId = (): string =>
+    this.props.elementAuthorId ?? this.clientId;
+
   constructor(props: ExcalidrawCollabProps) {
     super(props);
     this.state = {

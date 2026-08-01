@@ -10,6 +10,8 @@ import { CaptureUpdateAction } from "@excalidraw/element";
 
 import type { ExcalidrawElement } from "@excalidraw/element/types";
 
+import { canEditElement } from "../elementOwnership";
+
 import { selectAllIcon } from "../components/icons";
 
 import { register } from "./register";
@@ -30,7 +32,10 @@ export const actionSelectAll = register({
         (element) =>
           !element.isDeleted &&
           !(isTextElement(element) && element.containerId) &&
-          !element.locked,
+          !element.locked &&
+          // SONACOVE: keep foreign-authored elements out of the selection, so
+          // select-all + Delete can't bypass the ownership guard.
+          canEditElement(element, app.props),
       )
       .reduce((map: Record<ExcalidrawElement["id"], true>, element) => {
         map[element.id] = true;

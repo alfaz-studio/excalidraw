@@ -19,6 +19,10 @@ import {
 import type { ElementsSegmentsMap, GlobalPoint } from "@excalidraw/math/types";
 import type { ElementsMap, ExcalidrawElement } from "@excalidraw/element/types";
 
+import { isElementEditable } from "../elementOwnership";
+
+import type { ElementOwnership } from "../elementOwnership";
+
 export const getLassoSelectedElementIds = (input: {
   lassoPath: GlobalPoint[];
   elements: readonly ExcalidrawElement[];
@@ -27,6 +31,9 @@ export const getLassoSelectedElementIds = (input: {
   intersectedElements: Set<ExcalidrawElement["id"]>;
   enclosedElements: Set<ExcalidrawElement["id"]>;
   simplifyDistance?: number;
+  // SONACOVE: so a lasso drag can't select (and then delete) elements this client
+  // doesn't own. See elementOwnership.ts.
+  ownership?: ElementOwnership;
 }): {
   selectedElementIds: string[];
 } => {
@@ -38,13 +45,16 @@ export const getLassoSelectedElementIds = (input: {
     intersectedElements,
     enclosedElements,
     simplifyDistance,
+    ownership,
   } = input;
   // simplify the path to reduce the number of points
   let path: GlobalPoint[] = lassoPath;
   if (simplifyDistance) {
     path = simplify(lassoPath, simplifyDistance) as GlobalPoint[];
   }
-  const unlockedElements = elements.filter((el) => !el.locked);
+  const unlockedElements = elements.filter((el) =>
+    isElementEditable(el, ownership),
+  );
   // as the path might not enclose a shape anymore, clear before checking
   enclosedElements.clear();
   intersectedElements.clear();

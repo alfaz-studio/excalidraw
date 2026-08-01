@@ -25,6 +25,7 @@ import {
   isEraserActive,
   isHandToolActive,
 } from "../appState";
+import { canEditElement } from "../elementOwnership";
 import { ColorPicker } from "../components/ColorPicker/ColorPicker";
 import { ToolButton } from "../components/ToolButton";
 import { Tooltip } from "../components/Tooltip";
@@ -89,6 +90,22 @@ export const actionChangeViewBackgroundColor = register<Partial<AppState>>({
   },
 });
 
+/**
+ * The `currentItem*` keys hold the user's tool preferences — stroke colour,
+ * font size, stroke width, and so on. `APP_STATE_STORAGE_CONF` marks every one
+ * of them `browser: true`, i.e. they are meant to outlive a session, so
+ * clearing the canvas should drop the drawing and leave the toolbar alone.
+ * Matched on the prefix rather than enumerated so a newly added preference is
+ * carried over without having to remember this spot.
+ */
+const getCurrentItemPrefs = (appState: AppState): Partial<AppState> =>
+  (Object.keys(appState) as (keyof AppState)[])
+    .filter((key) => key.startsWith("currentItem"))
+    .reduce(
+      (prefs, key) => Object.assign(prefs, { [key]: appState[key] }),
+      {} as Partial<AppState>,
+    );
+
 export const actionClearCanvas = register({
   name: "clearCanvas",
   label: "labels.clearCanvas",
@@ -104,11 +121,18 @@ export const actionClearCanvas = register({
   perform: (elements, appState, _, app) => {
     app.imageCache.clear();
     return {
+      // SONACOVE: leave foreign-authored elements standing. Unlike the eraser and
+      // the selection paths, clear-canvas has no `locked` check to compose with,
+      // so without this the trash button erases the whole guard. See
+      // elementOwnership.ts.
       elements: elements.map((element) =>
-        newElementWith(element, { isDeleted: true }),
+        canEditElement(element, app.props)
+          ? newElementWith(element, { isDeleted: true })
+          : element,
       ),
       appState: {
         ...getDefaultAppState(),
+        ...getCurrentItemPrefs(appState),
         files: {},
         theme: appState.theme,
         penMode: appState.penMode,
