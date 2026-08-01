@@ -186,6 +186,43 @@ describe("elementOwnership", () => {
       expect(Object.keys(h.state.selectedElementIds)).toEqual([]);
     });
 
+    it("keeps foreign elements unhittable when both opts are set", async () => {
+      // getElementsAtPosition used to skip its filter entirely when
+      // includeBoundTextElement and includeLockedElements were both true — a
+      // valid shortcut before ownership, since every condition was then
+      // trivially true, and a hole afterwards. No production call site passes
+      // both today, so nothing else would catch a regression here.
+      await render(
+        <Excalidraw elementAuthorId={STUDENT} protectForeignElements={true} />,
+      );
+
+      API.setElements([
+        API.createElement({
+          type: "rectangle",
+          id: "theirs",
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+        }),
+      ]);
+      API.setElements([
+        { ...h.elements[0], customData: { authorId: TEACHER } },
+      ]);
+
+      await waitFor(() => {
+        expect(h.elements.length).toBe(1);
+      });
+
+      expect(
+        //@ts-ignore private — this funnel has no public caller passing both
+        h.app.getElementsAtPosition(50, 50, {
+          includeBoundTextElement: true,
+          includeLockedElements: true,
+        }),
+      ).toEqual([]);
+    });
+
     it("clears everything once protection is toggled off", async () => {
       await render(
         <Excalidraw elementAuthorId={STUDENT} protectForeignElements={false} />,
