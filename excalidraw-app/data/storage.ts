@@ -1,8 +1,10 @@
 /**
  * @fileoverview Storage module for Excalidraw data persistence with external Jitsi backend.
  *
- * Handles encrypted scene storage, file management, and real-time collaboration
- * through JWT-authenticated API calls to the external backend service.
+ * Handles scene archival, file management, and real-time collaboration through
+ * JWT-authenticated API calls to the external backend service. Scenes are stored
+ * as plain `.excalidraw` documents — see {@link StoredScene} for why they are not
+ * encrypted; embedded image files still are.
  */
 import { reconcileElements } from "@excalidraw/excalidraw";
 
@@ -11,7 +13,10 @@ import { getSceneVersion } from "@excalidraw/element";
 import { restoreElements } from "@excalidraw/excalidraw/data/restore";
 
 import { decompressData } from "@excalidraw/excalidraw/data/encode";
-import { decryptData } from "@excalidraw/excalidraw/data/encryption";
+import {
+  isValidExcalidrawData,
+  serializeAsJSON,
+} from "@excalidraw/excalidraw/data/json";
 import { MIME_TYPES } from "@excalidraw/common";
 
 import type {
@@ -231,64 +236,17 @@ const downloadFilesFromBackend = async (
   return { loadedFiles, erroredFiles };
 };
 
-class BackendBytes {
-  private data: Uint8Array;
-
-  constructor(data: Uint8Array) {
-    this.data = data;
-  }
-
-  static fromUint8Array(data: Uint8Array): BackendBytes {
-    return new BackendBytes(data);
-  }
-
-  toUint8Array(): Uint8Array {
-    return this.data;
-  }
-
-  toBase64(): string {
-    return btoa(String.fromCharCode(...this.data));
-  }
-
-  static fromBase64(base64: string): BackendBytes {
-    const binaryString = atob(base64);
-    const data = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      data[i] = binaryString.charCodeAt(i);
-    }
-    return new BackendBytes(data);
-  }
-}
-
+/**
+ * A scene as the storage backend holds it.
+ *
+ * Plain elements, not an encrypted blob: the room key lives only in the
+ * meeting's room metadata, which is discarded when the meeting ends, so a scene
+ * encrypted with it would become permanently unreadable exactly when someone
+ * wants to open it. The archived object is therefore a real `.excalidraw` file.
+ */
 type StoredScene = {
   sceneVersion: number;
-  iv: BackendBytes;
-  ciphertext: BackendBytes;
-};
-
-const decryptElements = async (
-  data: StoredScene,
-  roomKey: string,
-): Promise<readonly ExcalidrawElement[]> => {
-  const ciphertext = data.ciphertext.toUint8Array();
-  const iv = data.iv.toUint8Array();
-
-  // Empty IV = plaintext. Same sentinel the collab wire format uses (see
-  // Portal._broadcastSocketData / Collab.decryptPayload), so a scene written by
-  // one build and read by another cannot be mistaken for corrupt ciphertext.
-  if (iv.byteLength === 0) {
-    return JSON.parse(new TextDecoder("utf-8").decode(ciphertext));
-  }
-
-  const decrypted = await decryptData(
-    iv as Uint8Array<ArrayBuffer>,
-    ciphertext as Uint8Array<ArrayBuffer>,
-    roomKey,
-  );
-  const decodedData = new TextDecoder("utf-8").decode(
-    new Uint8Array(decrypted),
-  );
-  return JSON.parse(decodedData);
+  elements: readonly ExcalidrawElement[];
 };
 
 class StorageSceneVersionCache {
@@ -346,52 +304,34 @@ export const saveFilesToStorage = async ({
   return { savedFiles, erroredFiles };
 };
 
-const createStorageSceneDocument = async (
-  elements: readonly SyncableExcalidrawElement[],
-  _roomKey: string,
-) => {
-  const sceneVersion = getSceneVersion(elements);
-
-  // Stored as plaintext with the zero-length-IV sentinel, so the archived object
-  // is a real `.excalidraw` file the dashboard can hand straight to a user. The
-  // room key is not usable here: it lives only in LiveKit room metadata, which
-  // is discarded when the meeting ends, so anything encrypted with it would be
-  // permanently unreadable the moment it mattered.
-  const json = new TextEncoder().encode(JSON.stringify(elements));
-
-  return {
-    sceneVersion,
-    ciphertext: BackendBytes.fromUint8Array(json),
-    iv: BackendBytes.fromUint8Array(new Uint8Array(0)),
-  } as StoredScene;
-};
-
-/** The scene object's fixed file id under the session — one board per meeting. */
+/**
+ * The scene object's fixed file id under the session — one board per meeting.
+ *
+ * Cross-repo contract: the dashboard API looks the object up by this exact name
+ * (`WHITEBOARD_FILE_ID` in the sonacove repo's `apps/api/src/lib/whiteboard-store.ts`).
+ * Changing it on one side alone makes archived boards silently stop appearing.
+ */
 const SCENE_FILE_ID = "whiteboard.excalidraw";
 
-/** Canonical `.excalidraw` envelope, so the archived object opens in any editor. */
-const SCENE_FILE_TYPE = "excalidraw";
-const SCENE_FILE_VERSION = 2;
-
 /**
- * Whether this participant archives the scene. Annotation overlays are
- * deliberately excluded — they are transient markup over someone's screenshare,
- * not a document — and only the designated writer uploads (see
- * `IMeetingDetails.canPersistScene`).
+ * Whether this participant archives the scene.
+ *
+ * Every peer runs the same save throttle, so without a single designated writer
+ * they would all read-modify-write one object with no locking — upstream leaned
+ * on Firebase transactions, which this backend has none of.
  */
 const _canPersistScene = (): boolean => {
   const meetingDetails = _getMeetingDetails();
 
-  if (!meetingDetails?.sessionId || !_getToken()) {
-    return false;
-  }
-  if (meetingDetails.sceneType === "annotation") {
-    return false;
-  }
-  return meetingDetails.canPersistScene === true;
+  return Boolean(
+    meetingDetails?.sessionId &&
+      _getToken() &&
+      meetingDetails.canPersistScene === true,
+  );
 };
 
-const _sceneUrl = (): string | null => {
+/** `…/sessions/<id>/files` — the session's file collection, or null pre-init. */
+const _sessionFilesUrl = (): string | null => {
   const meetingDetails = _getMeetingDetails();
 
   if (!meetingDetails?.sessionId) {
@@ -405,7 +345,7 @@ const _sceneUrl = (): string | null => {
 const getBackendDocument = async (
   _roomId: string,
 ): Promise<StoredScene | null> => {
-  const baseUrl = _sceneUrl();
+  const baseUrl = _sessionFilesUrl();
 
   if (!baseUrl || !_getToken()) {
     return null;
@@ -434,20 +374,15 @@ const getBackendDocument = async (
     }
 
     const scene = await sceneResponse.json();
-    const elements = Array.isArray(scene?.elements) ? scene.elements : null;
-    if (!elements) {
+
+    if (!isValidExcalidrawData(scene)) {
       return null;
     }
 
-    // Rebuilt in the plaintext form `decryptElements` understands; the version
-    // is derived rather than trusted from the file.
-    return {
-      sceneVersion: getSceneVersion(elements),
-      ciphertext: BackendBytes.fromUint8Array(
-        new TextEncoder().encode(JSON.stringify(elements)),
-      ),
-      iv: BackendBytes.fromUint8Array(new Uint8Array(0)),
-    } as StoredScene;
+    const elements = scene.elements ?? [];
+
+    // Version is derived, never trusted from the file.
+    return { sceneVersion: getSceneVersion(elements), elements };
   } catch (error) {
     console.error("Failed to load whiteboard scene from storage:", error);
     return null;
@@ -458,29 +393,23 @@ const setBackendDocument = async (
   _roomId: string,
   document: StoredScene,
 ): Promise<void> => {
-  if (!_canPersistScene()) {
-    return;
-  }
-
-  const baseUrl = _sceneUrl();
+  const baseUrl = _sessionFilesUrl();
   const meetingDetails = _getMeetingDetails();
 
   if (!baseUrl || !meetingDetails) {
     return;
   }
 
-  const elements = JSON.parse(
-    new TextDecoder("utf-8").decode(document.ciphertext.toUint8Array()),
+  // `serializeAsJSON` in "database" mode is what every other export path uses,
+  // so the archived object stays a canonical `.excalidraw` file and picks up
+  // any future bump to VERSIONS.excalidraw for free.
+  const body = serializeAsJSON(
+    document.elements,
+    {} as AppState,
+    {},
+    "database",
   );
-  const body = JSON.stringify({
-    type: SCENE_FILE_TYPE,
-    version: SCENE_FILE_VERSION,
-    source: meetingDetails.roomJid,
-    elements,
-    appState: {},
-    files: {},
-  });
-  const blob = new Blob([body], { type: "application/json" });
+  const blob = new Blob([body], { type: MIME_TYPES.excalidraw });
 
   const formData = new FormData();
   formData.append(
@@ -508,16 +437,6 @@ const setBackendDocument = async (
   }
 };
 
-// Backend transaction simulation - using simple read-modify-write
-const runBackendTransaction = async <T>(
-  roomId: string,
-  updateFunction: (document: StoredScene | null) => Promise<T>,
-): Promise<T> => {
-  const existingDocument = await getBackendDocument(roomId);
-  const result = await updateFunction(existingDocument);
-  return result;
-};
-
 export const saveToStorage = async (
   portal: Portal,
   elements: readonly SyncableExcalidrawElement[],
@@ -535,44 +454,41 @@ export const saveToStorage = async (
     return null;
   }
 
+  // Non-writers bail BEFORE the read: the read exists only to reconcile against
+  // what is already stored ahead of a write, so for them it would be a full
+  // scene download every throttle tick, thrown away — and marking the version
+  // cache afterwards would claim elements were saved that never were.
+  if (!_canPersistScene()) {
+    return null;
+  }
+
   // Check if already saved (happy path - no need to log)
   if (isSavedToStorage(portal, elements)) {
     return null;
   }
 
-  const storedScene = await runBackendTransaction(roomId, async (snapshot) => {
-    if (!snapshot) {
-      const storedScene = await createStorageSceneDocument(elements, roomKey);
-      await setBackendDocument(roomId, storedScene);
-      return storedScene;
-    }
+  // Read-modify-write, not a transaction: the backend offers no compare-and-set,
+  // which is exactly why there is a single designated writer above.
+  const snapshot = await getBackendDocument(roomId);
+  const merged = snapshot
+    ? getSyncableElements(
+        reconcileElements(
+          elements,
+          getSyncableElements(
+            restoreElements(snapshot.elements, null),
+          ) as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
+          appState,
+        ),
+      )
+    : elements;
 
-    const prevStoredScene = snapshot;
-    const prevStoredElements = getSyncableElements(
-      restoreElements(await decryptElements(prevStoredScene, roomKey), null),
-    );
-    const reconciledElements = getSyncableElements(
-      reconcileElements(
-        elements,
-        prevStoredElements as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
-        appState,
-      ),
-    );
-
-    const storedScene = await createStorageSceneDocument(
-      reconciledElements,
-      roomKey,
-    );
-
-    await setBackendDocument(roomId, storedScene);
-
-    // Return the stored elements as the in memory `reconciledElements` could have mutated in the meantime
-    return storedScene;
+  await setBackendDocument(roomId, {
+    sceneVersion: getSceneVersion(merged),
+    elements: merged,
   });
 
-  const storedElements = getSyncableElements(
-    restoreElements(await decryptElements(storedScene, roomKey), null),
-  );
+  // Restored rather than returned as-is: `merged` may mutate in the meantime.
+  const storedElements = getSyncableElements(restoreElements(merged, null));
 
   StorageSceneVersionCache.set(socket, storedElements);
 
@@ -591,7 +507,7 @@ export const loadFromStorage = async (
   }
 
   const elements = getSyncableElements(
-    restoreElements(await decryptElements(storedScene, roomKey), null),
+    restoreElements(storedScene.elements, null),
   );
 
   if (socket) {
