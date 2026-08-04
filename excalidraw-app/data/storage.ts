@@ -376,13 +376,27 @@ const _sessionFilesUrl = (): string | null => {
   return `${api.baseUrl}${api.apiPrefix}/sessions/${meetingDetails.sessionId}/files`;
 };
 
+/**
+ * Outcome of a read.
+ *
+ * "absent" and "error" MUST stay distinguishable. A write reconciles against
+ * what it reads, so collapsing them means a transient 500 reads as "there is no
+ * scene" and the next write replaces the stored board with whatever this client
+ * happens to hold — which, for a writer whose own restore just failed, is
+ * nothing. That is how a blip wipes a term's worth of a recurring class's board.
+ */
+type SceneReadResult =
+  | { status: "found"; scene: StoredScene }
+  | { status: "absent" }
+  | { status: "error" };
+
 const getBackendDocument = async (
   _roomId: string,
-): Promise<StoredScene | null> => {
+): Promise<SceneReadResult> => {
   const baseUrl = _sessionFilesUrl();
 
   if (!baseUrl || !_getToken()) {
-    return null;
+    return { status: "error" };
   }
 
   try {
@@ -392,34 +406,46 @@ const getBackendDocument = async (
       headers: _getAuthHeaders(),
     });
 
-    // 404 is the ordinary "first save of this meeting" case, not a failure.
+    // 404 is the ordinary "nothing archived yet" case. Anything else — 5xx, a
+    // gateway timeout, an expired token — leaves us unable to say.
+    if (response.status === 404) {
+      return { status: "absent" };
+    }
     if (!response.ok) {
-      return null;
+      return { status: "error" };
     }
 
     const data = await response.json();
     if (!data?.presignedUrl) {
-      return null;
+      return { status: "error" };
     }
 
     const sceneResponse = await fetch(data.presignedUrl);
     if (!sceneResponse.ok) {
-      return null;
+      return { status: "error" };
     }
 
     const scene = await sceneResponse.json();
 
+    // An object that exists but is not a scene cannot be reconciled against and
+    // is not worth preserving — overwriting it is the repair.
     if (!isValidExcalidrawData(scene)) {
-      return null;
+      console.warn("Archived whiteboard is not a valid scene; replacing it.");
+
+      return { status: "absent" };
     }
 
     const elements = scene.elements ?? [];
 
     // Version is derived, never trusted from the file.
-    return { sceneVersion: getSceneVersion(elements), elements };
+    return {
+      status: "found",
+      scene: { sceneVersion: getSceneVersion(elements), elements },
+    };
   } catch (error) {
     console.error("Failed to load whiteboard scene from storage:", error);
-    return null;
+
+    return { status: "error" };
   }
 };
 
@@ -519,17 +545,33 @@ export const saveToStorage = async (
     // Read-modify-write, not a transaction: the backend offers no compare-and-set,
     // which is exactly why there is a single designated writer above.
     const snapshot = await getBackendDocument(roomId);
-    const merged = snapshot
-      ? getSyncableElements(
-          reconcileElements(
-            elements,
-            getSyncableElements(
-              restoreElements(snapshot.elements, null),
-            ) as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
-            appState,
-          ),
-        )
-      : elements;
+
+    // Could not read: refuse to write. Overwriting a scene we failed to read
+    // would discard whatever it held — and this client's own copy may be the
+    // empty one, if its restore is what failed. Skipping costs one tick; the
+    // next one retries, and the user is told so they can save to disk.
+    if (snapshot.status === "error") {
+      const error = new Error(
+        "Whiteboard archive skipped: could not read the stored scene",
+      );
+
+      notifyArchive({ status: "failed", error });
+
+      return null;
+    }
+
+    const merged =
+      snapshot.status === "found"
+        ? getSyncableElements(
+            reconcileElements(
+              elements,
+              getSyncableElements(
+                restoreElements(snapshot.scene.elements, null),
+              ) as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
+              appState,
+            ),
+          )
+        : elements;
 
     await setBackendDocument(roomId, {
       sceneVersion: getSceneVersion(merged),
@@ -556,14 +598,26 @@ export const loadFromStorage = async (
   roomKey: string,
   socket: CollabSocket | null,
 ): Promise<readonly SyncableExcalidrawElement[] | null> => {
-  const storedScene = await getBackendDocument(roomId);
+  const result = await getBackendDocument(roomId);
 
-  if (!storedScene) {
+  // A failed read is reported: it is the difference between "this room has no
+  // board" and "we could not tell", and only the second one means the writer
+  // must not go on to overwrite it.
+  if (result.status === "error") {
+    notifyArchive({
+      status: "failed",
+      error: new Error("Could not load the archived whiteboard"),
+    });
+
+    return null;
+  }
+
+  if (result.status === "absent") {
     return null;
   }
 
   const elements = getSyncableElements(
-    restoreElements(storedScene.elements, null),
+    restoreElements(result.scene.elements, null),
   );
 
   // Content appearing on a board the user expected to be blank needs explaining.
