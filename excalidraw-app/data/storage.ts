@@ -313,6 +313,40 @@ export const saveFilesToStorage = async ({
  */
 const SCENE_FILE_ID = "whiteboard.excalidraw";
 
+/** What happened to the archived scene, for the host to surface to the user. */
+export type SceneArchiveEvent =
+  | { status: "saved" }
+  | { status: "restored" }
+  | { status: "failed"; error: unknown };
+
+let sceneArchiveListener: ((event: SceneArchiveEvent) => void) | null = null;
+
+/**
+ * Registers a host callback for scene-archive outcomes.
+ *
+ * Mirrors `setFileSaveOverride`: the fork owns the archival, the host owns how
+ * (and whether) to tell the user about it. Without this the whole feature is
+ * invisible — a user has no way to know their board outlives the meeting, and no
+ * way to know when it did not.
+ *
+ * @param {Function|null} listener - Called on every outcome; null to unregister.
+ * @returns {void}
+ */
+export const setSceneArchiveListener = (
+  listener: ((event: SceneArchiveEvent) => void) | null,
+) => {
+  sceneArchiveListener = listener;
+};
+
+/** Never let a host listener's failure break the save path. */
+const notifyArchive = (event: SceneArchiveEvent) => {
+  try {
+    sceneArchiveListener?.(event);
+  } catch (error) {
+    console.error("Scene archive listener threw:", error);
+  }
+};
+
 /**
  * Whether this participant archives the scene.
  *
@@ -462,35 +496,57 @@ export const saveToStorage = async (
     return null;
   }
 
+  // A board that was opened and never drawn on is not a board. Archiving it puts
+  // a whiteboard badge on the meeting and offers a blank download. Skipped only
+  // while nothing has been stored yet: once a scene exists, an emptied board is a
+  // deliberate clear that must overwrite it — and a cleared board still carries
+  // tombstoned elements here, so it never reads as empty.
+  if (
+    elements.length === 0 &&
+    StorageSceneVersionCache.get(socket) === undefined
+  ) {
+    return null;
+  }
+
   // Check if already saved (happy path - no need to log)
   if (isSavedToStorage(portal, elements)) {
     return null;
   }
 
-  // Read-modify-write, not a transaction: the backend offers no compare-and-set,
-  // which is exactly why there is a single designated writer above.
-  const snapshot = await getBackendDocument(roomId);
-  const merged = snapshot
-    ? getSyncableElements(
-        reconcileElements(
-          elements,
-          getSyncableElements(
-            restoreElements(snapshot.elements, null),
-          ) as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
-          appState,
-        ),
-      )
-    : elements;
+  let storedElements: readonly SyncableExcalidrawElement[];
 
-  await setBackendDocument(roomId, {
-    sceneVersion: getSceneVersion(merged),
-    elements: merged,
-  });
+  try {
+    // Read-modify-write, not a transaction: the backend offers no compare-and-set,
+    // which is exactly why there is a single designated writer above.
+    const snapshot = await getBackendDocument(roomId);
+    const merged = snapshot
+      ? getSyncableElements(
+          reconcileElements(
+            elements,
+            getSyncableElements(
+              restoreElements(snapshot.elements, null),
+            ) as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
+            appState,
+          ),
+        )
+      : elements;
 
-  // Restored rather than returned as-is: `merged` may mutate in the meantime.
-  const storedElements = getSyncableElements(restoreElements(merged, null));
+    await setBackendDocument(roomId, {
+      sceneVersion: getSceneVersion(merged),
+      elements: merged,
+    });
+
+    // Restored rather than returned as-is: `merged` may mutate in the meantime.
+    storedElements = getSyncableElements(restoreElements(merged, null));
+  } catch (error) {
+    // Surfaced, not swallowed: the user believes the board is kept, and only
+    // they can do anything about it (save it to disk before leaving).
+    notifyArchive({ status: "failed", error });
+    throw error;
+  }
 
   StorageSceneVersionCache.set(socket, storedElements);
+  notifyArchive({ status: "saved" });
 
   return storedElements;
 };
@@ -509,6 +565,11 @@ export const loadFromStorage = async (
   const elements = getSyncableElements(
     restoreElements(storedScene.elements, null),
   );
+
+  // Content appearing on a board the user expected to be blank needs explaining.
+  if (elements.length > 0) {
+    notifyArchive({ status: "restored" });
+  }
 
   if (socket) {
     StorageSceneVersionCache.set(socket, elements);

@@ -271,6 +271,37 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     appJotaiStore.set(isOfflineAtom, !window.navigator.onLine);
   };
 
+  componentDidUpdate(prevProps: CollabProps) {
+    // The storage backend was configured ONCE when collaboration started, from
+    // whatever meetingDetails existed at that instant. Two things change after
+    // it, and both were being ignored:
+    //
+    // - `token`. It is fetched asynchronously once the board opens, so at
+    //   startCollaboration it is frequently still empty — and the init is
+    //   gated on it. Without this the backend stayed uninitialised for the
+    //   WHOLE meeting and nothing was ever archived, silently.
+    // - `canPersistScene`. The writer is elected from the participant list, so
+    //   it flips when the elected writer leaves or roles change. A stale copy
+    //   leaves the room with no writer at all.
+    const { storageBackendUrl, meetingDetails } = this.props;
+    const prev = prevProps.meetingDetails;
+
+    if (
+      storageBackendUrl &&
+      meetingDetails?.sessionId &&
+      meetingDetails.token &&
+      (prev?.token !== meetingDetails.token ||
+        prev?.canPersistScene !== meetingDetails.canPersistScene ||
+        prev?.sessionId !== meetingDetails.sessionId)
+    ) {
+      try {
+        initializeBackend(storageBackendUrl, meetingDetails);
+      } catch (error) {
+        console.error("Failed to re-initialize storage backend:", error);
+      }
+    }
+  }
+
   componentWillUnmount() {
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
