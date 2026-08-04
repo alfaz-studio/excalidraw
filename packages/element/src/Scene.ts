@@ -310,15 +310,17 @@ export class Scene {
 
   onUpdate(cb: SceneStateCallback): SceneStateCallbackRemover {
     if (this.callbacks.has(cb)) {
-      throw new Error();
+      throw new Error("Scene.onUpdate: callback is already registered");
     }
 
     this.callbacks.add(cb);
 
     return () => {
-      if (!this.callbacks.has(cb)) {
-        throw new Error();
-      }
+      // Idempotent: unsubscribing more than once, or after the scene has been
+      // destroyed (which clears `callbacks`), is a normal teardown-ordering
+      // outcome — e.g. React unmounts a subscriber after `destroy()` already
+      // ran. `Set.delete` is a safe no-op when the callback is absent, so we
+      // must not throw here or we crash React's commit-phase teardown.
       this.callbacks.delete(cb);
     };
   }
