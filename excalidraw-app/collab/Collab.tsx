@@ -347,9 +347,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       (this.fileManager.shouldPreventUnload(syncableElements) ||
         !isSavedToStorage(this.portal, syncableElements))
     ) {
-      // this won't run in time if user decides to leave the site, but
-      //  the purpose is to run in immediately after user decides to stay
-      this.saveCollabRoomToFirebase(syncableElements);
+      // Marked final so the upload goes out with `keepalive` and can outlive the
+      // page — otherwise leaving at the confirm dialog cancels it mid-flight and
+      // the last edits are gone. Still best-effort above the keepalive size cap,
+      // which is what preventUnload below is for.
+      this.saveCollabRoomToFirebase(syncableElements, { final: true });
 
       if (import.meta.env.VITE_APP_DISABLE_PREVENT_UNLOAD !== "true") {
         preventUnload(event);
@@ -363,6 +365,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
+    opts?: { final?: boolean },
   ) => {
     syncableElements = cloneJSON(syncableElements);
     try {
@@ -370,6 +373,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         this.portal,
         syncableElements,
         this.excalidrawAPI.getAppState(),
+        opts,
       );
 
       this.resetErrorIndicator();
@@ -392,10 +396,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.loadImageFiles.cancel();
     this.resetErrorIndicator(true);
 
+    // Final: leaving a meeting usually navigates the page away immediately
+    // after this, which would cancel an ordinary in-flight upload.
     this.saveCollabRoomToFirebase(
       getSyncableElements(
         this.excalidrawAPI.getSceneElementsIncludingDeleted(),
       ),
+      { final: true },
     );
 
     if (this.portal.socket && this.fallbackInitializationHandler) {

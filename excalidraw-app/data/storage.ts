@@ -449,9 +449,20 @@ const getBackendDocument = async (
   }
 };
 
+/**
+ * Body ceiling for a `keepalive` request.
+ *
+ * The spec caps all in-flight keepalive bodies at 64 KiB and REJECTS anything
+ * over it, so this must stay under that with room for the multipart envelope and
+ * headers. A scene above the ceiling falls back to a normal request, which the
+ * unload may cancel — `beforeUnload`'s confirm dialog is what covers that case.
+ */
+const KEEPALIVE_MAX_BYTES = 56 * 1024;
+
 const setBackendDocument = async (
   _roomId: string,
   document: StoredScene,
+  opts?: { final?: boolean },
 ): Promise<void> => {
   const baseUrl = _sessionFilesUrl();
   const meetingDetails = _getMeetingDetails();
@@ -483,10 +494,15 @@ const setBackendDocument = async (
   );
   formData.append("file", blob, SCENE_FILE_ID);
 
+  // The last save of a meeting races the page going away: both `beforeUnload`
+  // and `stopCollaboration` fire it without awaiting, and an ordinary fetch in
+  // flight when the document unloads is cancelled — losing exactly the edits
+  // nobody gets a second chance at. `keepalive` lets it outlive the page.
   const response = await fetch(baseUrl, {
     method: "POST",
     headers: _getAuthHeaders(),
     body: formData,
+    keepalive: Boolean(opts?.final) && blob.size <= KEEPALIVE_MAX_BYTES,
   });
 
   if (!response.ok) {
@@ -501,6 +517,7 @@ export const saveToStorage = async (
   portal: Portal,
   elements: readonly SyncableExcalidrawElement[],
   appState: AppState,
+  opts?: { final?: boolean },
 ) => {
   const { roomId, roomKey, socket } = portal;
 
@@ -573,10 +590,11 @@ export const saveToStorage = async (
           )
         : elements;
 
-    await setBackendDocument(roomId, {
-      sceneVersion: getSceneVersion(merged),
-      elements: merged,
-    });
+    await setBackendDocument(
+      roomId,
+      { sceneVersion: getSceneVersion(merged), elements: merged },
+      opts,
+    );
 
     // Restored rather than returned as-is: `merged` may mutate in the meantime.
     storedElements = getSyncableElements(restoreElements(merged, null));
