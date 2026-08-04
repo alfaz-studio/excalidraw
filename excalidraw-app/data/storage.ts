@@ -11,10 +11,7 @@ import { getSceneVersion } from "@excalidraw/element";
 import { restoreElements } from "@excalidraw/excalidraw/data/restore";
 
 import { decompressData } from "@excalidraw/excalidraw/data/encode";
-import {
-  encryptData,
-  decryptData,
-} from "@excalidraw/excalidraw/data/encryption";
+import { decryptData } from "@excalidraw/excalidraw/data/encryption";
 import { MIME_TYPES } from "@excalidraw/common";
 
 import type {
@@ -269,23 +266,19 @@ type StoredScene = {
   ciphertext: BackendBytes;
 };
 
-const encryptElements = async (
-  key: string,
-  elements: readonly ExcalidrawElement[],
-): Promise<{ ciphertext: ArrayBuffer; iv: Uint8Array }> => {
-  const json = JSON.stringify(elements);
-  const encoded = new TextEncoder().encode(json);
-  const { encryptedBuffer, iv } = await encryptData(key, encoded);
-
-  return { ciphertext: encryptedBuffer, iv };
-};
-
 const decryptElements = async (
   data: StoredScene,
   roomKey: string,
 ): Promise<readonly ExcalidrawElement[]> => {
   const ciphertext = data.ciphertext.toUint8Array();
   const iv = data.iv.toUint8Array();
+
+  // Empty IV = plaintext. Same sentinel the collab wire format uses (see
+  // Portal._broadcastSocketData / Collab.decryptPayload), so a scene written by
+  // one build and read by another cannot be mistaken for corrupt ciphertext.
+  if (iv.byteLength === 0) {
+    return JSON.parse(new TextDecoder("utf-8").decode(ciphertext));
+  }
 
   const decrypted = await decryptData(
     iv as Uint8Array<ArrayBuffer>,
@@ -355,29 +348,165 @@ export const saveFilesToStorage = async ({
 
 const createStorageSceneDocument = async (
   elements: readonly SyncableExcalidrawElement[],
-  roomKey: string,
+  _roomKey: string,
 ) => {
   const sceneVersion = getSceneVersion(elements);
-  const { ciphertext, iv } = await encryptElements(roomKey, elements);
+
+  // Stored as plaintext with the zero-length-IV sentinel, so the archived object
+  // is a real `.excalidraw` file the dashboard can hand straight to a user. The
+  // room key is not usable here: it lives only in LiveKit room metadata, which
+  // is discarded when the meeting ends, so anything encrypted with it would be
+  // permanently unreadable the moment it mattered.
+  const json = new TextEncoder().encode(JSON.stringify(elements));
+
   return {
     sceneVersion,
-    ciphertext: BackendBytes.fromUint8Array(new Uint8Array(ciphertext)),
-    iv: BackendBytes.fromUint8Array(iv),
+    ciphertext: BackendBytes.fromUint8Array(json),
+    iv: BackendBytes.fromUint8Array(new Uint8Array(0)),
   } as StoredScene;
 };
 
-// TODO: implement when backend scene persistence is ready
+/** The scene object's fixed file id under the session — one board per meeting. */
+const SCENE_FILE_ID = "whiteboard.excalidraw";
+
+/** Canonical `.excalidraw` envelope, so the archived object opens in any editor. */
+const SCENE_FILE_TYPE = "excalidraw";
+const SCENE_FILE_VERSION = 2;
+
+/**
+ * Whether this participant archives the scene. Annotation overlays are
+ * deliberately excluded — they are transient markup over someone's screenshare,
+ * not a document — and only the designated writer uploads (see
+ * `IMeetingDetails.canPersistScene`).
+ */
+const _canPersistScene = (): boolean => {
+  const meetingDetails = _getMeetingDetails();
+
+  if (!meetingDetails?.sessionId || !_getToken()) {
+    return false;
+  }
+  if (meetingDetails.sceneType === "annotation") {
+    return false;
+  }
+  return meetingDetails.canPersistScene === true;
+};
+
+const _sceneUrl = (): string | null => {
+  const meetingDetails = _getMeetingDetails();
+
+  if (!meetingDetails?.sessionId) {
+    return null;
+  }
+  const api = _getBackendApi();
+
+  return `${api.baseUrl}${api.apiPrefix}/sessions/${meetingDetails.sessionId}/files`;
+};
+
 const getBackendDocument = async (
   _roomId: string,
 ): Promise<StoredScene | null> => {
-  return null;
+  const baseUrl = _sceneUrl();
+
+  if (!baseUrl || !_getToken()) {
+    return null;
+  }
+
+  try {
+    // The backend answers with a presigned URL rather than the bytes.
+    const response = await fetch(`${baseUrl}/${SCENE_FILE_ID}`, {
+      method: "GET",
+      headers: _getAuthHeaders(),
+    });
+
+    // 404 is the ordinary "first save of this meeting" case, not a failure.
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data?.presignedUrl) {
+      return null;
+    }
+
+    const sceneResponse = await fetch(data.presignedUrl);
+    if (!sceneResponse.ok) {
+      return null;
+    }
+
+    const scene = await sceneResponse.json();
+    const elements = Array.isArray(scene?.elements) ? scene.elements : null;
+    if (!elements) {
+      return null;
+    }
+
+    // Rebuilt in the plaintext form `decryptElements` understands; the version
+    // is derived rather than trusted from the file.
+    return {
+      sceneVersion: getSceneVersion(elements),
+      ciphertext: BackendBytes.fromUint8Array(
+        new TextEncoder().encode(JSON.stringify(elements)),
+      ),
+      iv: BackendBytes.fromUint8Array(new Uint8Array(0)),
+    } as StoredScene;
+  } catch (error) {
+    console.error("Failed to load whiteboard scene from storage:", error);
+    return null;
+  }
 };
 
-// TODO: implement when backend scene persistence is ready
 const setBackendDocument = async (
   _roomId: string,
-  _document: StoredScene,
-): Promise<void> => {};
+  document: StoredScene,
+): Promise<void> => {
+  if (!_canPersistScene()) {
+    return;
+  }
+
+  const baseUrl = _sceneUrl();
+  const meetingDetails = _getMeetingDetails();
+
+  if (!baseUrl || !meetingDetails) {
+    return;
+  }
+
+  const elements = JSON.parse(
+    new TextDecoder("utf-8").decode(document.ciphertext.toUint8Array()),
+  );
+  const body = JSON.stringify({
+    type: SCENE_FILE_TYPE,
+    version: SCENE_FILE_VERSION,
+    source: meetingDetails.roomJid,
+    elements,
+    appState: {},
+    files: {},
+  });
+  const blob = new Blob([body], { type: "application/json" });
+
+  const formData = new FormData();
+  formData.append(
+    "metadata",
+    JSON.stringify({
+      conferenceFullName: meetingDetails.roomJid,
+      fileId: SCENE_FILE_ID,
+      fileSize: blob.size,
+      timestamp: Date.now(),
+    }),
+  );
+  formData.append("file", blob, SCENE_FILE_ID);
+
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: _getAuthHeaders(),
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Whiteboard scene upload failed: ${response.status} ${response.statusText} ${text}`,
+    );
+  }
+};
 
 // Backend transaction simulation - using simple read-modify-write
 const runBackendTransaction = async <T>(
