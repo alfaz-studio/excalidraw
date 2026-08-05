@@ -63,6 +63,7 @@ import {
   LOAD_IMAGES_TIMEOUT,
   WS_SUBTYPES,
   SYNC_FULL_SCENE_INTERVAL_MS,
+  VISIBILITY_FLUSH_MIN_INTERVAL_MS,
   WS_EVENTS,
 } from "../app_constants";
 import {
@@ -84,6 +85,7 @@ import {
   saveToStorage,
   initializeBackend,
   setSceneFlushHandler,
+  canPersistScene,
 } from "../data/storage";
 import {
   importUsernameFromLocalStorage,
@@ -143,6 +145,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   idleTimeoutId: number | null;
 
   private socketInitializationTimer?: number;
+  private lastVisibilityFlush = 0;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
@@ -395,7 +398,17 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     syncableElements: readonly SyncableExcalidrawElement[],
     opts?: { final?: boolean },
   ) => {
-    syncableElements = cloneJSON(syncableElements);
+    // The clone protects the array from mutation across the await below, which
+    // only matters if there IS a write. `saveToStorage` bails non-writers out
+    // before it touches anything, so in a ten-person meeting nine clients were
+    // deep-copying the whole element array every tick purely to discard it,
+    // each blocking its own main thread while people draw.
+    //
+    // Only the copy is skipped — everything downstream still runs exactly as
+    // before, including the post-save error-indicator reset.
+    syncableElements = canPersistScene()
+      ? cloneJSON(syncableElements)
+      : syncableElements;
     try {
       const storedElements = await saveToStorage(
         this.portal,
@@ -956,9 +969,19 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private onVisibilityChange = () => {
     if (document.hidden) {
       // A hidden tab is the last reliable signal before a page we never get an
-      // unload from — the mobile/bfcache path in particular. Cheap: the save
-      // short-circuits when nothing changed, and non-writers bail before it.
-      this.queueSaveToFirebase.flush();
+      // unload from — the mobile/bfcache path in particular.
+      //
+      // Rate-limited because this fires at USER frequency, not the 20s throttle:
+      // alt-tabbing while drawing would otherwise force a full cycle per hide
+      // (scene read, reconcile, write). The case this exists for — a hide that
+      // precedes a page we never hear from again — is unaffected, since that
+      // hide is the first one after any recent save.
+      const now = Date.now();
+
+      if (now - this.lastVisibilityFlush >= VISIBILITY_FLUSH_MIN_INTERVAL_MS) {
+        this.lastVisibilityFlush = now;
+        this.queueSaveToFirebase.flush();
+      }
 
       if (this.idleTimeoutId) {
         window.clearTimeout(this.idleTimeoutId);

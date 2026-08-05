@@ -407,6 +407,16 @@ const _canPersistScene = (): boolean => {
   );
 };
 
+/**
+ * Whether this participant would archive the scene if asked.
+ *
+ * Exposed so a caller can skip the work of PREPARING a save it is not going to
+ * perform. `saveToStorage` bails on the same condition, but only after the
+ * caller has deep-cloned the entire element array — which every non-writer in
+ * the meeting was doing, on its own main thread, while people draw.
+ */
+export const canPersistScene = (): boolean => _canPersistScene();
+
 /** `…/sessions/<id>/files` — the session's file collection, or null pre-init. */
 const _sessionFilesUrl = (): string | null => {
   const meetingDetails = _getMeetingDetails();
