@@ -83,6 +83,7 @@ import {
   saveFilesToStorage,
   saveToStorage,
   initializeBackend,
+  setSceneFlushHandler,
 } from "../data/storage";
 import {
   importUsernameFromLocalStorage,
@@ -225,6 +226,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     window.addEventListener("offline", this.onOfflineStatusToggle);
     window.addEventListener(EVENT.UNLOAD, this.onUnload);
 
+    // Lets the host archive the board and WAIT for it before it navigates away
+    // — the only way to beat the keepalive size cap, which silently drops the
+    // last edits of any board over 56 KiB.
+    setSceneFlushHandler(this.flushSceneNow);
+
     const unsubOnUserFollow = this.excalidrawAPI.onUserFollow((payload) => {
       this.portal.socket && this.portal.broadcastUserFollowed(payload);
     });
@@ -303,6 +309,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   }
 
   componentWillUnmount() {
+    setSceneFlushHandler(null);
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
     window.removeEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
@@ -362,6 +369,27 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       }
     }
   });
+
+  /**
+   * Archives the board and resolves once the upload has settled.
+   *
+   * Deliberately NOT `{ final: true }`: `final` exists to buy `keepalive` for a
+   * save that cannot be awaited, and it is capped at 56 KiB. Here the page is
+   * still alive precisely because the host is awaiting us, so an ordinary
+   * request is both unbounded in size and actually observable.
+   *
+   * The pending throttled save is cancelled first so it cannot fire a second,
+   * older write behind this one.
+   *
+   * @returns {Promise<void>} Resolves when the save settles.
+   */
+  flushSceneNow = async (): Promise<void> => {
+    this.queueSaveToFirebase.cancel();
+
+    await this.saveCollabRoomToFirebase(
+      getSyncableElements(this.excalidrawAPI.getSceneElementsIncludingDeleted()),
+    );
+  };
 
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
@@ -927,6 +955,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   private onVisibilityChange = () => {
     if (document.hidden) {
+      // A hidden tab is the last reliable signal before a page we never get an
+      // unload from — the mobile/bfcache path in particular. Cheap: the save
+      // short-circuits when nothing changed, and non-writers bail before it.
+      this.queueSaveToFirebase.flush();
+
       if (this.idleTimeoutId) {
         window.clearTimeout(this.idleTimeoutId);
         this.idleTimeoutId = null;

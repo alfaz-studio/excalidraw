@@ -346,3 +346,8 @@ export { generateCollaborationLinkData } from "../../excalidraw-app/data/index";
 // setFileSaveOverride above.
 export { setSceneArchiveListener } from "../../excalidraw-app/data/storage";
 export type { SceneArchiveEvent } from "../../excalidraw-app/data/storage";
+
+// Archive the board and WAIT for it. For a host that is about to navigate away
+// (leaving a meeting): the unload-time saves ride `keepalive` and are dropped
+// above 56 KiB, so a host that can await should, before it tears the page down.
+export { flushSceneArchive } from "../../excalidraw-app/data/storage";

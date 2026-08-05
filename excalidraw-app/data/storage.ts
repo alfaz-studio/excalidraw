@@ -338,6 +338,49 @@ export const setSceneArchiveListener = (
   sceneArchiveListener = listener;
 };
 
+/**
+ * The live board's final-save, registered by the collab layer while it is
+ * mounted. Null when no board is open.
+ */
+let sceneFlushHandler: (() => Promise<void>) | null = null;
+
+/**
+ * Registers the handler that {@link flushSceneArchive} drives.
+ *
+ * @param {Function|null} handler - Performs a final save; null to unregister.
+ * @returns {void}
+ */
+export const setSceneFlushHandler = (
+  handler: (() => Promise<void>) | null,
+) => {
+  sceneFlushHandler = handler;
+};
+
+/**
+ * Archives the board NOW, and resolves when the upload has actually landed.
+ *
+ * For the host's leave flow. The unload-time saves cannot be awaited — nothing
+ * can await a page that is going away — so they ride `keepalive`, which the spec
+ * caps at 64 KiB of in-flight body. Above that cap the request is a plain fetch
+ * racing navigation, and a busy board clears 56 KiB easily, so the edits since
+ * the last 20s tick are exactly what gets dropped.
+ *
+ * Awaiting this BEFORE navigating removes the race instead of narrowing it: the
+ * page is still alive, so no cap and no keepalive are involved. Resolves rather
+ * than rejects on failure — a board that could not be saved must not be able to
+ * trap the user in the meeting.
+ *
+ * @returns {Promise<void>} Resolves once the save settles, or immediately if no
+ * board is open / this client is not the elected writer.
+ */
+export const flushSceneArchive = async (): Promise<void> => {
+  try {
+    await sceneFlushHandler?.();
+  } catch (error) {
+    console.error("Scene archive flush failed:", error);
+  }
+};
+
 /** Never let a host listener's failure break the save path. */
 const notifyArchive = (event: SceneArchiveEvent) => {
   try {
