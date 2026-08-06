@@ -315,7 +315,11 @@ const SCENE_FILE_ID = "whiteboard.excalidraw";
 
 /** What happened to the archived scene, for the host to surface to the user. */
 export type SceneArchiveEvent =
-  | { status: "saved" }
+  /** `final` marks the save the host asked for on the way out, as opposed to a
+   *  routine throttled tick. Anything the host derives from the scene — a
+   *  preview it otherwise rate-limits — must refresh on this one, because there
+   *  is no later save to correct it. */
+  | { status: "saved"; final?: boolean }
   | { status: "restored" }
   | { status: "failed"; error: unknown };
 
@@ -570,7 +574,7 @@ export const saveToStorage = async (
   portal: Portal,
   elements: readonly SyncableExcalidrawElement[],
   appState: AppState,
-  opts?: { final?: boolean },
+  opts?: { final?: boolean; flushed?: boolean },
 ) => {
   const { roomId, roomKey, socket } = portal;
 
@@ -659,7 +663,7 @@ export const saveToStorage = async (
   }
 
   StorageSceneVersionCache.set(socket, storedElements);
-  notifyArchive({ status: "saved" });
+  notifyArchive({ status: "saved", final: opts?.flushed });
 
   return storedElements;
 };

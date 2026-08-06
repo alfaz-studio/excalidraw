@@ -391,12 +391,16 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     await this.saveCollabRoomToFirebase(
       getSyncableElements(this.excalidrawAPI.getSceneElementsIncludingDeleted()),
+      // Not `final` (that buys keepalive for a save nobody can await) —
+      // `flushed` tells the host this is the last one, so anything it derives
+      // from the scene refreshes now or never.
+      { flushed: true },
     );
   };
 
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
-    opts?: { final?: boolean },
+    opts?: { final?: boolean; flushed?: boolean },
   ) => {
     // The clone protects the array from mutation across the await below, which
     // only matters if there IS a write. `saveToStorage` bails non-writers out
