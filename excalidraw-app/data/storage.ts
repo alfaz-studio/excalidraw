@@ -116,7 +116,7 @@ const uploadFilesWithMulter = async (
   // Uploading sequentially
   for (const { id, buffer } of files) {
     try {
-      const url = `${baseUrl}/sessions/${meetingDetails.sessionId}/files`;
+      const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files`;
 
       const fileMetaData = {
         conferenceFullName: meetingDetails.roomJid,
@@ -191,7 +191,7 @@ const downloadFilesFromBackend = async (
     [...new Set(fileIds)].map(async (id) => {
       try {
         const encodedFileId = encodeURIComponent(`${prefix}/${id}`);
-        const url = `${baseUrl}/sessions/${meetingDetails.sessionId}/files/${encodedFileId}`;
+        const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files/${encodedFileId}`;
         const response = await fetch(url, {
           method: "GET",
           headers,
@@ -421,7 +421,18 @@ const _canPersistScene = (): boolean => {
  */
 export const canPersistScene = (): boolean => _canPersistScene();
 
-/** `…/sessions/<id>/files` — the session's file collection, or null pre-init. */
+/**
+ * `…/sessions/<id>/files` — the session's file collection, or null pre-init.
+ *
+ * The id is percent-encoded because it is a ROOM NAME, and a room name reached
+ * as "quick meeting" is the literal string `quick%20meeting` — the meet client
+ * encodes internal spaces on the way in and keeps them encoded. Interpolated
+ * raw, that `%20` is decoded back to a space by the server's path parser, and
+ * the id it compares against the token's `meeting_id` claim no longer matches:
+ * every archive tick 403s with "SessionId mismatch" and the board is never
+ * saved. Rooms with no encodable character were unaffected, which is why this
+ * survived: it only breaks rooms with spaces in the name.
+ */
 const _sessionFilesUrl = (): string | null => {
   const meetingDetails = _getMeetingDetails();
 
@@ -430,7 +441,7 @@ const _sessionFilesUrl = (): string | null => {
   }
   const api = _getBackendApi();
 
-  return `${api.baseUrl}${api.apiPrefix}/sessions/${meetingDetails.sessionId}/files`;
+  return `${api.baseUrl}${api.apiPrefix}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files`;
 };
 
 /**
