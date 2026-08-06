@@ -739,6 +739,15 @@ export interface IMeetingDetails {
   jid?: string;
   token?: string;
   sceneType?: "whiteboard" | "annotation";
+  /**
+   * Whether THIS participant archives the scene to the storage backend.
+   *
+   * Every peer runs the same save throttle, so without a single designated
+   * writer they all read-modify-write one object with no locking (upstream
+   * relied on Firebase transactions; this backend has none). The host sets this
+   * for the moderator only. Peers still read the scene on join.
+   */
+  canPersistScene?: boolean;
 }
 
 export type SceneData = {

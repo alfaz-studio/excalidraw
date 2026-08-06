@@ -1,8 +1,10 @@
 /**
  * @fileoverview Storage module for Excalidraw data persistence with external Jitsi backend.
  *
- * Handles encrypted scene storage, file management, and real-time collaboration
- * through JWT-authenticated API calls to the external backend service.
+ * Handles scene archival, file management, and real-time collaboration through
+ * JWT-authenticated API calls to the external backend service. Scenes are stored
+ * as plain `.excalidraw` documents — see {@link StoredScene} for why they are not
+ * encrypted; embedded image files still are.
  */
 import { reconcileElements } from "@excalidraw/excalidraw";
 
@@ -12,9 +14,9 @@ import { restoreElements } from "@excalidraw/excalidraw/data/restore";
 
 import { decompressData } from "@excalidraw/excalidraw/data/encode";
 import {
-  encryptData,
-  decryptData,
-} from "@excalidraw/excalidraw/data/encryption";
+  isValidExcalidrawData,
+  serializeAsJSON,
+} from "@excalidraw/excalidraw/data/json";
 import { MIME_TYPES } from "@excalidraw/common";
 
 import type {
@@ -114,7 +116,7 @@ const uploadFilesWithMulter = async (
   // Uploading sequentially
   for (const { id, buffer } of files) {
     try {
-      const url = `${baseUrl}/sessions/${meetingDetails.sessionId}/files`;
+      const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files`;
 
       const fileMetaData = {
         conferenceFullName: meetingDetails.roomJid,
@@ -189,7 +191,7 @@ const downloadFilesFromBackend = async (
     [...new Set(fileIds)].map(async (id) => {
       try {
         const encodedFileId = encodeURIComponent(`${prefix}/${id}`);
-        const url = `${baseUrl}/sessions/${meetingDetails.sessionId}/files/${encodedFileId}`;
+        const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files/${encodedFileId}`;
         const response = await fetch(url, {
           method: "GET",
           headers,
@@ -234,68 +236,17 @@ const downloadFilesFromBackend = async (
   return { loadedFiles, erroredFiles };
 };
 
-class BackendBytes {
-  private data: Uint8Array;
-
-  constructor(data: Uint8Array) {
-    this.data = data;
-  }
-
-  static fromUint8Array(data: Uint8Array): BackendBytes {
-    return new BackendBytes(data);
-  }
-
-  toUint8Array(): Uint8Array {
-    return this.data;
-  }
-
-  toBase64(): string {
-    return btoa(String.fromCharCode(...this.data));
-  }
-
-  static fromBase64(base64: string): BackendBytes {
-    const binaryString = atob(base64);
-    const data = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      data[i] = binaryString.charCodeAt(i);
-    }
-    return new BackendBytes(data);
-  }
-}
-
+/**
+ * A scene as the storage backend holds it.
+ *
+ * Plain elements, not an encrypted blob: the room key lives only in the
+ * meeting's room metadata, which is discarded when the meeting ends, so a scene
+ * encrypted with it would become permanently unreadable exactly when someone
+ * wants to open it. The archived object is therefore a real `.excalidraw` file.
+ */
 type StoredScene = {
   sceneVersion: number;
-  iv: BackendBytes;
-  ciphertext: BackendBytes;
-};
-
-const encryptElements = async (
-  key: string,
-  elements: readonly ExcalidrawElement[],
-): Promise<{ ciphertext: ArrayBuffer; iv: Uint8Array }> => {
-  const json = JSON.stringify(elements);
-  const encoded = new TextEncoder().encode(json);
-  const { encryptedBuffer, iv } = await encryptData(key, encoded);
-
-  return { ciphertext: encryptedBuffer, iv };
-};
-
-const decryptElements = async (
-  data: StoredScene,
-  roomKey: string,
-): Promise<readonly ExcalidrawElement[]> => {
-  const ciphertext = data.ciphertext.toUint8Array();
-  const iv = data.iv.toUint8Array();
-
-  const decrypted = await decryptData(
-    iv as Uint8Array<ArrayBuffer>,
-    ciphertext as Uint8Array<ArrayBuffer>,
-    roomKey,
-  );
-  const decodedData = new TextDecoder("utf-8").decode(
-    new Uint8Array(decrypted),
-  );
-  return JSON.parse(decodedData);
+  elements: readonly ExcalidrawElement[];
 };
 
 class StorageSceneVersionCache {
@@ -353,46 +304,288 @@ export const saveFilesToStorage = async ({
   return { savedFiles, erroredFiles };
 };
 
-const createStorageSceneDocument = async (
-  elements: readonly SyncableExcalidrawElement[],
-  roomKey: string,
+/**
+ * The scene object's fixed file id under the session — one board per meeting.
+ *
+ * Cross-repo contract: the dashboard API looks the object up by this exact name
+ * (`WHITEBOARD_FILE_ID` in the sonacove repo's `apps/api/src/lib/whiteboard-store.ts`).
+ * Changing it on one side alone makes archived boards silently stop appearing.
+ */
+const SCENE_FILE_ID = "whiteboard.excalidraw";
+
+/** What happened to the archived scene, for the host to surface to the user. */
+export type SceneArchiveEvent =
+  /** `final` marks the save the host asked for on the way out, as opposed to a
+   *  routine throttled tick. Anything the host derives from the scene — a
+   *  preview it otherwise rate-limits — must refresh on this one, because there
+   *  is no later save to correct it. */
+  | { status: "saved"; final?: boolean }
+  | { status: "restored" }
+  | { status: "failed"; error: unknown };
+
+let sceneArchiveListener: ((event: SceneArchiveEvent) => void) | null = null;
+
+/**
+ * Registers a host callback for scene-archive outcomes.
+ *
+ * Mirrors `setFileSaveOverride`: the fork owns the archival, the host owns how
+ * (and whether) to tell the user about it. Without this the whole feature is
+ * invisible — a user has no way to know their board outlives the meeting, and no
+ * way to know when it did not.
+ *
+ * @param {Function|null} listener - Called on every outcome; null to unregister.
+ * @returns {void}
+ */
+export const setSceneArchiveListener = (
+  listener: ((event: SceneArchiveEvent) => void) | null,
 ) => {
-  const sceneVersion = getSceneVersion(elements);
-  const { ciphertext, iv } = await encryptElements(roomKey, elements);
-  return {
-    sceneVersion,
-    ciphertext: BackendBytes.fromUint8Array(new Uint8Array(ciphertext)),
-    iv: BackendBytes.fromUint8Array(iv),
-  } as StoredScene;
+  sceneArchiveListener = listener;
 };
 
-// TODO: implement when backend scene persistence is ready
+/**
+ * The live board's final-save, registered by the collab layer while it is
+ * mounted. Null when no board is open.
+ */
+let sceneFlushHandler: (() => Promise<void>) | null = null;
+
+/**
+ * Registers the handler that {@link flushSceneArchive} drives.
+ *
+ * @param {Function|null} handler - Performs a final save; null to unregister.
+ * @returns {void}
+ */
+export const setSceneFlushHandler = (
+  handler: (() => Promise<void>) | null,
+) => {
+  sceneFlushHandler = handler;
+};
+
+/**
+ * Archives the board NOW, and resolves when the upload has actually landed.
+ *
+ * For the host's leave flow. The unload-time saves cannot be awaited — nothing
+ * can await a page that is going away — so they ride `keepalive`, which the spec
+ * caps at 64 KiB of in-flight body. Above that cap the request is a plain fetch
+ * racing navigation, and a busy board clears 56 KiB easily, so the edits since
+ * the last 20s tick are exactly what gets dropped.
+ *
+ * Awaiting this BEFORE navigating removes the race instead of narrowing it: the
+ * page is still alive, so no cap and no keepalive are involved. Resolves rather
+ * than rejects on failure — a board that could not be saved must not be able to
+ * trap the user in the meeting.
+ *
+ * @returns {Promise<void>} Resolves once the save settles, or immediately if no
+ * board is open / this client is not the elected writer.
+ */
+export const flushSceneArchive = async (): Promise<void> => {
+  try {
+    await sceneFlushHandler?.();
+  } catch (error) {
+    console.error("Scene archive flush failed:", error);
+  }
+};
+
+/** Never let a host listener's failure break the save path. */
+const notifyArchive = (event: SceneArchiveEvent) => {
+  try {
+    sceneArchiveListener?.(event);
+  } catch (error) {
+    console.error("Scene archive listener threw:", error);
+  }
+};
+
+/**
+ * Whether this participant archives the scene.
+ *
+ * Every peer runs the same save throttle, so without a single designated writer
+ * they would all read-modify-write one object with no locking — upstream leaned
+ * on Firebase transactions, which this backend has none of.
+ */
+const _canPersistScene = (): boolean => {
+  const meetingDetails = _getMeetingDetails();
+
+  return Boolean(
+    meetingDetails?.sessionId &&
+      _getToken() &&
+      meetingDetails.canPersistScene === true,
+  );
+};
+
+/**
+ * Whether this participant would archive the scene if asked.
+ *
+ * Exposed so a caller can skip the work of PREPARING a save it is not going to
+ * perform. `saveToStorage` bails on the same condition, but only after the
+ * caller has deep-cloned the entire element array — which every non-writer in
+ * the meeting was doing, on its own main thread, while people draw.
+ */
+export const canPersistScene = (): boolean => _canPersistScene();
+
+/**
+ * `…/sessions/<id>/files` — the session's file collection, or null pre-init.
+ *
+ * The id is percent-encoded because it is a ROOM NAME, and a room name reached
+ * as "quick meeting" is the literal string `quick%20meeting` — the meet client
+ * encodes internal spaces on the way in and keeps them encoded. Interpolated
+ * raw, that `%20` is decoded back to a space by the server's path parser, and
+ * the id it compares against the token's `meeting_id` claim no longer matches:
+ * every archive tick 403s with "SessionId mismatch" and the board is never
+ * saved. Rooms with no encodable character were unaffected, which is why this
+ * survived: it only breaks rooms with spaces in the name.
+ */
+const _sessionFilesUrl = (): string | null => {
+  const meetingDetails = _getMeetingDetails();
+
+  if (!meetingDetails?.sessionId) {
+    return null;
+  }
+  const api = _getBackendApi();
+
+  return `${api.baseUrl}${api.apiPrefix}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files`;
+};
+
+/**
+ * Outcome of a read.
+ *
+ * "absent" and "error" MUST stay distinguishable. A write reconciles against
+ * what it reads, so collapsing them means a transient 500 reads as "there is no
+ * scene" and the next write replaces the stored board with whatever this client
+ * happens to hold — which, for a writer whose own restore just failed, is
+ * nothing. That is how a blip wipes a term's worth of a recurring class's board.
+ */
+type SceneReadResult =
+  | { status: "found"; scene: StoredScene }
+  | { status: "absent" }
+  | { status: "error" };
+
 const getBackendDocument = async (
   _roomId: string,
-): Promise<StoredScene | null> => {
-  return null;
+): Promise<SceneReadResult> => {
+  const baseUrl = _sessionFilesUrl();
+
+  if (!baseUrl || !_getToken()) {
+    return { status: "error" };
+  }
+
+  try {
+    // The backend answers with a presigned URL rather than the bytes.
+    const response = await fetch(`${baseUrl}/${SCENE_FILE_ID}`, {
+      method: "GET",
+      headers: _getAuthHeaders(),
+    });
+
+    // 404 is the ordinary "nothing archived yet" case. Anything else — 5xx, a
+    // gateway timeout, an expired token — leaves us unable to say.
+    if (response.status === 404) {
+      return { status: "absent" };
+    }
+    if (!response.ok) {
+      return { status: "error" };
+    }
+
+    const data = await response.json();
+    if (!data?.presignedUrl) {
+      return { status: "error" };
+    }
+
+    const sceneResponse = await fetch(data.presignedUrl);
+    if (!sceneResponse.ok) {
+      return { status: "error" };
+    }
+
+    const scene = await sceneResponse.json();
+
+    // An object that exists but is not a scene cannot be reconciled against and
+    // is not worth preserving — overwriting it is the repair.
+    if (!isValidExcalidrawData(scene)) {
+      console.warn("Archived whiteboard is not a valid scene; replacing it.");
+
+      return { status: "absent" };
+    }
+
+    const elements = scene.elements ?? [];
+
+    // Version is derived, never trusted from the file.
+    return {
+      status: "found",
+      scene: { sceneVersion: getSceneVersion(elements), elements },
+    };
+  } catch (error) {
+    console.error("Failed to load whiteboard scene from storage:", error);
+
+    return { status: "error" };
+  }
 };
 
-// TODO: implement when backend scene persistence is ready
+/**
+ * Body ceiling for a `keepalive` request.
+ *
+ * The spec caps all in-flight keepalive bodies at 64 KiB and REJECTS anything
+ * over it, so this must stay under that with room for the multipart envelope and
+ * headers. A scene above the ceiling falls back to a normal request, which the
+ * unload may cancel — `beforeUnload`'s confirm dialog is what covers that case.
+ */
+const KEEPALIVE_MAX_BYTES = 56 * 1024;
+
 const setBackendDocument = async (
   _roomId: string,
-  _document: StoredScene,
-): Promise<void> => {};
+  document: StoredScene,
+  opts?: { final?: boolean },
+): Promise<void> => {
+  const baseUrl = _sessionFilesUrl();
+  const meetingDetails = _getMeetingDetails();
 
-// Backend transaction simulation - using simple read-modify-write
-const runBackendTransaction = async <T>(
-  roomId: string,
-  updateFunction: (document: StoredScene | null) => Promise<T>,
-): Promise<T> => {
-  const existingDocument = await getBackendDocument(roomId);
-  const result = await updateFunction(existingDocument);
-  return result;
+  if (!baseUrl || !meetingDetails) {
+    return;
+  }
+
+  // `serializeAsJSON` in "database" mode is what every other export path uses,
+  // so the archived object stays a canonical `.excalidraw` file and picks up
+  // any future bump to VERSIONS.excalidraw for free.
+  const body = serializeAsJSON(
+    document.elements,
+    {} as AppState,
+    {},
+    "database",
+  );
+  const blob = new Blob([body], { type: MIME_TYPES.excalidraw });
+
+  const formData = new FormData();
+  formData.append(
+    "metadata",
+    JSON.stringify({
+      conferenceFullName: meetingDetails.roomJid,
+      fileId: SCENE_FILE_ID,
+      fileSize: blob.size,
+      timestamp: Date.now(),
+    }),
+  );
+  formData.append("file", blob, SCENE_FILE_ID);
+
+  // The last save of a meeting races the page going away: both `beforeUnload`
+  // and `stopCollaboration` fire it without awaiting, and an ordinary fetch in
+  // flight when the document unloads is cancelled — losing exactly the edits
+  // nobody gets a second chance at. `keepalive` lets it outlive the page.
+  const response = await fetch(baseUrl, {
+    method: "POST",
+    headers: _getAuthHeaders(),
+    body: formData,
+    keepalive: Boolean(opts?.final) && blob.size <= KEEPALIVE_MAX_BYTES,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(
+      `Whiteboard scene upload failed: ${response.status} ${response.statusText} ${text}`,
+    );
+  }
 };
 
 export const saveToStorage = async (
   portal: Portal,
   elements: readonly SyncableExcalidrawElement[],
   appState: AppState,
+  opts?: { final?: boolean; flushed?: boolean },
 ) => {
   const { roomId, roomKey, socket } = portal;
 
@@ -406,46 +599,82 @@ export const saveToStorage = async (
     return null;
   }
 
+  // Non-writers bail BEFORE the read: the read exists only to reconcile against
+  // what is already stored ahead of a write, so for them it would be a full
+  // scene download every throttle tick, thrown away — and marking the version
+  // cache afterwards would claim elements were saved that never were.
+  if (!_canPersistScene()) {
+    return null;
+  }
+
+  // A board that was opened and never drawn on is not a board. Archiving it puts
+  // a whiteboard badge on the meeting and offers a blank download. Skipped only
+  // while nothing has been stored yet: once a scene exists, an emptied board is a
+  // deliberate clear that must overwrite it — and a cleared board still carries
+  // tombstoned elements here, so it never reads as empty.
+  if (
+    elements.length === 0 &&
+    StorageSceneVersionCache.get(socket) === undefined
+  ) {
+    return null;
+  }
+
   // Check if already saved (happy path - no need to log)
   if (isSavedToStorage(portal, elements)) {
     return null;
   }
 
-  const storedScene = await runBackendTransaction(roomId, async (snapshot) => {
-    if (!snapshot) {
-      const storedScene = await createStorageSceneDocument(elements, roomKey);
-      await setBackendDocument(roomId, storedScene);
-      return storedScene;
+  let storedElements: readonly SyncableExcalidrawElement[];
+
+  try {
+    // Read-modify-write, not a transaction: the backend offers no compare-and-set,
+    // which is exactly why there is a single designated writer above.
+    const snapshot = await getBackendDocument(roomId);
+
+    // Could not read: refuse to write. Overwriting a scene we failed to read
+    // would discard whatever it held — and this client's own copy may be the
+    // empty one, if its restore is what failed. Skipping costs one tick; the
+    // next one retries, and the user is told so they can save to disk.
+    if (snapshot.status === "error") {
+      const error = new Error(
+        "Whiteboard archive skipped: could not read the stored scene",
+      );
+
+      notifyArchive({ status: "failed", error });
+
+      return null;
     }
 
-    const prevStoredScene = snapshot;
-    const prevStoredElements = getSyncableElements(
-      restoreElements(await decryptElements(prevStoredScene, roomKey), null),
+    const merged =
+      snapshot.status === "found"
+        ? getSyncableElements(
+            reconcileElements(
+              elements,
+              getSyncableElements(
+                restoreElements(snapshot.scene.elements, null),
+              ) as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
+              appState,
+            ),
+          )
+        : elements;
+
+    await setBackendDocument(
+      roomId,
+      { sceneVersion: getSceneVersion(merged), elements: merged },
+      opts,
     );
-    const reconciledElements = getSyncableElements(
-      reconcileElements(
-        elements,
-        prevStoredElements as OrderedExcalidrawElement[] as RemoteExcalidrawElement[],
-        appState,
-      ),
-    );
 
-    const storedScene = await createStorageSceneDocument(
-      reconciledElements,
-      roomKey,
-    );
-
-    await setBackendDocument(roomId, storedScene);
-
-    // Return the stored elements as the in memory `reconciledElements` could have mutated in the meantime
-    return storedScene;
-  });
-
-  const storedElements = getSyncableElements(
-    restoreElements(await decryptElements(storedScene, roomKey), null),
-  );
+    // Restored rather than returned as-is: `merged` may mutate in the meantime.
+    storedElements = getSyncableElements(restoreElements(merged, null));
+  } catch (error) {
+    // Surfaced, not swallowed: the user believes the board is kept, and only
+    // they can do anything about it (save it to disk before leaving).
+    notifyArchive({ status: "failed", error });
+    throw error;
+  }
 
   StorageSceneVersionCache.set(socket, storedElements);
+  notifyArchive({ status: "saved", final: opts?.flushed });
 
   return storedElements;
 };
@@ -455,15 +684,32 @@ export const loadFromStorage = async (
   roomKey: string,
   socket: CollabSocket | null,
 ): Promise<readonly SyncableExcalidrawElement[] | null> => {
-  const storedScene = await getBackendDocument(roomId);
+  const result = await getBackendDocument(roomId);
 
-  if (!storedScene) {
+  // A failed read is reported: it is the difference between "this room has no
+  // board" and "we could not tell", and only the second one means the writer
+  // must not go on to overwrite it.
+  if (result.status === "error") {
+    notifyArchive({
+      status: "failed",
+      error: new Error("Could not load the archived whiteboard"),
+    });
+
+    return null;
+  }
+
+  if (result.status === "absent") {
     return null;
   }
 
   const elements = getSyncableElements(
-    restoreElements(await decryptElements(storedScene, roomKey), null),
+    restoreElements(result.scene.elements, null),
   );
+
+  // Content appearing on a board the user expected to be blank needs explaining.
+  if (elements.length > 0) {
+    notifyArchive({ status: "restored" });
+  }
 
   if (socket) {
     StorageSceneVersionCache.set(socket, elements);
