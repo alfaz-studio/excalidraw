@@ -5,9 +5,21 @@ set -e
 
 echo "Building Excalidraw for Jitsi Meet..."
 
-# Check if the package dist exists
-if [ ! -f "packages/excalidraw/dist/prod/index.js" ]; then
-    echo "Package dist not found. Building packages (esbuild only, skipping type generation)..."
+# Rebuild when the SOURCES have moved, not merely when a dist is absent.
+#
+# This used to skip on `[ -f dist/prod/index.js ]` alone, which meant any edit to
+# the fork was silently ignored on every machine that had already built once: the
+# script printed "build complete" and copied a stale bundle forward with a fresh
+# timestamp. A missing export then failed at runtime as an `undefined` the caller
+# guarded away, so nothing surfaced until someone traced it from the symptom.
+#
+# The stamp is the submodule's HEAD plus a digest of the tracked working tree, so
+# both a pin change and an uncommitted edit invalidate it.
+STAMP_FILE="packages/excalidraw/dist/prod/.source-stamp"
+SOURCE_STAMP="$(git rev-parse HEAD 2>/dev/null || echo nogit)-$(git status --porcelain 2>/dev/null | sha1sum | cut -c1-12)"
+
+if [ ! -f "packages/excalidraw/dist/prod/index.js" ] || [ "$(cat "$STAMP_FILE" 2>/dev/null)" != "$SOURCE_STAMP" ]; then
+    echo "Package dist missing or stale. Building packages (esbuild only, skipping type generation)..."
 
     # Build each package using esbuild directly (skip gen:types which has
     # upstream TS2717 duplicate-declaration errors we don't need to fix).
@@ -22,8 +34,12 @@ if [ ! -f "packages/excalidraw/dist/prod/index.js" ]; then
 
     echo "  Building @excalidraw/excalidraw..."
     (cd packages/excalidraw && rm -rf dist && node ../../scripts/buildPackage.js)
+
+    # Written only after every package succeeds, so an interrupted build is
+    # retried rather than remembered as current.
+    echo "$SOURCE_STAMP" > "$STAMP_FILE"
 else
-    echo "Using existing package build from packages/excalidraw/dist/prod/"
+    echo "Using existing package build from packages/excalidraw/dist/prod/ (sources unchanged)"
 fi
 
 # Create dist directory structure
