@@ -48,7 +48,6 @@ import type {
   Gesture,
   ExcalidrawCollabProps,
   ExcalidrawFileError,
-  StorageCapabilities,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -158,24 +157,20 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   getElementAuthorId = (): string =>
     this.props.elementAuthorId ?? this.clientId;
 
-  /**
-   * SONACOVE: which halves of the storage backend this surface may use. Without
-   * `storageBackendUrl` nothing is armed at all; with it, both halves default on
-   * so the whiteboard behaves exactly as before. Annotation surfaces pass
-   * `{ files: true, scene: false }` — see StorageCapabilities.
-   */
-  getStorageCapabilities = (): Required<StorageCapabilities> => {
-    const { storageBackendUrl, storageCapabilities } = this.props;
+  /** SONACOVE: see StorageCapabilities. Both halves default on once armed. */
+  get filesEnabled(): boolean {
+    return (
+      Boolean(this.props.storageBackendUrl) &&
+      (this.props.storageCapabilities?.files ?? true)
+    );
+  }
 
-    if (!storageBackendUrl) {
-      return { files: false, scene: false };
-    }
-
-    return {
-      files: storageCapabilities?.files ?? true,
-      scene: storageCapabilities?.scene ?? true,
-    };
-  };
+  get sceneEnabled(): boolean {
+    return (
+      Boolean(this.props.storageBackendUrl) &&
+      (this.props.storageCapabilities?.scene ?? true)
+    );
+  }
 
   constructor(props: ExcalidrawCollabProps) {
     super(props);
@@ -193,7 +188,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         // Not an abort: callers of `fetchImageFilesFromFirebase` don't catch,
         // so a surface with file storage off must resolve empty rather than
         // reject.
-        if (!this.getStorageCapabilities().files) {
+        if (!this.filesEnabled) {
           return { loadedFiles: [], erroredFiles: new Map() };
         }
 
@@ -210,7 +205,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
-        if (!roomId || !roomKey || !this.getStorageCapabilities().files) {
+        if (!roomId || !roomKey || !this.filesEnabled) {
           throw new AbortError();
         }
 
@@ -325,10 +320,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
   }
 
-  /**
-   * Forwarded to the storage module so file failures reach the host (and from
-   * there, telemetry) instead of dying in the console.
-   */
+  /** Late-bound so a prop swap after initializeBackend still reaches the host. */
   private onFileError = (error: ExcalidrawFileError) => {
     this.props.onFileError?.(error);
   };
@@ -356,9 +348,6 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.staleCollaboratorTimerId = null;
     }
     this.onUmmount?.();
-
-    // Drop this room's storage config so a later surface can't inherit it.
-    releaseBackend(this.portal.roomId);
 
     // Close the socket.io connection to prevent runaway reconnection loops
     // that can exhaust browser WebSocket resources and crash the meeting.
@@ -399,7 +388,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   ) => {
     // Scene persistence off: the reconcile below would re-apply a stored
     // snapshot over whatever the user is drawing right now.
-    if (!this.getStorageCapabilities().scene) {
+    if (!this.sceneEnabled) {
       return;
     }
 
@@ -473,6 +462,10 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   };
 
   private destroySocketClient = (opts?: { isUnload: boolean }) => {
+    // Every teardown path funnels through here, and `portal.close()` below nulls
+    // the roomId — so this is the only place the config is reliably released.
+    releaseBackend(this.portal.roomId);
+
     if (this.staleCollaboratorTimerId) {
       window.clearInterval(this.staleCollaboratorTimerId);
       this.staleCollaboratorTimerId = null;
@@ -756,7 +749,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               // continuously.
               if (
                 existingRoomLinkData &&
-                this.getStorageCapabilities().scene &&
+                this.sceneEnabled &&
                 remoteElements.length === 0
               ) {
                 this.mergePersistedScene(existingRoomLinkData);
@@ -904,12 +897,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         this.fallbackInitializationHandler,
       );
     }
-    if (
-      fetchScene &&
-      roomLinkData &&
-      this.portal.socket &&
-      this.getStorageCapabilities().scene
-    ) {
+    if (fetchScene && roomLinkData && this.portal.socket && this.sceneEnabled) {
       this.excalidrawAPI.resetScene();
 
       try {
@@ -1222,10 +1210,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
   queueSaveToFirebase = throttle(
     () => {
-      if (
-        this.portal.socketInitialized &&
-        this.getStorageCapabilities().scene
-      ) {
+      if (this.portal.socketInitialized) {
         this.saveCollabRoomToFirebase(
           getSyncableElements(
             this.excalidrawAPI.getSceneElementsIncludingDeleted(),

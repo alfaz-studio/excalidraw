@@ -49,7 +49,6 @@ import type {
   Collaborator,
   Gesture,
   IMeetingDetails,
-  StorageCapabilities,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -84,6 +83,7 @@ import {
   saveFilesToStorage,
   saveToStorage,
   initializeBackend,
+  releaseBackend,
 } from "../data/storage";
 import {
   importUsernameFromLocalStorage,
@@ -157,15 +157,16 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   getElementAuthorId = (): string => this.clientId;
 
   /**
-   * SONACOVE: mirrors the packaged Collab's capability split (see
-   * StorageCapabilities). The standalone app has no per-surface override, so
-   * both halves simply follow `storageBackendUrl`.
+   * SONACOVE: mirrors the packaged Collab's capability split. The standalone app
+   * has no per-surface override, so both halves follow `storageBackendUrl`.
    */
-  getStorageCapabilities = (): Required<StorageCapabilities> => {
-    const armed = Boolean(this.props.storageBackendUrl);
+  get filesEnabled(): boolean {
+    return Boolean(this.props.storageBackendUrl);
+  }
 
-    return { files: armed, scene: armed };
-  };
+  get sceneEnabled(): boolean {
+    return Boolean(this.props.storageBackendUrl);
+  }
 
   constructor(props: CollabProps) {
     super(props);
@@ -422,6 +423,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   };
 
   private destroySocketClient = (opts?: { isUnload: boolean }) => {
+    // `portal.close()` below nulls the roomId, so release before that.
+    releaseBackend(this.portal.roomId);
+
     if (this.staleCollaboratorTimerId) {
       window.clearInterval(this.staleCollaboratorTimerId);
       this.staleCollaboratorTimerId = null;

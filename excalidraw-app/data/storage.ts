@@ -40,9 +40,8 @@ import { getSyncableElements } from ".";
 import type { SyncableExcalidrawElement } from ".";
 import type Portal from "../collab/Portal";
 
-// No `http://localhost:3000` default here: a surface whose host never armed it
-// must stay silent (see `backendConfigs` below), not fall back to an origin that
-// only exists on a developer's machine.
+// No `http://localhost:3000` fallback: a surface whose host never armed storage
+// must stay silent rather than talk to a developer-only origin.
 const DEFAULT_BACKEND_BASE_URL = import.meta.env.VITE_APP_STORAGE_BACKEND_URL;
 const BACKEND_API_PREFIX =
   import.meta.env.VITE_APP_STORAGE_API_PREFIX || "/api/file-sharing";
@@ -57,24 +56,14 @@ type BackendConfig = {
 };
 
 /**
- * One config per collab room, NOT a module-global singleton.
- *
- * Several Excalidraw surfaces (the whiteboard, the transparent whiteboard, the
- * annotation overlay) can be mounted in the same tab. With a shared global, a
- * surface that deliberately withheld `storageBackendUrl`/`meetingDetails` still
- * inherited whichever config was installed last, and then issued downloads
- * under *its own* room prefix — `files/rooms/<annotationRoomId>/…` — which
- * nothing had ever uploaded to. The result was a permanent stream of 404s that
- * nobody had armed and nobody could see.
- *
- * Keying by the collab roomId that owns the config means an uninitialized
- * surface resolves to `null` and every file op no-ops instead.
+ * Keyed per collab room, not a module-global singleton: several surfaces mount
+ * in one tab, and a shared global let a surface that withheld its config inherit
+ * another's credentials and then fetch under its own room prefix — a path
+ * nothing had uploaded to, i.e. permanent 404s. An unarmed surface resolves to
+ * `null` here and every file op no-ops instead.
  */
 const backendConfigs = new Map<string, BackendConfig>();
 
-// Initialize backend configuration for a collab room with storageBackendUrl &
-// meetingDetails (token comes from meetingDetails). `onFileError` lets the host
-// surface upload/download failures that would otherwise only reach the console.
 export const initializeBackend = (
   roomId: string,
   storageBackendUrl?: string,
@@ -111,19 +100,18 @@ const _getBackendConfig = (roomId?: string | null): BackendConfig | null => {
   return backendConfigs.get(roomId) ?? null;
 };
 
-export const loadStorage = async (roomId?: string | null) => {
-  return _getBackendConfig(roomId);
-};
+const _errMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
 
-// Reporting must never break the failure path it is reporting on.
 const _reportFileError = (
   config: BackendConfig | null,
   error: ExcalidrawFileError,
 ) => {
+  console.error(`Excalidraw file ${error.op} failed`, error);
   try {
     config?.onFileError?.(error);
   } catch {
-    // ignore
+    // Reporting must never break the failure path it is reporting on.
   }
 };
 
@@ -184,14 +172,11 @@ const uploadFilesWithMulter = async (
 
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        console.error(
-          `Upload failed for file ${id}: ${response.status} ${response.statusText} ${text}`,
-        );
         _reportFileError(config, {
           op: "upload",
           fileId: id,
           status: response.status,
-          message: response.statusText,
+          message: `${response.statusText} ${text}`.trim(),
         });
         erroredFiles.push(id);
         continue;
@@ -199,7 +184,6 @@ const uploadFilesWithMulter = async (
 
       const result = await response.json().catch(() => null);
       if (!result) {
-        console.error(`Invalid response for file ${id}`);
         _reportFileError(config, {
           op: "upload",
           fileId: id,
@@ -212,11 +196,10 @@ const uploadFilesWithMulter = async (
 
       savedFiles.push(id);
     } catch (error) {
-      console.error(`Error uploading file ${id}:`, error);
       _reportFileError(config, {
         op: "upload",
         fileId: id,
-        message: error instanceof Error ? error.message : String(error),
+        message: _errMessage(error),
       });
       erroredFiles.push(id);
     }
@@ -250,12 +233,10 @@ const downloadFilesFromBackend = async (
   await Promise.all(
     [...new Set(fileIds)].map(async (id) => {
       try {
-        // Read the bytes straight off our own API rather than following a
-        // presigned URL to the object store. These files are ciphertext, so JS
-        // *must* read the response body — and a cross-origin body read needs an
-        // `Access-Control-Allow-Origin` header the bucket cannot send (its
-        // endpoint type refuses to hold a CORS policy at all). Same-origin, no
-        // CORS, no preflight.
+        // Read the bytes from our own API, not a presigned object-store URL.
+        // These files are ciphertext, so JS must read the response body — and the
+        // bucket's endpoint type cannot hold a CORS policy, so a cross-origin
+        // body read can never succeed.
         const encodedFileId = encodeURIComponent(`${prefix}/${id}`);
         const url = `${baseUrl}/sessions/${meetingDetails.sessionId}/files/${encodedFileId}/content`;
         const response = await fetch(url, {
@@ -271,9 +252,6 @@ const downloadFilesFromBackend = async (
           });
         } else {
           erroredFiles.push(id);
-          console.error(
-            `Failed to download file: ${id}, Status: ${response.status}`,
-          );
           _reportFileError(config, {
             op: "download",
             fileId: id,
@@ -283,11 +261,10 @@ const downloadFilesFromBackend = async (
         }
       } catch (error) {
         erroredFiles.push(id);
-        console.error(`Error downloading file ${id}:`, error);
         _reportFileError(config, {
           op: "download",
           fileId: id,
-          message: error instanceof Error ? error.message : String(error),
+          message: _errMessage(error),
         });
       }
     }),
@@ -418,11 +395,7 @@ export const saveFilesToStorage = async ({
     savedFiles.push(...(result.savedFiles || []));
     erroredFiles.push(...(result.erroredFiles || []));
   } catch (error) {
-    console.error("Error uploading files to backend:", error);
-    _reportFileError(config, {
-      op: "upload",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    _reportFileError(config, { op: "upload", message: _errMessage(error) });
     // Mark all files as errored if the API call fails
     files.forEach(({ id }) => erroredFiles.push(id));
   }
@@ -597,11 +570,10 @@ export const loadFilesFromStorage = async (
           });
         } catch (error) {
           erroredFiles.set(id as FileId, true);
-          console.error("Error processing file:", id, error);
           _reportFileError(config, {
             op: "decrypt",
             fileId: id,
-            message: error instanceof Error ? error.message : String(error),
+            message: _errMessage(error),
           });
         }
       }),
@@ -613,11 +585,7 @@ export const loadFilesFromStorage = async (
     });
   } catch (error) {
     // Marking all files as errored if the API call fails
-    console.error("Error loading files from backend:", error);
-    _reportFileError(config, {
-      op: "download",
-      message: error instanceof Error ? error.message : String(error),
-    });
+    _reportFileError(config, { op: "download", message: _errMessage(error) });
     filesIds.forEach((id) => erroredFiles.set(id, true));
   }
 
