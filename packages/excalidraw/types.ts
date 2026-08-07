@@ -273,6 +273,8 @@ export interface AppState {
     items: ContextMenuItems;
     top: number;
     left: number;
+    /** SONACOVE: the box it was opened from — see Popover's `anchor`. */
+    anchor?: { top: number; bottom: number };
   } | null;
   showWelcomeScreen: boolean;
   isLoading: boolean;
@@ -676,6 +678,27 @@ export interface ExcalidrawProps {
   // would unprotect everyone. Elements with no authorId predate the feature and
   // stay editable. See elementOwnership.ts.
   protectForeignElements?: boolean;
+
+  // SONACOVE: autoLockImages — lock an image as it is inserted, and point the
+  // lock out.
+  //
+  // On a shared board the eraser is the hazard: it filters out locked elements
+  // per pointer-move, so locking an inserted image leaves only the strokes
+  // drawn on top of it erasable. `locked` rides the collab broadcast like any
+  // element property, so the inserting client locking it is enough — peers
+  // receive it already locked.
+  //
+  // The bar is opened over the new image at the same time (`activeLockedId`),
+  // because an image that silently refuses to move is the confusing half of
+  // this: users found they could not drag it and had no way to discover why.
+  //
+  // Done here rather than by the host reacting to `onChange`: an insert lands
+  // as an unselected placeholder and is only swapped for the initialized
+  // element a tick later, so from outside there is no single moment that is
+  // "the image arrived", and an appState write issued from inside an `onChange`
+  // is discarded anyway — that callback runs during this component's own
+  // commit. In here both are one update.
+  autoLockImages?: boolean;
 }
 
 /**

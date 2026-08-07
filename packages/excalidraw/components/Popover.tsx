@@ -18,6 +18,17 @@ type Props = {
   viewportWidth?: number;
   viewportHeight?: number;
   className?: string;
+  /**
+   * SONACOVE: the box this popover belongs to, in the same coordinate space as
+   * `top`/`left`.
+   *
+   * Without it `fitInViewport` only knows a point, so a popover too tall to fit
+   * below it is bottom-aligned to the viewport — which lands it back over
+   * whatever opened it. Given the anchor's box it can place itself on the side
+   * with more room and cap its height to that room, so it stays attached to its
+   * trigger instead of jumping.
+   */
+  anchor?: { top: number; bottom: number };
 };
 
 export const Popover = ({
@@ -31,6 +42,7 @@ export const Popover = ({
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
   className,
+  anchor,
 }: Props) => {
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -117,7 +129,29 @@ export const Popover = ({
         container.style.left = `${left}px`;
       }
 
-      if (height >= viewportHeight) {
+      // SONACOVE: anchored placement, when the caller said what it opened from.
+      if (anchor) {
+        const MARGIN = 8;
+        const below = viewportHeight - anchor.bottom - MARGIN;
+        const above = anchor.top - MARGIN;
+        // Prefer below, as a dropdown should; go above only when that side
+        // genuinely has more room. Either way the height is capped to the room
+        // actually available, so it scrolls rather than escaping the canvas.
+        const useBelow = height <= below || below >= above;
+        const room = Math.max(useBelow ? below : above, 0);
+
+        container.style.top = useBelow
+          ? `${anchor.bottom + MARGIN}px`
+          : `${Math.max(
+              MARGIN,
+              anchor.top - Math.min(height, room) - MARGIN,
+            )}px`;
+
+        if (height > room) {
+          container.style.maxHeight = `${room}px`;
+          container.style.overflowY = "auto";
+        }
+      } else if (height >= viewportHeight) {
         container.style.height = `${viewportHeight - 20}px`;
         container.style.top = "10px";
         container.style.overflowY = "scroll";
@@ -128,6 +162,7 @@ export const Popover = ({
       }
     }
   }, [
+    anchor,
     top,
     left,
     fitInViewport,

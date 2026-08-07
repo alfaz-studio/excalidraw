@@ -1627,10 +1627,19 @@ const _renderInteractiveScene = ({
     const elements = element
       ? [element]
       : getElementsInGroup(allElementsMap, appState.activeLockedId);
-    renderElementsBoxHighlight(context, appState, elements, {
-      colors: ["#ced4da"],
-      dashed: true,
-    });
+
+    // SONACOVE: only while actually locked.
+    //
+    // This dashed box says "locked" — it is the outline you get on something
+    // you cannot select. `activeLockedId` now also points at the element the
+    // action bar is open over, which may be unlocked, and drawing it there put
+    // a second dashed outline on top of the normal selection highlight.
+    if (elements.some((el) => el.locked)) {
+      renderElementsBoxHighlight(context, appState, elements, {
+        colors: ["#ced4da"],
+        dashed: true,
+      });
+    }
   }
 
   const isFrameSelected = selectedElements.some((element) =>

@@ -2230,6 +2230,7 @@ class App extends React.Component<AppProps, AppState> {
                             items={this.state.contextMenu.items}
                             top={this.state.contextMenu.top}
                             left={this.state.contextMenu.left}
+                            anchor={this.state.contextMenu.anchor}
                             actionManager={this.actionManager}
                             onClose={(callback) => {
                               this.setState({ contextMenu: null }, () => {
@@ -10217,7 +10218,18 @@ class App extends React.Component<AppProps, AppState> {
           },
         );
 
-        this.store.scheduleCapture();
+        // SONACOVE: not for the bar-over-an-image case.
+        //
+        // `activeLockedId` is observed app state and delta.ts counts a change
+        // in it as a visible difference, so capturing here would put a history
+        // entry on a plain click. Upstream only reached this block when nothing
+        // hit was selected; the image exemption below makes it run on ordinary
+        // clicks too, and without this, drawing a stroke and then clicking an
+        // image meant the next undo dismissed the bar instead of undoing the
+        // stroke.
+        if (hitLockedElement?.locked) {
+          this.store.scheduleCapture();
+        }
 
         // SONACOVE: the bar shows for a locked element OR any image.
         //
@@ -11598,16 +11610,32 @@ class App extends React.Component<AppProps, AppState> {
     );
     const positionedMap = arrayToMap(positioned);
 
-    const nextElements = this.scene
-      .getElementsIncludingDeleted()
-      .map((el) => positionedMap.get(el.id) ?? initializedMap.get(el.id) ?? el);
+    // SONACOVE: see `autoLockImages` in types.ts. Locking and opening the bar
+    // ride the same update that inserts, so there is no window in which the
+    // image is present but unaccounted for.
+    const autoLock =
+      this.props.autoLockImages === true && positioned.length > 0;
+
+    const nextElements = this.scene.getElementsIncludingDeleted().map((el) => {
+      const next = positionedMap.get(el.id) ?? initializedMap.get(el.id) ?? el;
+
+      // `positionedMap` already IS the set of inserted ids.
+      return autoLock && positionedMap.has(el.id)
+        ? newElementWith(next, { locked: true })
+        : next;
+    });
 
     this.updateScene({
       appState: {
-        selectedElementIds: makeNextSelectedElementIds(
-          Object.fromEntries(positioned.map((el) => [el.id, true])),
-          this.state,
-        ),
+        // A locked element is never in the selection; the bar is what the user
+        // acts through instead.
+        selectedElementIds: autoLock
+          ? {}
+          : makeNextSelectedElementIds(
+              Object.fromEntries(positioned.map((el) => [el.id, true])),
+              this.state,
+            ),
+        activeLockedId: autoLock ? positioned[0].id : this.state.activeLockedId,
       },
       elements: nextElements,
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
@@ -11877,6 +11905,33 @@ class App extends React.Component<AppProps, AppState> {
     const left = clientX - offsetLeft;
     const top = clientY - offsetTop;
 
+    this.showContextMenu({ element, type, top, left });
+  };
+
+  /**
+   * Opens the context menu for an element, or for the canvas.
+   *
+   * SONACOVE: extracted from `handleCanvasContextMenu` so the menu can be
+   * opened from something other than a right-click — the element action bar's
+   * overflow button opens THIS menu rather than curating its own copy, so the
+   * two can never drift apart as actions are added.
+   *
+   * `top`/`left` are container-local, which is what the menu is positioned in.
+   */
+  public showContextMenu = ({
+    element,
+    type,
+    top,
+    left,
+    anchor,
+  }: {
+    element: NonDeletedExcalidrawElement | null;
+    type: "element" | "canvas";
+    top: number;
+    left: number;
+    /** The box it is opening from, so it can place itself around it. */
+    anchor?: { top: number; bottom: number };
+  }) => {
     trackEvent("contextMenu", "openContextMenu", type);
 
     this.setState(
@@ -11905,7 +11960,12 @@ class App extends React.Component<AppProps, AppState> {
       },
       () => {
         this.setState({
-          contextMenu: { top, left, items: this.getContextMenuItems(type) },
+          contextMenu: {
+            top,
+            left,
+            anchor,
+            items: this.getContextMenuItems(type),
+          },
         });
       },
     );

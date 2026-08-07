@@ -124,10 +124,19 @@ export const actionToggleElementLock = register({
     // the bar away at exactly the moment its other buttons become useful.
     // Dismissal is unchanged: clicking elsewhere or pressing Escape still
     // clears it (see the clear sites in App.tsx).
-    const activeLockedId = newGroupId
+    const activeLockedId = nextLockState
       ? newGroupId
-      : isAGroup
-      ? selectedElements[0].groupIds.at(-1)!
+        ? newGroupId
+        : isAGroup
+        ? selectedElements[0].groupIds.at(-1)!
+        : selectedElements[0].id
+      : // Unlocking a MULTI-element lock dissolves the temporary group — the id
+      // is stripped from every element and deleted from `lockedMultiSelections`
+      // just above — so keeping it would leave the bar anchored to a group that
+      // no longer exists, and nothing would render. Only a single element
+      // survives its own unlock.
+      isAGroup || newGroupId
+      ? null
       : selectedElements[0].id;
 
     return {

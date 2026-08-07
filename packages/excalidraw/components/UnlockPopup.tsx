@@ -1,6 +1,10 @@
+import { clamp } from "@excalidraw/math";
+
 import {
+  CaptureUpdateAction,
   getCommonBounds,
   getElementsInGroup,
+  newElementWith,
   selectGroupsFromGivenElements,
 } from "@excalidraw/element";
 import { sceneCoordsToViewportCoords } from "@excalidraw/common";
@@ -21,6 +25,7 @@ import { t } from "../i18n";
 import "./UnlockPopup.scss";
 
 import {
+  DotsHorizontalIcon,
   LayersArrowUpIcon,
   DuplicatePlusIcon,
   LockedIconFilled,
@@ -61,6 +66,14 @@ const UnlockPopup = ({
   activeLockedId: NonNullable<AppState["activeLockedId"]>;
 }) => {
   const barRef = useRef<HTMLDivElement>(null);
+
+  // Whether the menu was open when this button was pressed.
+  //
+  // Popover closes on a document `pointerdown`, which lands before the click —
+  // so pressing the button that opened it closes it, and the click that
+  // follows would open it straight back up. Read on the way down, acted on on
+  // the way up, which turns the pair into a toggle.
+  const menuWasOpenRef = useRef(false);
   const [barSize, setBarSize] = useState({ width: 0, height: 0 });
 
   // Measured rather than assumed: the bar's width depends on how many buttons
@@ -83,9 +96,13 @@ const UnlockPopup = ({
 
   const element = app.scene.getElement(activeLockedId);
 
-  const elements = element
-    ? [element]
-    : getElementsInGroup(app.scene.getNonDeletedElementsMap(), activeLockedId);
+  const elements =
+    element && !element.isDeleted
+      ? [element]
+      : getElementsInGroup(
+          app.scene.getNonDeletedElementsMap(),
+          activeLockedId,
+        );
 
   if (elements.length === 0) {
     return null;
@@ -117,17 +134,17 @@ const UnlockPopup = ({
   // so a viewport shorter than the element still lands the bar on-screen.
   // `max` is itself floored, so a viewport too small to hold the bar still
   // lands it at the margin rather than off the opposite edge.
-  const clamp = (value: number, max: number) =>
-    Math.min(Math.max(EDGE_MARGIN, value), Math.max(EDGE_MARGIN, max));
+  const clampToCanvas = (value: number, max: number) =>
+    clamp(value, EDGE_MARGIN, Math.max(EDGE_MARGIN, max));
 
-  const left = clamp(
+  const left = clampToCanvas(
     viewX - app.state.offsetLeft,
     app.state.width - barSize.width - EDGE_MARGIN,
   );
 
   const above = viewY - app.state.offsetTop - barSize.height - ELEMENT_GAP;
   const below = viewY2 - app.state.offsetTop + ELEMENT_GAP;
-  const top = clamp(
+  const top = clampToCanvas(
     above < EDGE_MARGIN ? below : above,
     app.state.height - barSize.height - EDGE_MARGIN,
   );
@@ -154,11 +171,63 @@ const UnlockPopup = ({
       });
     });
 
+    const before = new Set(
+      app.scene.getElementsIncludingDeleted().map((el) => el.id),
+    );
+
     app.actionManager.executeAction(action);
 
     // The lock toggle manages the selection itself, and delete leaves nothing
     // to deselect.
-    if (action === actionToggleElementLock || action === actionDeleteSelected) {
+    if (action === actionToggleElementLock) {
+      return;
+    }
+
+    // Nothing left to point at. Without this the bar hangs over the gap where
+    // the element was until the next click somewhere lands and clears it.
+    if (action === actionDeleteSelected) {
+      app.setState({ activeLockedId: null });
+
+      return;
+    }
+
+    // A duplicate arrives UNLOCKED, whatever the original was.
+    //
+    // Duplicating copies every property including `locked`, and the copy lands
+    // offset a few pixels from the original — so the next thing anyone does is
+    // drag it somewhere. Inheriting the lock made that a two-step every single
+    // time: unlock, then move. The lock exists to stop the eraser wiping a
+    // shared image, and a copy the user is actively placing is not yet that.
+    //
+    // The duplicates are what the action leaves selected, and the bar moves to
+    // the copy since that is the element now in play.
+    if (action === actionDuplicateSelection) {
+      // The copies are found by diffing the SCENE, not by reading
+      // `selectedElementIds` afterwards. `executeAction` ends in a `setState`
+      // that React batches to the end of this handler, so `app.state` still
+      // holds the ids set above — the originals — and unlocking those would
+      // unlock the wrong element and leave the locked copy selected. The scene
+      // is updated synchronously, so the difference is reliable.
+      const copies = app.scene
+        .getElementsIncludingDeleted()
+        .filter((el) => !before.has(el.id));
+
+      if (copies.length > 0) {
+        const copyIds = new Set(copies.map((el) => el.id));
+
+        app.updateScene({
+          elements: app.scene
+            .getElementsIncludingDeleted()
+            .map((el) =>
+              copyIds.has(el.id) ? newElementWith(el, { locked: false }) : el,
+            ),
+          appState: { activeLockedId: copies[0].id },
+          // Folded into the entry the duplicate itself captured — a second
+          // IMMEDIATELY made one duplicate cost two undos.
+          captureUpdate: CaptureUpdateAction.NEVER,
+        });
+      }
+
       return;
     }
 
@@ -174,7 +243,8 @@ const UnlockPopup = ({
     // ambient JSX.Element, which is not assignable to React's own ReactNode
     // under the types this package builds against.
     icon: typeof LockedIconFilled;
-    action: Action;
+    onClick: () => void;
+    onPointerDown?: () => void;
     /** Rendered as an engaged toggle rather than an idle button. */
     active?: boolean;
     danger?: boolean;
@@ -186,7 +256,7 @@ const UnlockPopup = ({
         ? t("labels.elementLock.unlock")
         : t("labels.elementLock.lock"),
       icon: locked ? LockedIconFilled : UnlockedIcon,
-      action: actionToggleElementLock,
+      onClick: () => run(actionToggleElementLock),
       // Locked is a STATE the element is being held in, not a thing that just
       // happened — so the button reads as pressed for as long as it holds,
       // rather than relying on the reader noticing which of two padlock glyphs
@@ -197,31 +267,62 @@ const UnlockPopup = ({
       key: "duplicate",
       label: t("labels.duplicateSelection"),
       icon: DuplicatePlusIcon,
-      action: actionDuplicateSelection,
+      onClick: () => run(actionDuplicateSelection),
     },
     {
       key: "front",
       label: t("labels.bringToFront"),
       icon: LayersArrowUpIcon,
-      action: actionBringToFront,
+      onClick: () => run(actionBringToFront),
     },
     {
       key: "back",
       label: t("labels.sendToBack"),
       icon: LayersArrowDownIcon,
-      action: actionSendToBack,
+      onClick: () => run(actionSendToBack),
     },
     {
       key: "delete",
       label: t("labels.delete"),
       icon: TrashIcon,
-      action: actionDeleteSelected,
+      onClick: () => run(actionDeleteSelected),
       // The only irreversible button here; it should not look like its
       // neighbours.
       danger: true,
       // Locking exists to stop the board's shared images being destroyed;
       // offering Delete a click away from that would undo the point of it.
       disabled: locked,
+    },
+    {
+      key: "more",
+      label: t("labels.more_options"),
+      icon: DotsHorizontalIcon,
+      // The editor's own context menu, not a curated copy of it — the same one
+      // a right-click gives. Anything added there appears here for free, and
+      // the two cannot drift. Anchored under the bar so it opens where the
+      // cursor already is rather than back over the element.
+      // The bar's own box goes with it, so the menu can sit below or above
+      // depending on which side has room, and cap its height to that room.
+      // Passing a bare point instead let `fitInViewport` bottom-align a menu
+      // too tall to fit — which landed it over the bar it opened from.
+      onPointerDown: () => {
+        menuWasOpenRef.current = Boolean(app.state.contextMenu);
+      },
+      onClick: () => {
+        if (menuWasOpenRef.current) {
+          menuWasOpenRef.current = false;
+
+          return;
+        }
+
+        app.showContextMenu({
+          element: elements[0],
+          type: "element",
+          top,
+          left,
+          anchor: { top, bottom: top + barSize.height },
+        });
+      },
     },
   ];
 
@@ -237,23 +338,35 @@ const UnlockPopup = ({
         visibility: barSize.width === 0 ? "hidden" : undefined,
       }}
     >
-      {buttons.map(({ key, label, icon, action, active, danger, disabled }) => (
-        <button
-          key={key}
-          type="button"
-          className={clsx("UnlockPopup__button", {
-            "UnlockPopup__button--active": active,
-            "UnlockPopup__button--danger": danger,
-          })}
-          aria-pressed={active}
-          title={label}
-          aria-label={label}
-          disabled={disabled}
-          onClick={() => run(action)}
-        >
-          {icon}
-        </button>
-      ))}
+      {buttons.map(
+        ({
+          key,
+          label,
+          icon,
+          onClick,
+          onPointerDown,
+          active,
+          danger,
+          disabled,
+        }) => (
+          <button
+            key={key}
+            type="button"
+            className={clsx("UnlockPopup__button", {
+              "UnlockPopup__button--active": active,
+              "UnlockPopup__button--danger": danger,
+            })}
+            aria-pressed={active}
+            title={label}
+            aria-label={label}
+            disabled={disabled}
+            onPointerDown={onPointerDown}
+            onClick={onClick}
+          >
+            {icon}
+          </button>
+        ),
+      )}
     </div>
   );
 };
