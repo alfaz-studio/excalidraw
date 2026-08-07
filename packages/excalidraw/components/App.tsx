@@ -10193,10 +10193,9 @@ class App extends React.Component<AppProps, AppState> {
         this.state.activeTool.type === "selection" &&
         !pointerDownState.boxSelection.hasOccurred &&
         !pointerDownState.resize.isResizing &&
-        // SONACOVE: images exempted. An unlocked image is selected on pointer-DOWN,
-        // so this block would never run for one and the bar could not reopen.
-        // Upstream's intent — don't hijack a multi-selection because the pointer
-        // crossed a locked element — still holds.
+        // SONACOVE: images exempted — an unlocked one is selected on
+        // pointer-DOWN, so this block would never run and the bar could not
+        // reopen. Upstream's multi-selection intent still holds.
         !hitElements.some(
           (el) => this.state.selectedElementIds[el.id] && !isImageElement(el),
         )
@@ -10215,10 +10214,8 @@ class App extends React.Component<AppProps, AppState> {
           this.store.scheduleCapture();
         }
 
-        // SONACOVE: the bar shows for a locked element OR any image — it outlives
-        // unlocking, so gating on `locked` made its other actions reachable only
-        // while the element happened to be locked. Not every element type: those
-        // already have the properties panel.
+        // SONACOVE: locked element OR any image — the bar outlives unlocking.
+        // Not every type: those already have the properties panel.
         if (
           hitLockedElement &&
           (hitLockedElement.locked || isImageElement(hitLockedElement))
@@ -11884,12 +11881,9 @@ class App extends React.Component<AppProps, AppState> {
   /**
    * Opens the context menu for an element, or for the canvas.
    *
-   * SONACOVE: extracted from `handleCanvasContextMenu` so the menu can be
-   * opened from something other than a right-click — the element action bar's
-   * overflow button opens THIS menu rather than curating its own copy, so the
-   * two can never drift apart as actions are added.
-   *
-   * `top`/`left` are container-local, which is what the menu is positioned in.
+   * SONACOVE: extracted from `handleCanvasContextMenu` so the action bar's
+   * overflow button can open THIS menu rather than a copy that would drift.
+   * `top`/`left` are container-local.
    */
   public showContextMenu = ({
     element,

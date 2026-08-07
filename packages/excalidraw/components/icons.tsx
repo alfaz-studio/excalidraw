@@ -786,18 +786,10 @@ export const SendBackwardIcon = createIcon(arrownNarrowUpJSX, {
   },
 });
 
-// SONACOVE: layer-stack variants for the element action bar.
-//
-// The arrow-bar icons above read as "move up/down" — fine in the properties
-// panel where they sit in a labelled row of four, but ambiguous on a bare
-// toolbar floating over the canvas, where "up" could as easily mean nudge the
-// element. These show a STACK with a direction, so they say layer order on
-// their own.
-//
-// Paths are lucide's `layers-arrow-up` / `layers-arrow-down`, transcribed from
-// the upstream sources rather than the installed package: they were added after
-// lucide 0.555.0, which is the version vendored in the meet app. Same 24px
-// stroke geometry this file already uses, so they need no adjustment.
+// SONACOVE: layer-stack variants for the element action bar — the arrow-bar
+// icons above read as "move up/down" on a bare floating toolbar. Paths are
+// lucide's `layers-arrow-up` / `layers-arrow-down`, taken from upstream since
+// they postdate the vendored lucide.
 const layersArrowUpJSX = (
   <g strokeWidth={2}>
     <path d="M12 12V2" />
@@ -824,10 +816,8 @@ export const LayersArrowDownIcon = createIcon(
   tablerIconProps,
 );
 
-// SONACOVE: a copy icon with a plus, rather than the two bare overlapping
-// squares of `DuplicateIcon` — those read as "copy to clipboard", which is a
-// different action and one this bar does not offer. Path is lucide's
-// `copy-plus`.
+// SONACOVE: lucide's `copy-plus`. `DuplicateIcon`'s two bare squares read as
+// "copy to clipboard", which is a different action.
 const duplicatePlusJSX = (
   <g strokeWidth={2}>
     <line x1="15" x2="15" y1="12" y2="18" />

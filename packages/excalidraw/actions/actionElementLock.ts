@@ -116,17 +116,10 @@ export const actionToggleElementLock = register({
       ? {}
       : selectGroupsFromGivenElements(unlockedSelectedElements, appState);
 
-    // SONACOVE: `activeLockedId` now means "the element the action bar points
-    // at", not "the locked element", so it survives unlocking — the bar carries
-    // duplicate/layer/delete, and dropping it the instant you unlock takes it
-    // away exactly when those become useful. Dismissal is unchanged (see the
-    // clear sites in App.tsx).
-    //
-    // The exception is unlocking a MULTI-element lock: that dissolves the
-    // temporary group just above — its id is stripped from every element and
-    // deleted from `lockedMultiSelections` — so keeping it would anchor the bar
-    // to a group that no longer exists and nothing would render. Only a single
-    // element survives its own unlock.
+    // SONACOVE: `activeLockedId` means "the element the action bar points at",
+    // so it survives unlocking — the bar's other actions become useful exactly
+    // then. The exception is a MULTI-element unlock, which dissolves the
+    // temporary group just above and would leave the bar anchored to nothing.
     let activeLockedId: string | null = null;
 
     if (newGroupId) {

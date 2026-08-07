@@ -47,15 +47,10 @@ const EDGE_MARGIN = 8;
 /**
  * The floating bar for the element the user is focused on.
  *
- * SONACOVE: upstream this was unlock-only — shown over a locked element and
- * gone the moment you unlocked it. Images on a shared board are auto-locked
- * so the eraser cannot wipe them, which made "why can't I move this?" the
- * common confusion, and the answer once unlocked was a properties panel on
- * the far side of the screen. It now carries the actions people reach for,
- * next to the element, and outlives the unlock (see `actionElementLock`).
- *
- * Delete is disabled while locked — a UI guard only; neither delete nor
- * duplicate inspects `locked`.
+ * SONACOVE: upstream this was unlock-only and vanished the moment you
+ * unlocked. It now carries the actions people reach for, next to the element,
+ * and outlives the unlock (see `actionElementLock`). Delete is disabled while
+ * locked — a UI guard only; the actions do not inspect `locked`.
  */
 const UnlockPopup = ({
   app,
@@ -66,15 +61,13 @@ const UnlockPopup = ({
 }) => {
   const barRef = useRef<HTMLDivElement>(null);
 
-  // Popover closes on a document `pointerdown`, which lands before the click,
-  // so the button that opened it would close and immediately reopen it. Read
-  // on the way down, acted on on the way up — that makes it a toggle.
+  // Popover closes on a document `pointerdown`, before the click — so the
+  // trigger has to read that state on the way down to act as a toggle.
   const menuWasOpenRef = useRef(false);
 
   const [barSize, setBarSize] = useState({ width: 0, height: 0 });
 
-  // Measured once, before paint: clamping needs the real width, and the button
-  // set is fixed so it cannot change while this stays mounted.
+  // Measured once, before paint — clamping needs the real width.
   useLayoutEffect(() => {
     const node = barRef.current;
 
@@ -113,10 +106,8 @@ const UnlockPopup = ({
   );
 
   // SONACOVE: clamped to the canvas, flipping below the element when there is
-  // no room above. Anchored to the element's top-left, an element against an
-  // edge took the bar off-canvas with it — and the clipped part was the lock
-  // button, leaving no way to unlock and so no way to move it back.
-  // lands it at the margin rather than off the opposite edge.
+  // no room above — anchored to the top-left alone, an element against an edge
+  // took the bar off-canvas with it, clipping away the lock button itself.
   const clampToCanvas = (value: number, max: number) =>
     clamp(value, EDGE_MARGIN, Math.max(EDGE_MARGIN, max));
 
@@ -137,7 +128,6 @@ const UnlockPopup = ({
    *
    * A locked element is never in the selection by any normal route, so it is
    * put there, the action runs, and anything still locked is deselected again.
-   * `flushSync` so the action reads this selection, not the last render's.
    */
   const run = (action: Action) => {
     flushSync(() => {
@@ -155,28 +145,24 @@ const UnlockPopup = ({
 
     app.actionManager.executeAction(action);
 
-    // The lock toggle manages the selection itself, and delete leaves nothing
-    // to deselect.
+    // The lock toggle manages the selection itself.
     if (action === actionToggleElementLock) {
       return;
     }
 
-    // Nothing left to point at. Without this the bar hangs over the gap where
-    // the element was until the next click somewhere lands and clears it.
+    // Nothing left to point at, or the bar hangs over the gap.
     if (action === actionDeleteSelected) {
       app.setState({ activeLockedId: null });
 
       return;
     }
 
-    // A duplicate arrives UNLOCKED whatever the original was: the copy lands
-    // offset and the next thing anyone does is drag it, so inheriting the lock
-    // made that a two-step every time.
+    // A duplicate arrives UNLOCKED: the copy lands offset and the next thing
+    // anyone does is drag it, so inheriting the lock made that a two-step.
     if (action === actionDuplicateSelection) {
-      // Found by diffing the SCENE, not by reading `selectedElementIds`:
-      // `executeAction` ends in a setState React batches to the end of this
-      // handler, so that still holds the ids set above — the ORIGINALS — and
-      // unlocking those inverts the whole thing. The scene is synchronous.
+      // Diffed off the SCENE: `executeAction` ends in a setState React batches
+      // to the end of this handler, so `selectedElementIds` still holds the ids
+      // set above — the ORIGINALS. The scene is synchronous.
       const copies = app.scene
         .getElementsIncludingDeleted()
         .filter((el) => !before.has(el.id));
@@ -191,8 +177,7 @@ const UnlockPopup = ({
               copyIds.has(el.id) ? newElementWith(el, { locked: false }) : el,
             ),
           appState: { activeLockedId: copies[0].id },
-          // Folded into the entry the duplicate itself captured — a second
-          // IMMEDIATELY made one duplicate cost two undos.
+          // Folded into the duplicate's own entry, or it costs two undos.
           captureUpdate: CaptureUpdateAction.NEVER,
         });
       }
@@ -208,9 +193,7 @@ const UnlockPopup = ({
   const buttons: {
     key: string;
     label: string;
-    // Inferred from an icon rather than annotated: `createIcon` returns the
-    // ambient JSX.Element, which is not assignable to React's own ReactNode
-    // under the types this package builds against.
+    // `createIcon` returns the ambient JSX.Element, not React's ReactNode.
     icon: typeof LockedIconFilled;
     onClick: () => void;
     onPointerDown?: () => void;
@@ -226,10 +209,8 @@ const UnlockPopup = ({
         : t("labels.elementLock.lock"),
       icon: locked ? LockedIconFilled : UnlockedIcon,
       onClick: () => run(actionToggleElementLock),
-      // Locked is a STATE the element is being held in, not a thing that just
-      // happened — so the button reads as pressed for as long as it holds,
-      // rather than relying on the reader noticing which of two padlock glyphs
-      // is showing.
+      // Locked is a state the element is held in, so the button stays pressed
+      // rather than relying on which padlock glyph is showing.
       active: locked,
     },
     {
@@ -255,21 +236,18 @@ const UnlockPopup = ({
       label: t("labels.delete"),
       icon: TrashIcon,
       onClick: () => run(actionDeleteSelected),
-      // The only irreversible button here; it should not look like its
-      // neighbours.
+      // The only irreversible button here.
       danger: true,
-      // Locking exists to stop the board's shared images being destroyed;
-      // offering Delete a click away from that would undo the point of it.
+      // Locking exists to stop shared images being destroyed; offering Delete
+      // a click away would undo the point of it.
       disabled: locked,
     },
     {
       key: "more",
       label: t("labels.more_options"),
       icon: DotsHorizontalIcon,
-      // The editor's own context menu, not a curated copy — so the two cannot
-      // drift as actions are added. Its box goes along, letting the menu sit
-      // below or above depending on room; a bare point let `fitInViewport`
-      // bottom-align a tall menu over the bar that opened it.
+      // The editor's own context menu, not a curated copy that would drift.
+      // Its box goes along so the menu can sit below or above by room.
       onPointerDown: () => {
         menuWasOpenRef.current = Boolean(app.state.contextMenu);
       },
@@ -298,8 +276,7 @@ const UnlockPopup = ({
       style={{
         top: `${top}px`,
         left: `${left}px`,
-        // Nothing to clamp against until the first measure; showing it at the
-        // raw anchor for one frame is the flicker this avoids.
+        // Nothing to clamp against until the first measure.
         visibility: barSize.width === 0 ? "hidden" : undefined,
       }}
     >

@@ -19,14 +19,11 @@ type Props = {
   viewportHeight?: number;
   className?: string;
   /**
-   * SONACOVE: the box this popover belongs to, in the same coordinate space as
-   * `top`/`left`.
+   * SONACOVE: the box this popover opened from, in `top`/`left`'s space.
    *
-   * Without it `fitInViewport` only knows a point, so a popover too tall to fit
-   * below it is bottom-aligned to the viewport — which lands it back over
-   * whatever opened it. Given the anchor's box it can place itself on the side
-   * with more room and cap its height to that room, so it stays attached to its
-   * trigger instead of jumping.
+   * Given only a point, `fitInViewport` bottom-aligns a popover too tall to fit
+   * — landing it over its own trigger. With the box it picks the side with room
+   * and caps its height to that room.
    */
   anchor?: { top: number; bottom: number };
 };
