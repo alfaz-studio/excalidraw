@@ -10,7 +10,6 @@ import {
 import { sceneCoordsToViewportCoords } from "@excalidraw/common";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import clsx from "clsx";
 import { flushSync } from "react-dom";
 
 import {
@@ -21,6 +20,8 @@ import {
   actionToggleElementLock,
 } from "../actions";
 import { t } from "../i18n";
+
+import { ToolButton } from "./ToolButton";
 
 import "./UnlockPopup.scss";
 
@@ -46,17 +47,15 @@ const EDGE_MARGIN = 8;
 /**
  * The floating bar for the element the user is focused on.
  *
- * SONACOVE: upstream this was an unlock-only affordance, shown over a locked
- * element and gone the moment you unlocked it. Images on a shared board are
- * auto-locked so the eraser can't wipe them, which made "why can't I move
- * this?" the single most common confusion — and the answer, once unlocked, was
- * a properties panel on the far side of the screen. So it now carries the
- * actions people actually reach for, next to the element, and it outlives the
- * unlock (see `actionElementLock`).
+ * SONACOVE: upstream this was unlock-only — shown over a locked element and
+ * gone the moment you unlocked it. Images on a shared board are auto-locked
+ * so the eraser cannot wipe them, which made "why can't I move this?" the
+ * common confusion, and the answer once unlocked was a properties panel on
+ * the far side of the screen. It now carries the actions people reach for,
+ * next to the element, and outlives the unlock (see `actionElementLock`).
  *
- * Delete is disabled while the element is locked. That is a UI guard only —
- * neither `actionDeleteSelected` nor `actionDuplicateSelection` inspects
- * `locked`, so nothing in the engine enforces it.
+ * Delete is disabled while locked — a UI guard only; neither delete nor
+ * duplicate inspects `locked`.
  */
 const UnlockPopup = ({
   app,
@@ -67,22 +66,15 @@ const UnlockPopup = ({
 }) => {
   const barRef = useRef<HTMLDivElement>(null);
 
-  // Whether the menu was open when this button was pressed.
-  //
-  // Popover closes on a document `pointerdown`, which lands before the click —
-  // so pressing the button that opened it closes it, and the click that
-  // follows would open it straight back up. Read on the way down, acted on on
-  // the way up, which turns the pair into a toggle.
+  // Popover closes on a document `pointerdown`, which lands before the click,
+  // so the button that opened it would close and immediately reopen it. Read
+  // on the way down, acted on on the way up — that makes it a toggle.
   const menuWasOpenRef = useRef(false);
+
   const [barSize, setBarSize] = useState({ width: 0, height: 0 });
 
-  // Measured rather than assumed: the bar's width depends on how many buttons
-  // it renders, and clamping it inside the canvas needs its real size. A layout
-  // effect runs before paint, so the corrected position is the first one drawn.
-  //
-  // Measured once — the button set is fixed, so the size cannot change while
-  // this stays mounted, and re-measuring every render would mean a setState on
-  // every scroll and zoom frame.
+  // Measured once, before paint: clamping needs the real width, and the button
+  // set is fixed so it cannot change while this stays mounted.
   useLayoutEffect(() => {
     const node = barRef.current;
 
@@ -120,19 +112,10 @@ const UnlockPopup = ({
     app.state,
   );
 
-  // SONACOVE: clamped to the canvas, and flipped below the element when there
-  // is no room above.
-  //
-  // The bar is anchored to the element's top-left corner, so an element pushed
-  // against an edge took the bar off-canvas with it — drop an image half off
-  // the left of the board and the lock button itself was the part clipped away,
-  // leaving no way to unlock and therefore no way to move it back. Position is
-  // resolved in viewport coordinates so both axes can be bounded.
-  //
-  // `left` is the element's, pulled back inside the canvas. `top` prefers above
-  // the element, falls to below when that would clip, and is bounded either way
-  // so a viewport shorter than the element still lands the bar on-screen.
-  // `max` is itself floored, so a viewport too small to hold the bar still
+  // SONACOVE: clamped to the canvas, flipping below the element when there is
+  // no room above. Anchored to the element's top-left, an element against an
+  // edge took the bar off-canvas with it — and the clipped part was the lock
+  // button, leaving no way to unlock and so no way to move it back.
   // lands it at the margin rather than off the opposite edge.
   const clampToCanvas = (value: number, max: number) =>
     clamp(value, EDGE_MARGIN, Math.max(EDGE_MARGIN, max));
@@ -152,14 +135,9 @@ const UnlockPopup = ({
   /**
    * Runs an action against these elements.
    *
-   * Everything here is selection-driven, and a locked element is never in the
-   * selection by any normal route — so it is put there, the action runs, and
-   * for anything still locked afterwards the selection is dropped again. Left
-   * in place it would be a locked element sitting selected, which the editor
-   * otherwise never produces and which the next click would have to unpick.
-   *
-   * `flushSync` so the action reads the selection this sets rather than the
-   * one from the previous render.
+   * A locked element is never in the selection by any normal route, so it is
+   * put there, the action runs, and anything still locked is deselected again.
+   * `flushSync` so the action reads this selection, not the last render's.
    */
   const run = (action: Action) => {
     flushSync(() => {
@@ -191,23 +169,14 @@ const UnlockPopup = ({
       return;
     }
 
-    // A duplicate arrives UNLOCKED, whatever the original was.
-    //
-    // Duplicating copies every property including `locked`, and the copy lands
-    // offset a few pixels from the original — so the next thing anyone does is
-    // drag it somewhere. Inheriting the lock made that a two-step every single
-    // time: unlock, then move. The lock exists to stop the eraser wiping a
-    // shared image, and a copy the user is actively placing is not yet that.
-    //
-    // The duplicates are what the action leaves selected, and the bar moves to
-    // the copy since that is the element now in play.
+    // A duplicate arrives UNLOCKED whatever the original was: the copy lands
+    // offset and the next thing anyone does is drag it, so inheriting the lock
+    // made that a two-step every time.
     if (action === actionDuplicateSelection) {
-      // The copies are found by diffing the SCENE, not by reading
-      // `selectedElementIds` afterwards. `executeAction` ends in a `setState`
-      // that React batches to the end of this handler, so `app.state` still
-      // holds the ids set above — the originals — and unlocking those would
-      // unlock the wrong element and leave the locked copy selected. The scene
-      // is updated synchronously, so the difference is reliable.
+      // Found by diffing the SCENE, not by reading `selectedElementIds`:
+      // `executeAction` ends in a setState React batches to the end of this
+      // handler, so that still holds the ids set above — the ORIGINALS — and
+      // unlocking those inverts the whole thing. The scene is synchronous.
       const copies = app.scene
         .getElementsIncludingDeleted()
         .filter((el) => !before.has(el.id));
@@ -297,14 +266,10 @@ const UnlockPopup = ({
       key: "more",
       label: t("labels.more_options"),
       icon: DotsHorizontalIcon,
-      // The editor's own context menu, not a curated copy of it — the same one
-      // a right-click gives. Anything added there appears here for free, and
-      // the two cannot drift. Anchored under the bar so it opens where the
-      // cursor already is rather than back over the element.
-      // The bar's own box goes with it, so the menu can sit below or above
-      // depending on which side has room, and cap its height to that room.
-      // Passing a bare point instead let `fitInViewport` bottom-align a menu
-      // too tall to fit — which landed it over the bar it opened from.
+      // The editor's own context menu, not a curated copy — so the two cannot
+      // drift as actions are added. Its box goes along, letting the menu sit
+      // below or above depending on room; a bare point let `fitInViewport`
+      // bottom-align a tall menu over the bar that opened it.
       onPointerDown: () => {
         menuWasOpenRef.current = Boolean(app.state.contextMenu);
       },
@@ -349,22 +314,18 @@ const UnlockPopup = ({
           danger,
           disabled,
         }) => (
-          <button
+          <ToolButton
             key={key}
-            type="button"
-            className={clsx("UnlockPopup__button", {
-              "UnlockPopup__button--active": active,
-              "UnlockPopup__button--danger": danger,
-            })}
-            aria-pressed={active}
+            type="icon"
+            icon={icon}
             title={label}
             aria-label={label}
+            selected={active}
             disabled={disabled}
+            className={danger ? "UnlockPopup__danger" : undefined}
             onPointerDown={onPointerDown}
             onClick={onClick}
-          >
-            {icon}
-          </button>
+          />
         ),
       )}
     </div>

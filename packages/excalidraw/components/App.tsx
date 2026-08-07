@@ -10193,19 +10193,10 @@ class App extends React.Component<AppProps, AppState> {
         this.state.activeTool.type === "selection" &&
         !pointerDownState.boxSelection.hasOccurred &&
         !pointerDownState.resize.isResizing &&
-        // SONACOVE: `&& !isImageElement(el)`.
-        //
-        // Upstream skips this block when the pointer is over something already
-        // selected, which was safe while the bar only ever showed for locked
-        // elements — those are never in the selection. An UNLOCKED image is
-        // selected on pointer-DOWN, so by the time this runs it is always in
-        // `selectedElementIds`, the block never executes, and the `else` below
-        // clears the bar. That is why the bar came back only while the image
-        // happened to be locked.
-        //
-        // Exempting images keeps upstream's intent — don't hijack a
-        // multi-selection just because the pointer crossed a locked element —
-        // while letting the one type this bar exists for reach it.
+        // SONACOVE: images exempted. An unlocked image is selected on pointer-DOWN,
+        // so this block would never run for one and the bar could not reopen.
+        // Upstream's intent — don't hijack a multi-selection because the pointer
+        // crossed a locked element — still holds.
         !hitElements.some(
           (el) => this.state.selectedElementIds[el.id] && !isImageElement(el),
         )
@@ -10218,33 +10209,16 @@ class App extends React.Component<AppProps, AppState> {
           },
         );
 
-        // SONACOVE: not for the bar-over-an-image case.
-        //
-        // `activeLockedId` is observed app state and delta.ts counts a change
-        // in it as a visible difference, so capturing here would put a history
-        // entry on a plain click. Upstream only reached this block when nothing
-        // hit was selected; the image exemption below makes it run on ordinary
-        // clicks too, and without this, drawing a stroke and then clicking an
-        // image meant the next undo dismissed the bar instead of undoing the
-        // stroke.
+        // SONACOVE: locked case only. `activeLockedId` is observed app state, so
+        // capturing on the image path below would cost an undo step per click.
         if (hitLockedElement?.locked) {
           this.store.scheduleCapture();
         }
 
-        // SONACOVE: the bar shows for a locked element OR any image.
-        //
-        // Upstream this was `locked` only, because the bar was an unlock
-        // affordance and an unlocked element has nothing to unlock. It now
-        // carries duplicate, layer order and delete, and it outlives unlocking
-        // (see actionElementLock) — so gating on `locked` meant that once you
-        // unlocked an image and clicked away, clicking it again brought back
-        // nothing, and the actions were reachable only while it happened to be
-        // locked. Images are the case this bar exists for (they are auto-locked
-        // on insert), so they get it in both states.
-        //
-        // Deliberately NOT every element type: a bar over every rectangle you
-        // click would be an editor-wide change, and those already have the
-        // properties panel. A click on empty canvas still clears.
+        // SONACOVE: the bar shows for a locked element OR any image — it outlives
+        // unlocking, so gating on `locked` made its other actions reachable only
+        // while the element happened to be locked. Not every element type: those
+        // already have the properties panel.
         if (
           hitLockedElement &&
           (hitLockedElement.locked || isImageElement(hitLockedElement))
@@ -11610,9 +11584,8 @@ class App extends React.Component<AppProps, AppState> {
     );
     const positionedMap = arrayToMap(positioned);
 
-    // SONACOVE: see `autoLockImages` in types.ts. Locking and opening the bar
-    // ride the same update that inserts, so there is no window in which the
-    // image is present but unaccounted for.
+    // SONACOVE: see `autoLockImages` in types.ts. Every inserted image is
+    // locked; the bar anchors to the first, since it points at one element.
     const autoLock =
       this.props.autoLockImages === true && positioned.length > 0;
 

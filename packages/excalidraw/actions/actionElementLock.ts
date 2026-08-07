@@ -116,28 +116,28 @@ export const actionToggleElementLock = register({
       ? {}
       : selectGroupsFromGivenElements(unlockedSelectedElements, appState);
 
-    // SONACOVE: kept when UNLOCKING too, where upstream nulls it.
+    // SONACOVE: `activeLockedId` now means "the element the action bar points
+    // at", not "the locked element", so it survives unlocking — the bar carries
+    // duplicate/layer/delete, and dropping it the instant you unlock takes it
+    // away exactly when those become useful. Dismissal is unchanged (see the
+    // clear sites in App.tsx).
     //
-    // `activeLockedId` now means "the element the action bar is pointing at",
-    // not "the locked element" — the bar carries duplicate/layer/delete
-    // alongside the lock toggle, and dropping it the instant you unlock takes
-    // the bar away at exactly the moment its other buttons become useful.
-    // Dismissal is unchanged: clicking elsewhere or pressing Escape still
-    // clears it (see the clear sites in App.tsx).
-    const activeLockedId = nextLockState
-      ? newGroupId
-        ? newGroupId
-        : isAGroup
+    // The exception is unlocking a MULTI-element lock: that dissolves the
+    // temporary group just above — its id is stripped from every element and
+    // deleted from `lockedMultiSelections` — so keeping it would anchor the bar
+    // to a group that no longer exists and nothing would render. Only a single
+    // element survives its own unlock.
+    let activeLockedId: string | null = null;
+
+    if (newGroupId) {
+      activeLockedId = nextLockState ? newGroupId : null;
+    } else if (isAGroup) {
+      activeLockedId = nextLockState
         ? selectedElements[0].groupIds.at(-1)!
-        : selectedElements[0].id
-      : // Unlocking a MULTI-element lock dissolves the temporary group — the id
-      // is stripped from every element and deleted from `lockedMultiSelections`
-      // just above — so keeping it would leave the bar anchored to a group that
-      // no longer exists, and nothing would render. Only a single element
-      // survives its own unlock.
-      isAGroup || newGroupId
-      ? null
-      : selectedElements[0].id;
+        : null;
+    } else {
+      activeLockedId = selectedElements[0].id;
+    }
 
     return {
       elements: nextElements,

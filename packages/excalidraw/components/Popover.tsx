@@ -129,14 +129,13 @@ export const Popover = ({
         container.style.left = `${left}px`;
       }
 
-      // SONACOVE: anchored placement, when the caller said what it opened from.
+      // SONACOVE: anchored placement.
       if (anchor) {
         const MARGIN = 8;
         const below = viewportHeight - anchor.bottom - MARGIN;
         const above = anchor.top - MARGIN;
-        // Prefer below, as a dropdown should; go above only when that side
-        // genuinely has more room. Either way the height is capped to the room
-        // actually available, so it scrolls rather than escaping the canvas.
+        // Below by default, above only when that side has more room; capped
+        // either way so it scrolls rather than escaping the canvas.
         const useBelow = height <= below || below >= above;
         const room = Math.max(useBelow ? below : above, 0);
 
