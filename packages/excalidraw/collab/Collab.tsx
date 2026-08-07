@@ -48,6 +48,7 @@ import type {
   Gesture,
   ExcalidrawCollabProps,
   ExcalidrawFileError,
+  IMeetingDetails,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -82,6 +83,7 @@ import {
   saveToStorage,
   initializeBackend,
   releaseBackend,
+  expectBackend,
 } from "../../../excalidraw-app/data/storage";
 import {
   importUsernameFromLocalStorage,
@@ -306,19 +308,50 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Re-initialize storage backend when the token changes (initial fetch or refresh)
     const { storageBackendUrl, meetingDetails } = this.props;
     if (
-      this.portal.roomId &&
       storageBackendUrl &&
       meetingDetails?.token &&
       meetingDetails.token !== prevProps.meetingDetails?.token
     ) {
-      initializeBackend(
-        this.portal.roomId,
-        storageBackendUrl,
-        meetingDetails,
-        this.onFileError,
-      );
+      this.armBackend(storageBackendUrl, meetingDetails);
     }
   }
+
+  /**
+   * `portal.roomId` is only set once `portal.open()` runs, two awaits into
+   * startCollaboration. A token arriving inside that window has no room to arm,
+   * so it is stashed and flushed the moment the room exists — otherwise neither
+   * path initialises the backend and every file op silently no-ops.
+   */
+  private pendingBackendConfig: {
+    storageBackendUrl: string;
+    meetingDetails: IMeetingDetails;
+  } | null = null;
+
+  private armBackend = (
+    storageBackendUrl: string,
+    meetingDetails: IMeetingDetails,
+  ) => {
+    if (!this.portal.roomId) {
+      this.pendingBackendConfig = { storageBackendUrl, meetingDetails };
+      return;
+    }
+
+    this.pendingBackendConfig = null;
+    initializeBackend(
+      this.portal.roomId,
+      storageBackendUrl,
+      meetingDetails,
+      this.onFileError,
+    );
+  };
+
+  private flushPendingBackendConfig = () => {
+    const pending = this.pendingBackendConfig;
+
+    if (pending) {
+      this.armBackend(pending.storageBackendUrl, pending.meetingDetails);
+    }
+  };
 
   /** Late-bound so a prop swap after initializeBackend still reaches the host. */
   private onFileError = (error: ExcalidrawFileError) => {
@@ -465,6 +498,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Every teardown path funnels through here, and `portal.close()` below nulls
     // the roomId — so this is the only place the config is reliably released.
     releaseBackend(this.portal.roomId);
+    this.pendingBackendConfig = null;
 
     if (this.staleCollaboratorTimerId) {
       window.clearInterval(this.staleCollaboratorTimerId);
@@ -575,6 +609,13 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     // Initialize storage backend if storageBackendUrl & jwt are provided
     const { storageBackendUrl, meetingDetails } = this.props;
+
+    // Marks the room as one that is *meant* to have storage, so a later file op
+    // that finds no config can tell "never armed on purpose" from a real gap.
+    if (storageBackendUrl) {
+      expectBackend(roomId, this.onFileError);
+    }
+
     if (
       storageBackendUrl &&
       meetingDetails?.sessionId &&
@@ -668,6 +709,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
             }
           : { clientId: this.clientId },
       );
+
+      this.flushPendingBackendConfig();
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
     } catch (error) {

@@ -64,6 +64,23 @@ type BackendConfig = {
  */
 const backendConfigs = new Map<string, BackendConfig>();
 
+/**
+ * Rooms whose host intends to arm storage. Separates "never armed on purpose"
+ * (a standalone or baked-in annotation surface, which must stay silent and make
+ * no requests) from "should have been armed but wasn't", which is a real failure
+ * and the only case reported below.
+ */
+const expectedBackends = new Map<string, FileErrorHandler | null>();
+
+export const expectBackend = (
+  roomId?: string | null,
+  onFileError?: FileErrorHandler,
+) => {
+  if (roomId) {
+    expectedBackends.set(roomId, onFileError || null);
+  }
+};
+
 export const initializeBackend = (
   roomId: string,
   storageBackendUrl?: string,
@@ -89,6 +106,7 @@ export const initializeBackend = (
 export const releaseBackend = (roomId?: string | null) => {
   if (roomId) {
     backendConfigs.delete(roomId);
+    expectedBackends.delete(roomId);
   }
 };
 
@@ -104,14 +122,39 @@ const _errMessage = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 const _reportFileError = (
-  config: BackendConfig | null,
+  onFileError: FileErrorHandler | null | undefined,
   error: ExcalidrawFileError,
 ) => {
   console.error(`Excalidraw file ${error.op} failed`, error);
   try {
-    config?.onFileError?.(error);
+    onFileError?.(error);
   } catch {
     // Reporting must never break the failure path it is reporting on.
+  }
+};
+
+/**
+ * Reports the one failure a missing config would otherwise hide: the surface was
+ * meant to be armed but no backend was ever initialised, so every file op no-ops
+ * without a single request to observe. Silent for surfaces that never opted in.
+ */
+const _reportUnarmedBackend = (
+  roomId: string | null | undefined,
+  op: ExcalidrawFileError["op"],
+  fileIds: readonly FileId[],
+) => {
+  if (!roomId || !expectedBackends.has(roomId)) {
+    return;
+  }
+
+  const onFileError = expectedBackends.get(roomId) || null;
+
+  for (const fileId of new Set(fileIds)) {
+    _reportFileError(onFileError, {
+      op,
+      fileId,
+      message: "backend not initialized",
+    });
   }
 };
 
@@ -172,7 +215,7 @@ const uploadFilesWithMulter = async (
 
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        _reportFileError(config, {
+        _reportFileError(config.onFileError, {
           op: "upload",
           fileId: id,
           status: response.status,
@@ -184,7 +227,7 @@ const uploadFilesWithMulter = async (
 
       const result = await response.json().catch(() => null);
       if (!result) {
-        _reportFileError(config, {
+        _reportFileError(config.onFileError, {
           op: "upload",
           fileId: id,
           status: response.status,
@@ -196,7 +239,7 @@ const uploadFilesWithMulter = async (
 
       savedFiles.push(id);
     } catch (error) {
-      _reportFileError(config, {
+      _reportFileError(config.onFileError, {
         op: "upload",
         fileId: id,
         message: _errMessage(error),
@@ -252,7 +295,7 @@ const downloadFilesFromBackend = async (
           });
         } else {
           erroredFiles.push(id);
-          _reportFileError(config, {
+          _reportFileError(config.onFileError, {
             op: "download",
             fileId: id,
             status: response.status,
@@ -261,7 +304,7 @@ const downloadFilesFromBackend = async (
         }
       } catch (error) {
         erroredFiles.push(id);
-        _reportFileError(config, {
+        _reportFileError(config.onFileError, {
           op: "download",
           fileId: id,
           message: _errMessage(error),
@@ -383,6 +426,12 @@ export const saveFilesToStorage = async ({
   // No backend was armed for this surface — stay silent rather than firing
   // requests under a prefix nothing owns.
   if (!config) {
+    _reportUnarmedBackend(
+      roomId,
+      "upload",
+      files.map(({ id }) => id),
+    );
+
     return { savedFiles: [], erroredFiles: files.map(({ id }) => id) };
   }
 
@@ -395,7 +444,10 @@ export const saveFilesToStorage = async ({
     savedFiles.push(...(result.savedFiles || []));
     erroredFiles.push(...(result.erroredFiles || []));
   } catch (error) {
-    _reportFileError(config, { op: "upload", message: _errMessage(error) });
+    _reportFileError(config.onFileError, {
+      op: "upload",
+      message: _errMessage(error),
+    });
     // Mark all files as errored if the API call fails
     files.forEach(({ id }) => erroredFiles.push(id));
   }
@@ -541,6 +593,7 @@ export const loadFilesFromStorage = async (
   // No backend was armed for this surface — see `backendConfigs`. Report the
   // ids as "not loaded" without issuing a request.
   if (!config) {
+    _reportUnarmedBackend(roomId, "download", filesIds);
     filesIds.forEach((id) => erroredFiles.set(id, true));
     return { loadedFiles, erroredFiles };
   }
@@ -570,7 +623,7 @@ export const loadFilesFromStorage = async (
           });
         } catch (error) {
           erroredFiles.set(id as FileId, true);
-          _reportFileError(config, {
+          _reportFileError(config.onFileError, {
             op: "decrypt",
             fileId: id,
             message: _errMessage(error),
@@ -585,7 +638,10 @@ export const loadFilesFromStorage = async (
     });
   } catch (error) {
     // Marking all files as errored if the API call fails
-    _reportFileError(config, { op: "download", message: _errMessage(error) });
+    _reportFileError(config.onFileError, {
+      op: "download",
+      message: _errMessage(error),
+    });
     filesIds.forEach((id) => erroredFiles.set(id, true));
   }
 
