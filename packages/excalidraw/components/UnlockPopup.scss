@@ -3,6 +3,10 @@
 .excalidraw {
   .UnlockPopup {
     position: absolute;
+    /* Sized by its buttons, not by whatever `left` it happens to be clamped
+       to — without this the flex row can be squeezed by the right edge and
+       measure narrower than it renders. */
+    width: max-content;
     z-index: var(--zIndex-interactiveCanvas);
     display: flex;
     justify-content: center;
@@ -59,6 +63,41 @@
         cursor: not-allowed;
         color: var(--color-gray-40);
         opacity: 0.5;
+      }
+
+      /* The lock button while the element IS locked. Same treatment the editor
+         gives an engaged tool (see `.active` in Actions.scss) — a tinted
+         container plus the primary colour — because that is what this is: a
+         toggle that is currently on, not a button that was recently pressed.
+         Swapping the padlock glyph alone asked the reader to know which of two
+         similar icons means which. */
+      &--active {
+        background: var(--color-surface-primary-container);
+        color: var(--color-primary);
+
+        &:hover:not(:disabled) {
+          background: var(--color-surface-primary-container);
+          color: var(--color-primary);
+        }
+      }
+
+      /* Delete is the one irreversible action on this bar, so it carries the
+         danger colour rather than reading as another neutral tool — and it
+         keeps that colour while disabled, just dimmed. Greyed out it read as a
+         different, inert button rather than as THIS button being unavailable,
+         which is the whole signal: unlock the element and delete becomes
+         possible. The opacity comes from the :disabled rule above. */
+      &--danger {
+        color: var(--color-danger);
+
+        &:hover:not(:disabled) {
+          background: var(--color-danger-background);
+          color: var(--color-danger);
+        }
+
+        &:disabled {
+          color: var(--color-danger);
+        }
       }
     }
   }

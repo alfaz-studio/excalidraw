@@ -10192,7 +10192,22 @@ class App extends React.Component<AppProps, AppState> {
         this.state.activeTool.type === "selection" &&
         !pointerDownState.boxSelection.hasOccurred &&
         !pointerDownState.resize.isResizing &&
-        !hitElements.some((el) => this.state.selectedElementIds[el.id])
+        // SONACOVE: `&& !isImageElement(el)`.
+        //
+        // Upstream skips this block when the pointer is over something already
+        // selected, which was safe while the bar only ever showed for locked
+        // elements — those are never in the selection. An UNLOCKED image is
+        // selected on pointer-DOWN, so by the time this runs it is always in
+        // `selectedElementIds`, the block never executes, and the `else` below
+        // clears the bar. That is why the bar came back only while the image
+        // happened to be locked.
+        //
+        // Exempting images keeps upstream's intent — don't hijack a
+        // multi-selection just because the pointer crossed a locked element —
+        // while letting the one type this bar exists for reach it.
+        !hitElements.some(
+          (el) => this.state.selectedElementIds[el.id] && !isImageElement(el),
+        )
       ) {
         const hitLockedElement = this.getElementAtPosition(
           sceneCoords.x,
@@ -10204,12 +10219,20 @@ class App extends React.Component<AppProps, AppState> {
 
         this.store.scheduleCapture();
 
-        // SONACOVE: `|| already pointing at this element`.
+        // SONACOVE: the bar shows for a locked element OR any image.
         //
-        // The action bar outlives unlocking (see actionElementLock), so a click
-        // on an element it is already anchored to must keep it — otherwise
-        // unlocking and then reaching for Delete dismissed the bar on the way.
-        // A click on anything else still clears, so dismissal is unchanged.
+        // Upstream this was `locked` only, because the bar was an unlock
+        // affordance and an unlocked element has nothing to unlock. It now
+        // carries duplicate, layer order and delete, and it outlives unlocking
+        // (see actionElementLock) — so gating on `locked` meant that once you
+        // unlocked an image and clicked away, clicking it again brought back
+        // nothing, and the actions were reachable only while it happened to be
+        // locked. Images are the case this bar exists for (they are auto-locked
+        // on insert), so they get it in both states.
+        //
+        // Deliberately NOT every element type: a bar over every rectangle you
+        // click would be an editor-wide change, and those already have the
+        // properties panel. A click on empty canvas still clears.
         const hitBarTarget =
           hitLockedElement &&
           (hitLockedElement.groupIds.length > 0
@@ -10218,8 +10241,7 @@ class App extends React.Component<AppProps, AppState> {
 
         if (
           hitLockedElement &&
-          (hitLockedElement.locked ||
-            hitBarTarget === this.state.activeLockedId)
+          (hitLockedElement.locked || isImageElement(hitLockedElement))
         ) {
           this.setState({ activeLockedId: hitBarTarget as string });
         } else {

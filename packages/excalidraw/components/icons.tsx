@@ -786,6 +786,59 @@ export const SendBackwardIcon = createIcon(arrownNarrowUpJSX, {
   },
 });
 
+// SONACOVE: layer-stack variants for the element action bar.
+//
+// The arrow-bar icons above read as "move up/down" — fine in the properties
+// panel where they sit in a labelled row of four, but ambiguous on a bare
+// toolbar floating over the canvas, where "up" could as easily mean nudge the
+// element. These show a STACK with a direction, so they say layer order on
+// their own.
+//
+// Paths are lucide's `layers-arrow-up` / `layers-arrow-down`, transcribed from
+// the upstream sources rather than the installed package: they were added after
+// lucide 0.555.0, which is the version vendored in the meet app. Same 24px
+// stroke geometry this file already uses, so they need no adjustment.
+const layersArrowUpJSX = (
+  <g strokeWidth={2}>
+    <path d="M12 12V2" />
+    <path d="M2 17.002a1 1 0 00.58.91l8.6 3.91a2 2 0 001.65 0l8.58-3.9a1 1 0 00.59-.92" />
+    <path d="M7.674 8.774 2.58 11.09a1 1 0 000 1.822l8.6 3.91a2 2 0 001.65 0l8.58-3.9a1 1 0 00.59-.92 1 1 0 00-.59-.922l-5.078-2.308" />
+    <path d="m9 5 3-3 3 3" />
+  </g>
+);
+
+const layersArrowDownJSX = (
+  <g strokeWidth={2}>
+    <path d="M12 7v15" />
+    <path d="M2 12a1 1 0 00.58.91l5.093 2.316" />
+    <path d="M22 12a1 1 0 01-.59.92l-5.077 2.308" />
+    <path d="M8 10.37 2.6 7.91a1 1 0 010-1.831l8.57-3.9a2 2 0 011.66.001l8.59 3.91a1 1 0 010 1.831l-5.392 2.45" />
+    <path d="m9 19 3 3 3-3" />
+  </g>
+);
+
+export const LayersArrowUpIcon = createIcon(layersArrowUpJSX, tablerIconProps);
+
+export const LayersArrowDownIcon = createIcon(
+  layersArrowDownJSX,
+  tablerIconProps,
+);
+
+// SONACOVE: a copy icon with a plus, rather than the two bare overlapping
+// squares of `DuplicateIcon` — those read as "copy to clipboard", which is a
+// different action and one this bar does not offer. Path is lucide's
+// `copy-plus`.
+const duplicatePlusJSX = (
+  <g strokeWidth={2}>
+    <line x1="15" x2="15" y1="12" y2="18" />
+    <line x1="12" x2="18" y1="15" y2="15" />
+    <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+  </g>
+);
+
+export const DuplicatePlusIcon = createIcon(duplicatePlusJSX, tablerIconProps);
+
 export const BringToFrontIcon = createIcon(arrowBarToTopJSX, tablerIconProps);
 
 export const SendToBackIcon = createIcon(arrowBarToTopJSX, {

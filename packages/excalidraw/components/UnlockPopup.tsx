@@ -5,6 +5,7 @@ import {
 } from "@excalidraw/element";
 import { sceneCoordsToViewportCoords } from "@excalidraw/common";
 
+import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import type { ExcalidrawElement } from "@excalidraw/element/types";
@@ -21,10 +22,10 @@ import { t } from "../i18n";
 import "./UnlockPopup.scss";
 
 import {
-  BringToFrontIcon,
-  DuplicateIcon,
+  LayersArrowUpIcon,
+  DuplicatePlusIcon,
   LockedIconFilled,
-  SendToBackIcon,
+  LayersArrowDownIcon,
   TrashIcon,
   UnlockedIcon,
 } from "./icons";
@@ -33,6 +34,10 @@ import type { Action } from "../actions/types";
 import type App from "./App";
 
 import type { AppState } from "../types";
+
+/** Breathing room between the bar and the element, and the canvas edges. */
+const ELEMENT_GAP = 12;
+const EDGE_MARGIN = 8;
 
 /**
  * The floating bar for the element the user is focused on.
@@ -56,6 +61,33 @@ const UnlockPopup = ({
   app: App;
   activeLockedId: NonNullable<AppState["activeLockedId"]>;
 }) => {
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barSize, setBarSize] = useState({ width: 0, height: 0 });
+
+  // Measured rather than assumed: the bar's width depends on how many buttons
+  // it renders, and clamping it inside the canvas needs its real size. A layout
+  // effect runs before paint, so the corrected position is the first one drawn.
+  //
+  // Measured once — the button set is fixed, so the size cannot change while
+  // this stays mounted, and re-measuring every render would mean a setState on
+  // every scroll and zoom frame.
+  useLayoutEffect(() => {
+    const node = barRef.current;
+
+    if (!node) {
+      return;
+    }
+
+    const { offsetWidth: width, offsetHeight: height } = node;
+
+    setBarSize((current) =>
+      current.width === width && current.height === height
+        ? current
+        : { width, height },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const element = app.scene.getElement(activeLockedId);
 
   const elements = element
@@ -68,10 +100,42 @@ const UnlockPopup = ({
 
   const locked = elements.some((el) => el.locked);
 
-  const [x, y] = getCommonBounds(elements);
+  const [x, y, , y2] = getCommonBounds(elements);
   const { x: viewX, y: viewY } = sceneCoordsToViewportCoords(
     { sceneX: x, sceneY: y },
     app.state,
+  );
+  const { y: viewY2 } = sceneCoordsToViewportCoords(
+    { sceneX: x, sceneY: y2 },
+    app.state,
+  );
+
+  // SONACOVE: clamped to the canvas, and flipped below the element when there
+  // is no room above.
+  //
+  // The bar is anchored to the element's top-left corner, so an element pushed
+  // against an edge took the bar off-canvas with it — drop an image half off
+  // the left of the board and the lock button itself was the part clipped away,
+  // leaving no way to unlock and therefore no way to move it back. Position is
+  // resolved in viewport coordinates so both axes can be bounded.
+  //
+  // `left` is the element's, pulled back inside the canvas. `top` prefers above
+  // the element, falls to below when that would clip, and is bounded either way
+  // so a viewport shorter than the element still lands the bar on-screen.
+  const canvasLeft = viewX - app.state.offsetLeft;
+  const maxLeft = app.state.width - barSize.width - EDGE_MARGIN;
+  const left = Math.min(
+    Math.max(EDGE_MARGIN, canvasLeft),
+    Math.max(EDGE_MARGIN, maxLeft),
+  );
+
+  const above = viewY - app.state.offsetTop - barSize.height - ELEMENT_GAP;
+  const below = viewY2 - app.state.offsetTop + ELEMENT_GAP;
+  const maxTop = app.state.height - barSize.height - EDGE_MARGIN;
+  const preferred = above < EDGE_MARGIN ? below : above;
+  const top = Math.min(
+    Math.max(EDGE_MARGIN, preferred),
+    Math.max(EDGE_MARGIN, maxTop),
   );
 
   /**
@@ -129,6 +193,9 @@ const UnlockPopup = ({
     // under the types this package builds against.
     icon: typeof LockedIconFilled;
     action: Action;
+    /** Rendered as an engaged toggle rather than an idle button. */
+    active?: boolean;
+    danger?: boolean;
     disabled?: boolean;
   }[] = [
     {
@@ -138,23 +205,28 @@ const UnlockPopup = ({
         : t("labels.elementLock.lock"),
       icon: locked ? LockedIconFilled : UnlockedIcon,
       action: actionToggleElementLock,
+      // Locked is a STATE the element is being held in, not a thing that just
+      // happened — so the button reads as pressed for as long as it holds,
+      // rather than relying on the reader noticing which of two padlock glyphs
+      // is showing.
+      active: locked,
     },
     {
       key: "duplicate",
       label: t("labels.duplicateSelection"),
-      icon: DuplicateIcon,
+      icon: DuplicatePlusIcon,
       action: actionDuplicateSelection,
     },
     {
       key: "front",
       label: t("labels.bringToFront"),
-      icon: BringToFrontIcon,
+      icon: LayersArrowUpIcon,
       action: actionBringToFront,
     },
     {
       key: "back",
       label: t("labels.sendToBack"),
-      icon: SendToBackIcon,
+      icon: LayersArrowDownIcon,
       action: actionSendToBack,
     },
     {
@@ -162,6 +234,9 @@ const UnlockPopup = ({
       label: t("labels.delete"),
       icon: TrashIcon,
       action: actionDeleteSelected,
+      // The only irreversible button here; it should not look like its
+      // neighbours.
+      danger: true,
       // Locking exists to stop the board's shared images being destroyed;
       // offering Delete a click away from that would undo the point of it.
       disabled: locked,
@@ -170,17 +245,28 @@ const UnlockPopup = ({
 
   return (
     <div
+      ref={barRef}
       className="UnlockPopup"
       style={{
-        bottom: `${app.state.height + 12 - viewY + app.state.offsetTop}px`,
-        left: `${viewX - app.state.offsetLeft}px`,
+        top: `${top}px`,
+        left: `${left}px`,
+        // Nothing to clamp against until the first measure; showing it at the
+        // raw anchor for one frame is the flicker this avoids.
+        visibility: barSize.width === 0 ? "hidden" : undefined,
       }}
     >
-      {buttons.map(({ key, label, icon, action, disabled }) => (
+      {buttons.map(({ key, label, icon, action, active, danger, disabled }) => (
         <button
           key={key}
           type="button"
-          className="UnlockPopup__button"
+          className={[
+            "UnlockPopup__button",
+            active && "UnlockPopup__button--active",
+            danger && "UnlockPopup__button--danger",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-pressed={active}
           title={label}
           aria-label={label}
           disabled={disabled}
