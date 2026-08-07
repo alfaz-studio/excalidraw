@@ -116,13 +116,19 @@ export const actionToggleElementLock = register({
       ? {}
       : selectGroupsFromGivenElements(unlockedSelectedElements, appState);
 
-    const activeLockedId = nextLockState
+    // SONACOVE: kept when UNLOCKING too, where upstream nulls it.
+    //
+    // `activeLockedId` now means "the element the action bar is pointing at",
+    // not "the locked element" — the bar carries duplicate/layer/delete
+    // alongside the lock toggle, and dropping it the instant you unlock takes
+    // the bar away at exactly the moment its other buttons become useful.
+    // Dismissal is unchanged: clicking elsewhere or pressing Escape still
+    // clears it (see the clear sites in App.tsx).
+    const activeLockedId = newGroupId
       ? newGroupId
-        ? newGroupId
-        : isAGroup
-        ? selectedElements[0].groupIds.at(-1)!
-        : selectedElements[0].id
-      : null;
+      : isAGroup
+      ? selectedElements[0].groupIds.at(-1)!
+      : selectedElements[0].id;
 
     return {
       elements: nextElements,

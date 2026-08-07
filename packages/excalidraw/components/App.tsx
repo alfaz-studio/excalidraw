@@ -10204,13 +10204,24 @@ class App extends React.Component<AppProps, AppState> {
 
         this.store.scheduleCapture();
 
-        if (hitLockedElement?.locked) {
-          this.setState({
-            activeLockedId:
-              hitLockedElement.groupIds.length > 0
-                ? hitLockedElement.groupIds.at(-1) || ""
-                : hitLockedElement.id,
-          });
+        // SONACOVE: `|| already pointing at this element`.
+        //
+        // The action bar outlives unlocking (see actionElementLock), so a click
+        // on an element it is already anchored to must keep it — otherwise
+        // unlocking and then reaching for Delete dismissed the bar on the way.
+        // A click on anything else still clears, so dismissal is unchanged.
+        const hitBarTarget =
+          hitLockedElement &&
+          (hitLockedElement.groupIds.length > 0
+            ? hitLockedElement.groupIds.at(-1) || ""
+            : hitLockedElement.id);
+
+        if (
+          hitLockedElement &&
+          (hitLockedElement.locked ||
+            hitBarTarget === this.state.activeLockedId)
+        ) {
+          this.setState({ activeLockedId: hitBarTarget as string });
         } else {
           this.setState({
             activeLockedId: null,
