@@ -47,6 +47,8 @@ import type {
   CollabSocket,
   Gesture,
   ExcalidrawCollabProps,
+  ExcalidrawFileError,
+  StorageCapabilities,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -80,6 +82,7 @@ import {
   saveFilesToStorage,
   saveToStorage,
   initializeBackend,
+  releaseBackend,
 } from "../../../excalidraw-app/data/storage";
 import {
   importUsernameFromLocalStorage,
@@ -155,6 +158,25 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   getElementAuthorId = (): string =>
     this.props.elementAuthorId ?? this.clientId;
 
+  /**
+   * SONACOVE: which halves of the storage backend this surface may use. Without
+   * `storageBackendUrl` nothing is armed at all; with it, both halves default on
+   * so the whiteboard behaves exactly as before. Annotation surfaces pass
+   * `{ files: true, scene: false }` — see StorageCapabilities.
+   */
+  getStorageCapabilities = (): Required<StorageCapabilities> => {
+    const { storageBackendUrl, storageCapabilities } = this.props;
+
+    if (!storageBackendUrl) {
+      return { files: false, scene: false };
+    }
+
+    return {
+      files: storageCapabilities?.files ?? true,
+      scene: storageCapabilities?.scene ?? true,
+    };
+  };
+
   constructor(props: ExcalidrawCollabProps) {
     super(props);
     this.state = {
@@ -167,15 +189,28 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.fileManager = new FileManager({
       getFiles: async (fileIds) => {
         const { roomId, roomKey } = this.portal;
+
+        // Not an abort: callers of `fetchImageFilesFromFirebase` don't catch,
+        // so a surface with file storage off must resolve empty rather than
+        // reject.
+        if (!this.getStorageCapabilities().files) {
+          return { loadedFiles: [], erroredFiles: new Map() };
+        }
+
         if (!roomId || !roomKey) {
           throw new AbortError();
         }
 
-        return loadFilesFromStorage(`files/rooms/${roomId}`, roomKey, fileIds);
+        return loadFilesFromStorage(
+          `files/rooms/${roomId}`,
+          roomKey,
+          fileIds,
+          roomId,
+        );
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
-        if (!roomId || !roomKey) {
+        if (!roomId || !roomKey || !this.getStorageCapabilities().files) {
           throw new AbortError();
         }
 
@@ -186,6 +221,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
             encryptionKey: roomKey,
             maxBytes: FILE_UPLOAD_MAX_BYTES,
           }),
+          roomId,
         });
 
         return {
@@ -275,13 +311,27 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Re-initialize storage backend when the token changes (initial fetch or refresh)
     const { storageBackendUrl, meetingDetails } = this.props;
     if (
+      this.portal.roomId &&
       storageBackendUrl &&
       meetingDetails?.token &&
       meetingDetails.token !== prevProps.meetingDetails?.token
     ) {
-      initializeBackend(storageBackendUrl, meetingDetails);
+      initializeBackend(
+        this.portal.roomId,
+        storageBackendUrl,
+        meetingDetails,
+        this.onFileError,
+      );
     }
   }
+
+  /**
+   * Forwarded to the storage module so file failures reach the host (and from
+   * there, telemetry) instead of dying in the console.
+   */
+  private onFileError = (error: ExcalidrawFileError) => {
+    this.props.onFileError?.(error);
+  };
 
   componentWillUnmount() {
     window.removeEventListener("online", this.onOfflineStatusToggle);
@@ -306,6 +356,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.staleCollaboratorTimerId = null;
     }
     this.onUmmount?.();
+
+    // Drop this room's storage config so a later surface can't inherit it.
+    releaseBackend(this.portal.roomId);
 
     // Close the socket.io connection to prevent runaway reconnection loops
     // that can exhaust browser WebSocket resources and crash the meeting.
@@ -344,6 +397,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
   ) => {
+    // Scene persistence off: the reconcile below would re-apply a stored
+    // snapshot over whatever the user is drawing right now.
+    if (!this.getStorageCapabilities().scene) {
+      return;
+    }
+
     try {
       const storedElements = await saveToStorage(
         this.portal,
@@ -535,7 +594,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         if (!meetingDetails.token) {
           console.warn("Missing token in whiteboard");
         }
-        initializeBackend(storageBackendUrl, meetingDetails);
+        initializeBackend(
+          roomId,
+          storageBackendUrl,
+          meetingDetails,
+          this.onFileError,
+        );
       } catch (error) {
         console.error("Failed to initialize storage backend:", error);
         this.setErrorDialog(
@@ -692,7 +756,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               // continuously.
               if (
                 existingRoomLinkData &&
-                this.props.storageBackendUrl &&
+                this.getStorageCapabilities().scene &&
                 remoteElements.length === 0
               ) {
                 this.mergePersistedScene(existingRoomLinkData);
@@ -840,7 +904,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         this.fallbackInitializationHandler,
       );
     }
-    if (fetchScene && roomLinkData && this.portal.socket) {
+    if (
+      fetchScene &&
+      roomLinkData &&
+      this.portal.socket &&
+      this.getStorageCapabilities().scene
+    ) {
       this.excalidrawAPI.resetScene();
 
       try {
@@ -1153,7 +1222,10 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
   queueSaveToFirebase = throttle(
     () => {
-      if (this.portal.socketInitialized) {
+      if (
+        this.portal.socketInitialized &&
+        this.getStorageCapabilities().scene
+      ) {
         this.saveCollabRoomToFirebase(
           getSyncableElements(
             this.excalidrawAPI.getSceneElementsIncludingDeleted(),

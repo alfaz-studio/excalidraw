@@ -49,6 +49,7 @@ import type {
   Collaborator,
   Gesture,
   IMeetingDetails,
+  StorageCapabilities,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -155,6 +156,17 @@ class Collab extends PureComponent<CollabProps, CollabState> {
    */
   getElementAuthorId = (): string => this.clientId;
 
+  /**
+   * SONACOVE: mirrors the packaged Collab's capability split (see
+   * StorageCapabilities). The standalone app has no per-surface override, so
+   * both halves simply follow `storageBackendUrl`.
+   */
+  getStorageCapabilities = (): Required<StorageCapabilities> => {
+    const armed = Boolean(this.props.storageBackendUrl);
+
+    return { files: armed, scene: armed };
+  };
+
   constructor(props: CollabProps) {
     super(props);
     this.state = {
@@ -171,7 +183,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           throw new AbortError();
         }
 
-        return loadFilesFromStorage(`files/rooms/${roomId}`, roomKey, fileIds);
+        return loadFilesFromStorage(
+          `files/rooms/${roomId}`,
+          roomKey,
+          fileIds,
+          roomId,
+        );
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -186,6 +203,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             encryptionKey: roomKey,
             maxBytes: FILE_UPLOAD_MAX_BYTES,
           }),
+          roomId,
         });
 
         return {
@@ -519,7 +537,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       meetingDetails.token
     ) {
       try {
-        initializeBackend(storageBackendUrl, meetingDetails);
+        initializeBackend(roomId, storageBackendUrl, meetingDetails);
       } catch (error) {
         console.error("Failed to initialize storage backend:", error);
         this.setErrorDialog(

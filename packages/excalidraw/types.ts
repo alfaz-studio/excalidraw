@@ -705,6 +705,32 @@ export type CollabSocketFactory = (opts: {
 }) => Promise<CollabSocket> | CollabSocket;
 
 /**
+ * SONACOVE: what the storage backend is allowed to do for a given surface.
+ *
+ * FILE persistence and SCENE persistence used to be armed by the single
+ * `storageBackendUrl` prop. That forced annotation surfaces to opt out of
+ * storage entirely — a stored-scene reconcile re-applies a snapshot and drops
+ * the drawer's in-flight stroke — which also cost them image sync, a feature
+ * that has no such problem. Splitting the two lets a surface keep files while
+ * leaving scene persistence off.
+ */
+export interface StorageCapabilities {
+  files?: boolean;
+  scene?: boolean;
+}
+
+/**
+ * SONACOVE: a file-sync failure the host may want to alert on. `storage.ts` only
+ * ever wrote to the console, so no upload/download failure was ever visible.
+ */
+export interface ExcalidrawFileError {
+  op: "upload" | "download" | "decrypt";
+  fileId?: string;
+  status?: number;
+  message?: string;
+}
+
+/**
  * Collab configuration passed through ExcalidrawApp down to the Collab
  * component — one definition so the two prop surfaces can't drift.
  */
@@ -715,6 +741,12 @@ export interface CollabTransportProps {
   collabSocketFactory?: CollabSocketFactory;
   storageBackendUrl?: string;
   meetingDetails?: IMeetingDetails;
+  /**
+   * Defaults to `{ files: true, scene: true }` when `storageBackendUrl` is set,
+   * and to everything-off when it isn't.
+   */
+  storageCapabilities?: StorageCapabilities;
+  onFileError?: (error: ExcalidrawFileError) => void;
 }
 
 export interface ExcalidrawCollabProps extends CollabTransportProps {
