@@ -16,12 +16,33 @@
        row squeezed by the right edge would measure narrower than it renders. */
     width: max-content;
 
+    /* The lock button while the element IS locked. ToolIcon's own selected
+       state is `--button-gray-2`, which reads as a pressed toolbar key; this is
+       a mode the element is being held in, so it takes the primary container
+       the editor uses for an engaged tool (see `.active` in Actions.scss). */
+    .ToolIcon_type_button.ToolIcon--selected {
+      background-color: var(--color-surface-primary-container);
+
+      .ToolIcon__icon svg {
+        color: var(--color-primary);
+      }
+    }
+
     /* Delete is the only irreversible action here, so it carries the danger
-       colour in every state — including disabled, where going grey read as
-       some other inert button rather than as THIS one being unavailable, which
-       is the signal. ToolIcon supplies the rest. */
+       colour — including while disabled, where going grey read as some other
+       inert button rather than as THIS one being unavailable, which is the
+       signal. Dimmed rather than recoloured, and the selector has to out-weigh
+       ToolIcon's own `:disabled svg { color: var(--color-disabled) }`. */
     .UnlockPopup__danger .ToolIcon__icon svg {
       color: var(--color-danger);
+    }
+
+    .UnlockPopup__danger:disabled {
+      opacity: 0.4;
+
+      .ToolIcon__icon svg {
+        color: var(--color-danger);
+      }
     }
 
     .UnlockPopup__danger:hover:not(:disabled) .ToolIcon__icon {
