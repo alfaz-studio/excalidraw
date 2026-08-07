@@ -10233,17 +10233,16 @@ class App extends React.Component<AppProps, AppState> {
         // Deliberately NOT every element type: a bar over every rectangle you
         // click would be an editor-wide change, and those already have the
         // properties panel. A click on empty canvas still clears.
-        const hitBarTarget =
-          hitLockedElement &&
-          (hitLockedElement.groupIds.length > 0
-            ? hitLockedElement.groupIds.at(-1) || ""
-            : hitLockedElement.id);
-
         if (
           hitLockedElement &&
           (hitLockedElement.locked || isImageElement(hitLockedElement))
         ) {
-          this.setState({ activeLockedId: hitBarTarget as string });
+          this.setState({
+            activeLockedId:
+              hitLockedElement.groupIds.length > 0
+                ? hitLockedElement.groupIds.at(-1) || ""
+                : hitLockedElement.id,
+          });
         } else {
           this.setState({
             activeLockedId: null,

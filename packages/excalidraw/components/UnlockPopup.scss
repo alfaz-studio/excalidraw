@@ -37,8 +37,8 @@
       }
 
       &:focus-visible {
-        outline: 2px solid var(--color-primary);
-        outline-offset: -2px;
+        outline: none;
+        box-shadow: 0 0 0 2px var(--focus-highlight-color);
       }
 
       svg {
@@ -61,7 +61,7 @@
 
       &:disabled {
         cursor: not-allowed;
-        color: var(--color-gray-40);
+        color: var(--color-disabled);
         opacity: 0.5;
       }
 
@@ -71,14 +71,10 @@
          toggle that is currently on, not a button that was recently pressed.
          Swapping the padlock glyph alone asked the reader to know which of two
          similar icons means which. */
-      &--active {
+      &--active,
+      &--active:hover:not(:disabled) {
         background: var(--color-surface-primary-container);
         color: var(--color-primary);
-
-        &:hover:not(:disabled) {
-          background: var(--color-surface-primary-container);
-          color: var(--color-primary);
-        }
       }
 
       /* Delete is the one irreversible action on this bar, so it carries the
@@ -87,17 +83,14 @@
          different, inert button rather than as THIS button being unavailable,
          which is the whole signal: unlock the element and delete becomes
          possible. The opacity comes from the :disabled rule above. */
-      &--danger {
+      &--danger,
+      &--danger:disabled {
         color: var(--color-danger);
+      }
 
-        &:hover:not(:disabled) {
-          background: var(--color-danger-background);
-          color: var(--color-danger);
-        }
-
-        &:disabled {
-          color: var(--color-danger);
-        }
+      &--danger:hover:not(:disabled) {
+        background: var(--color-danger-background);
+        color: var(--color-danger);
       }
     }
   }

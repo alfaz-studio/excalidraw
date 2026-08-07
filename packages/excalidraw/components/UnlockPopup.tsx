@@ -6,9 +6,8 @@ import {
 import { sceneCoordsToViewportCoords } from "@excalidraw/common";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import clsx from "clsx";
 import { flushSync } from "react-dom";
-
-import type { ExcalidrawElement } from "@excalidraw/element/types";
 
 import {
   actionBringToFront,
@@ -78,13 +77,7 @@ const UnlockPopup = ({
       return;
     }
 
-    const { offsetWidth: width, offsetHeight: height } = node;
-
-    setBarSize((current) =>
-      current.width === width && current.height === height
-        ? current
-        : { width, height },
-    );
+    setBarSize({ width: node.offsetWidth, height: node.offsetHeight });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -122,20 +115,21 @@ const UnlockPopup = ({
   // `left` is the element's, pulled back inside the canvas. `top` prefers above
   // the element, falls to below when that would clip, and is bounded either way
   // so a viewport shorter than the element still lands the bar on-screen.
-  const canvasLeft = viewX - app.state.offsetLeft;
-  const maxLeft = app.state.width - barSize.width - EDGE_MARGIN;
-  const left = Math.min(
-    Math.max(EDGE_MARGIN, canvasLeft),
-    Math.max(EDGE_MARGIN, maxLeft),
+  // `max` is itself floored, so a viewport too small to hold the bar still
+  // lands it at the margin rather than off the opposite edge.
+  const clamp = (value: number, max: number) =>
+    Math.min(Math.max(EDGE_MARGIN, value), Math.max(EDGE_MARGIN, max));
+
+  const left = clamp(
+    viewX - app.state.offsetLeft,
+    app.state.width - barSize.width - EDGE_MARGIN,
   );
 
   const above = viewY - app.state.offsetTop - barSize.height - ELEMENT_GAP;
   const below = viewY2 - app.state.offsetTop + ELEMENT_GAP;
-  const maxTop = app.state.height - barSize.height - EDGE_MARGIN;
-  const preferred = above < EDGE_MARGIN ? below : above;
-  const top = Math.min(
-    Math.max(EDGE_MARGIN, preferred),
-    Math.max(EDGE_MARGIN, maxTop),
+  const top = clamp(
+    above < EDGE_MARGIN ? below : above,
+    app.state.height - barSize.height - EDGE_MARGIN,
   );
 
   /**
@@ -150,25 +144,13 @@ const UnlockPopup = ({
    * `flushSync` so the action reads the selection this sets rather than the
    * one from the previous render.
    */
-  const run = (
-    action: Action,
-    elementsToActOn: readonly ExcalidrawElement[],
-  ) => {
+  const run = (action: Action) => {
     flushSync(() => {
-      const groupIds = selectGroupsFromGivenElements(
-        elementsToActOn,
-        app.state,
-      );
-
       app.setState({
-        selectedElementIds: elementsToActOn.reduce(
-          (acc, el) => ({
-            ...acc,
-            [el.id]: true,
-          }),
-          {},
+        selectedElementIds: Object.fromEntries(
+          elements.map((el) => [el.id, true]),
         ),
-        selectedGroupIds: groupIds,
+        selectedGroupIds: selectGroupsFromGivenElements(elements, app.state),
       });
     });
 
@@ -180,7 +162,7 @@ const UnlockPopup = ({
       return;
     }
 
-    if (elementsToActOn.some((el) => el.locked)) {
+    if (locked) {
       app.setState({ selectedElementIds: {}, selectedGroupIds: {} });
     }
   };
@@ -259,18 +241,15 @@ const UnlockPopup = ({
         <button
           key={key}
           type="button"
-          className={[
-            "UnlockPopup__button",
-            active && "UnlockPopup__button--active",
-            danger && "UnlockPopup__button--danger",
-          ]
-            .filter(Boolean)
-            .join(" ")}
+          className={clsx("UnlockPopup__button", {
+            "UnlockPopup__button--active": active,
+            "UnlockPopup__button--danger": danger,
+          })}
           aria-pressed={active}
           title={label}
           aria-label={label}
           disabled={disabled}
-          onClick={() => run(action, elements)}
+          onClick={() => run(action)}
         >
           {icon}
         </button>
