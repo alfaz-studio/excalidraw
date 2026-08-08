@@ -151,6 +151,12 @@ class Portal {
   }
 
   queueFileUpload = throttle(async () => {
+    // Every broadcast used to trigger an upload sweep unconditionally, so a
+    // surface with file storage off still pushed bytes at the backend.
+    if (!this.collab.filesEnabled) {
+      return;
+    }
+
     try {
       await this.collab.fileManager.saveFiles({
         elements: this.collab.excalidrawAPI.getSceneElementsIncludingDeleted(),
