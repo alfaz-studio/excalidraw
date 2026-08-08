@@ -18,6 +18,14 @@ type Props = {
   viewportWidth?: number;
   viewportHeight?: number;
   className?: string;
+  /**
+   * SONACOVE: the box this popover opened from, in `top`/`left`'s space.
+   *
+   * Given only a point, `fitInViewport` bottom-aligns a popover too tall to fit
+   * — landing it over its own trigger. With the box it picks the side with room
+   * and caps its height to that room.
+   */
+  anchor?: { top: number; bottom: number };
 };
 
 export const Popover = ({
@@ -31,6 +39,7 @@ export const Popover = ({
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
   className,
+  anchor,
 }: Props) => {
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -117,7 +126,28 @@ export const Popover = ({
         container.style.left = `${left}px`;
       }
 
-      if (height >= viewportHeight) {
+      // SONACOVE: anchored placement.
+      if (anchor) {
+        const MARGIN = 8;
+        const below = viewportHeight - anchor.bottom - MARGIN;
+        const above = anchor.top - MARGIN;
+        // Below by default, above only when that side has more room; capped
+        // either way so it scrolls rather than escaping the canvas.
+        const useBelow = height <= below || below >= above;
+        const room = Math.max(useBelow ? below : above, 0);
+
+        container.style.top = useBelow
+          ? `${anchor.bottom + MARGIN}px`
+          : `${Math.max(
+              MARGIN,
+              anchor.top - Math.min(height, room) - MARGIN,
+            )}px`;
+
+        if (height > room) {
+          container.style.maxHeight = `${room}px`;
+          container.style.overflowY = "auto";
+        }
+      } else if (height >= viewportHeight) {
         container.style.height = `${viewportHeight - 20}px`;
         container.style.top = "10px";
         container.style.overflowY = "scroll";
@@ -128,6 +158,7 @@ export const Popover = ({
       }
     }
   }, [
+    anchor,
     top,
     left,
     fitInViewport,

@@ -273,6 +273,8 @@ export interface AppState {
     items: ContextMenuItems;
     top: number;
     left: number;
+    /** SONACOVE: the box it was opened from — see Popover's `anchor`. */
+    anchor?: { top: number; bottom: number };
   } | null;
   showWelcomeScreen: boolean;
   isLoading: boolean;
@@ -676,6 +678,12 @@ export interface ExcalidrawProps {
   // would unprotect everyone. Elements with no authorId predate the feature and
   // stay editable. See elementOwnership.ts.
   protectForeignElements?: boolean;
+
+  // SONACOVE: lock an image as it is inserted, and open the action bar over it
+  // so the lock is visible. The eraser skips locked elements, so this leaves
+  // only the strokes drawn on top of an image erasable. `locked` rides the
+  // collab broadcast, so the inserting client locking it is enough.
+  autoLockImages?: boolean;
 }
 
 /**
