@@ -24,7 +24,7 @@ import type {
   BinaryFiles,
 } from "@excalidraw/excalidraw/types";
 
-import { loadStorage, saveFilesToStorage } from "../data/storage";
+import { saveFilesToStorage } from "../data/storage";
 
 import { FILE_UPLOAD_MAX_BYTES } from "../app_constants";
 import { encodeFilesForUpload } from "../data/FileManager";
@@ -35,8 +35,6 @@ export const exportToExcalidrawPlus = async (
   files: BinaryFiles,
   name: string,
 ) => {
-  await loadStorage();
-
   const id = `${nanoid(12)}`;
 
   const encryptionKey = (await generateEncryptionKey())!;

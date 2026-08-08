@@ -957,6 +957,8 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
             excalidrawAPI={excalidrawAPI}
             storageBackendUrl={props.storageBackendUrl}
             meetingDetails={props.meetingDetails}
+            storageCapabilities={props.storageCapabilities}
+            onFileError={props.onFileError}
           />
         )}
 
