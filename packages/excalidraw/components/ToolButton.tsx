@@ -35,6 +35,9 @@ type ToolButtonBaseProps = {
   className?: string;
   style?: CSSProperties;
   isLoading?: boolean;
+  // SONACOVE: for a button that toggles a popover — the popover closes on a
+  // document pointerdown, so its trigger has to read that state before it does.
+  onPointerDown?(event: React.PointerEvent): void;
 };
 
 type ToolButtonProps =
@@ -140,6 +143,9 @@ export const ToolButton = React.forwardRef(
           aria-label={props["aria-label"]}
           type={type}
           onClick={onClick}
+          onPointerDown={
+            "onPointerDown" in props ? props.onPointerDown : undefined
+          }
           ref={innerRef}
           disabled={isLoading || props.isLoading || !!props.disabled}
         >

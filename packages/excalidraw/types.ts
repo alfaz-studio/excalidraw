@@ -273,6 +273,8 @@ export interface AppState {
     items: ContextMenuItems;
     top: number;
     left: number;
+    /** SONACOVE: the box it was opened from — see Popover's `anchor`. */
+    anchor?: { top: number; bottom: number };
   } | null;
   showWelcomeScreen: boolean;
   isLoading: boolean;
@@ -676,6 +678,12 @@ export interface ExcalidrawProps {
   // would unprotect everyone. Elements with no authorId predate the feature and
   // stay editable. See elementOwnership.ts.
   protectForeignElements?: boolean;
+
+  // SONACOVE: lock an image as it is inserted, and open the action bar over it
+  // so the lock is visible. The eraser skips locked elements, so this leaves
+  // only the strokes drawn on top of an image erasable. `locked` rides the
+  // collab broadcast, so the inserting client locking it is enough.
+  autoLockImages?: boolean;
 }
 
 /**
@@ -705,6 +713,24 @@ export type CollabSocketFactory = (opts: {
 }) => Promise<CollabSocket> | CollabSocket;
 
 /**
+ * SONACOVE: file and scene persistence are armed independently. Scene storage
+ * re-applies a stored snapshot on reconcile, which drops an in-flight stroke —
+ * so annotation surfaces run files-only rather than opting out of storage.
+ */
+export interface StorageCapabilities {
+  files?: boolean;
+  scene?: boolean;
+}
+
+/** SONACOVE: a file-sync failure the host may want to alert on. */
+export interface ExcalidrawFileError {
+  op: "upload" | "download" | "decrypt";
+  fileId?: string;
+  status?: number;
+  message?: string;
+}
+
+/**
  * Collab configuration passed through ExcalidrawApp down to the Collab
  * component — one definition so the two prop surfaces can't drift.
  */
@@ -715,6 +741,12 @@ export interface CollabTransportProps {
   collabSocketFactory?: CollabSocketFactory;
   storageBackendUrl?: string;
   meetingDetails?: IMeetingDetails;
+  /**
+   * Defaults to `{ files: true, scene: true }` when `storageBackendUrl` is set,
+   * and to everything-off when it isn't.
+   */
+  storageCapabilities?: StorageCapabilities;
+  onFileError?: (error: ExcalidrawFileError) => void;
 }
 
 export interface ExcalidrawCollabProps extends CollabTransportProps {

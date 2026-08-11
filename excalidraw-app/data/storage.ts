@@ -24,6 +24,7 @@ import type {
   BinaryFileData,
   BinaryFileMetadata,
   DataURL,
+  ExcalidrawFileError,
   IMeetingDetails,
 } from "@excalidraw/excalidraw/types";
 import type {
@@ -41,52 +42,127 @@ import { getSyncableElements } from ".";
 import type { SyncableExcalidrawElement } from ".";
 import type Portal from "../collab/Portal";
 
-const BACKEND_CONFIG = {
-  baseUrl:
-    import.meta.env.VITE_APP_STORAGE_BACKEND_URL || "http://localhost:3000",
-  apiPrefix: import.meta.env.VITE_APP_STORAGE_API_PREFIX || "/api/file-sharing",
+// No `http://localhost:3000` fallback: a surface whose host never armed storage
+// must stay silent rather than talk to a developer-only origin.
+const DEFAULT_BACKEND_BASE_URL = import.meta.env.VITE_APP_STORAGE_BACKEND_URL;
+const BACKEND_API_PREFIX =
+  import.meta.env.VITE_APP_STORAGE_API_PREFIX || "/api/file-sharing";
+
+export type FileErrorHandler = (error: ExcalidrawFileError) => void;
+
+type BackendConfig = {
+  baseUrl: string;
+  apiPrefix: string;
+  meetingDetails: IMeetingDetails | null;
+  onFileError: FileErrorHandler | null;
 };
 
-let backendApi: { baseUrl: string; apiPrefix: string } | null = null;
-let meetingDetailsCache: IMeetingDetails | null = null; // Cache for meeting details
+/**
+ * Keyed per collab room, not a module-global singleton: several surfaces mount
+ * in one tab, and a shared global let a surface that withheld its config inherit
+ * another's credentials and then fetch under its own room prefix — a path
+ * nothing had uploaded to, i.e. permanent 404s. An unarmed surface resolves to
+ * `null` here and every file op no-ops instead.
+ */
+const backendConfigs = new Map<string, BackendConfig>();
 
-// Initialize backend configuration with storageBackendUrl & meetingDetails (Token comes from meetingDetails)
+/**
+ * Rooms whose host intends to arm storage. Separates "never armed on purpose"
+ * (a standalone or baked-in annotation surface, which must stay silent and make
+ * no requests) from "should have been armed but wasn't", which is a real failure
+ * and the only case reported below.
+ */
+const expectedBackends = new Map<string, FileErrorHandler | null>();
+
+export const expectBackend = (
+  roomId?: string | null,
+  onFileError?: FileErrorHandler,
+) => {
+  if (roomId) {
+    expectedBackends.set(roomId, onFileError || null);
+  }
+};
+
 export const initializeBackend = (
+  roomId: string,
   storageBackendUrl?: string,
   meetingDetails?: IMeetingDetails,
+  onFileError?: FileErrorHandler,
 ) => {
-  backendApi = {
-    baseUrl: storageBackendUrl || BACKEND_CONFIG.baseUrl,
-    apiPrefix: BACKEND_CONFIG.apiPrefix,
-  };
-  meetingDetailsCache = meetingDetails || null;
-};
+  const baseUrl = storageBackendUrl || DEFAULT_BACKEND_BASE_URL;
 
-const _getBackendApi = () => {
-  if (!backendApi) {
-    backendApi = {
-      baseUrl: BACKEND_CONFIG.baseUrl,
-      apiPrefix: BACKEND_CONFIG.apiPrefix,
-    };
+  if (!roomId || !baseUrl) {
+    return;
   }
-  return backendApi;
+
+  backendConfigs.set(roomId, {
+    baseUrl,
+    apiPrefix: BACKEND_API_PREFIX,
+    meetingDetails: meetingDetails || null,
+    onFileError: onFileError || null,
+  });
 };
 
-const _getToken = () => {
-  return meetingDetailsCache?.token;
+// Drop a room's config when its Collab instance goes away, so a later surface
+// reusing the same roomId can't pick up stale credentials.
+export const releaseBackend = (roomId?: string | null) => {
+  if (roomId) {
+    backendConfigs.delete(roomId);
+    expectedBackends.delete(roomId);
+  }
 };
 
-const _getMeetingDetails = (): IMeetingDetails | null => {
-  return meetingDetailsCache;
+const _getBackendConfig = (roomId?: string | null): BackendConfig | null => {
+  if (!roomId) {
+    return null;
+  }
+
+  return backendConfigs.get(roomId) ?? null;
 };
 
-export const loadStorage = async () => {
-  return _getBackendApi();
+const _errMessage = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+const _reportFileError = (
+  onFileError: FileErrorHandler | null | undefined,
+  error: ExcalidrawFileError,
+) => {
+  console.error(`Excalidraw file ${error.op} failed`, error);
+  try {
+    onFileError?.(error);
+  } catch {
+    // Reporting must never break the failure path it is reporting on.
+  }
 };
 
-const _getAuthHeaders = (): Record<string, string> => {
+/**
+ * Reports the one failure a missing config would otherwise hide: the surface was
+ * meant to be armed but no backend was ever initialised, so every file op no-ops
+ * without a single request to observe. Silent for surfaces that never opted in.
+ */
+const _reportUnarmedBackend = (
+  roomId: string | null | undefined,
+  op: ExcalidrawFileError["op"],
+  fileIds: readonly FileId[],
+) => {
+  if (!roomId || !expectedBackends.has(roomId)) {
+    return;
+  }
+
+  const onFileError = expectedBackends.get(roomId) || null;
+
+  for (const fileId of new Set(fileIds)) {
+    _reportFileError(onFileError, {
+      op,
+      fileId,
+      message: "backend not initialized",
+    });
+  }
+};
+
+const _getAuthHeaders = (config: BackendConfig): Record<string, string> => {
   const headers: Record<string, string> = {};
-  const token = _getToken();
+  const token = config.meetingDetails?.token;
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
@@ -95,6 +171,7 @@ const _getAuthHeaders = (): Record<string, string> => {
 
 // Helper function to upload files using Multer
 const uploadFilesWithMulter = async (
+  config: BackendConfig,
   prefix: string,
   files: { id: FileId; buffer: Uint8Array }[],
 ): Promise<{ savedFiles: FileId[]; erroredFiles: FileId[] }> => {
@@ -102,9 +179,8 @@ const uploadFilesWithMulter = async (
     return { savedFiles: [], erroredFiles: [] };
   }
 
-  const api = _getBackendApi();
-  const meetingDetails = _getMeetingDetails();
-  const baseUrl = `${api.baseUrl}${api.apiPrefix}`;
+  const meetingDetails = config.meetingDetails;
+  const baseUrl = `${config.baseUrl}${config.apiPrefix}`;
 
   if (!meetingDetails?.sessionId || !meetingDetails?.roomJid) {
     throw new Error("Missing required meeting details (sessionId or roomJid)");
@@ -135,29 +211,41 @@ const uploadFilesWithMulter = async (
 
       const response = await fetch(url, {
         method: "POST",
-        headers: _getAuthHeaders(),
+        headers: _getAuthHeaders(config),
         body: formData,
       });
 
       if (!response.ok) {
         const text = await response.text().catch(() => "");
-        console.error(
-          `Upload failed for file ${id}: ${response.status} ${response.statusText} ${text}`,
-        );
+        _reportFileError(config.onFileError, {
+          op: "upload",
+          fileId: id,
+          status: response.status,
+          message: `${response.statusText} ${text}`.trim(),
+        });
         erroredFiles.push(id);
         continue;
       }
 
       const result = await response.json().catch(() => null);
       if (!result) {
-        console.error(`Invalid response for file ${id}`);
+        _reportFileError(config.onFileError, {
+          op: "upload",
+          fileId: id,
+          status: response.status,
+          message: "Invalid response",
+        });
         erroredFiles.push(id);
         continue;
       }
 
       savedFiles.push(id);
     } catch (error) {
-      console.error(`Error uploading file ${id}:`, error);
+      _reportFileError(config.onFileError, {
+        op: "upload",
+        fileId: id,
+        message: _errMessage(error),
+      });
       erroredFiles.push(id);
     }
   }
@@ -167,6 +255,7 @@ const uploadFilesWithMulter = async (
 
 // Helper function to download files
 const downloadFilesFromBackend = async (
+  config: BackendConfig,
   prefix: string,
   fileIds: readonly FileId[],
 ) => {
@@ -175,9 +264,8 @@ const downloadFilesFromBackend = async (
     return { loadedFiles: [], erroredFiles: [] };
   }
 
-  const api = _getBackendApi();
-  const baseUrl = `${api.baseUrl}${api.apiPrefix}`;
-  const meetingDetails = _getMeetingDetails();
+  const baseUrl = `${config.baseUrl}${config.apiPrefix}`;
+  const meetingDetails = config.meetingDetails;
 
   if (!meetingDetails?.sessionId || !meetingDetails?.roomJid) {
     throw new Error("Missing required meeting details (sessionId or roomJid)");
@@ -185,50 +273,44 @@ const downloadFilesFromBackend = async (
   const loadedFiles: Array<{ id: FileId; buffer: Uint8Array }> = [];
   const erroredFiles: FileId[] = [];
 
-  const headers = _getAuthHeaders();
+  const headers = _getAuthHeaders(config);
 
   await Promise.all(
     [...new Set(fileIds)].map(async (id) => {
       try {
+        // Read the bytes from our own API, not a presigned object-store URL.
+        // These files are ciphertext, so JS must read the response body — and the
+        // bucket's endpoint type cannot hold a CORS policy, so a cross-origin
+        // body read can never succeed.
         const encodedFileId = encodeURIComponent(`${prefix}/${id}`);
-        const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files/${encodedFileId}`;
+        const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files/${encodedFileId}/content`;
         const response = await fetch(url, {
           method: "GET",
           headers,
         });
 
         if (response.ok) {
-          // Backend returns { presignedUrl, fileName } - fetch the actual file from S3
-          const data = await response.json();
-          if (!data.presignedUrl) {
-            console.error(`No presigned URL returned for file ${id}`);
-            erroredFiles.push(id);
-            return;
-          }
-
-          const fileResponse = await fetch(data.presignedUrl);
-          if (!fileResponse.ok) {
-            console.error(
-              `Failed to download file from S3: ${id}, Status: ${fileResponse.status}`,
-            );
-            erroredFiles.push(id);
-            return;
-          }
-
-          const arrayBuffer = await fileResponse.arrayBuffer();
+          const arrayBuffer = await response.arrayBuffer();
           loadedFiles.push({
             id,
             buffer: new Uint8Array(arrayBuffer),
           });
         } else {
           erroredFiles.push(id);
-          console.error(
-            `Failed to download file: ${id}, Status: ${response.status}`,
-          );
+          _reportFileError(config.onFileError, {
+            op: "download",
+            fileId: id,
+            status: response.status,
+            message: response.statusText,
+          });
         }
       } catch (error) {
         erroredFiles.push(id);
-        console.error(`Error downloading file ${id}:`, error);
+        _reportFileError(config.onFileError, {
+          op: "download",
+          fileId: id,
+          message: _errMessage(error),
+        });
       }
     }),
   );
@@ -279,24 +361,44 @@ export const isSavedToStorage = (
 export const saveFilesToStorage = async ({
   prefix,
   files,
+  roomId,
 }: {
   prefix: string;
   files: { id: FileId; buffer: Uint8Array }[];
+  /** The collab room whose backend config owns these files. */
+  roomId?: string | null;
 }) => {
   if (!files || files.length === 0) {
     return { savedFiles: [], erroredFiles: [] };
+  }
+
+  const config = _getBackendConfig(roomId);
+
+  // No backend was armed for this surface — stay silent rather than firing
+  // requests under a prefix nothing owns.
+  if (!config) {
+    _reportUnarmedBackend(
+      roomId,
+      "upload",
+      files.map(({ id }) => id),
+    );
+
+    return { savedFiles: [], erroredFiles: files.map(({ id }) => id) };
   }
 
   const erroredFiles: FileId[] = [];
   const savedFiles: FileId[] = [];
 
   try {
-    const result = await uploadFilesWithMulter(prefix, files);
+    const result = await uploadFilesWithMulter(config, prefix, files);
 
     savedFiles.push(...(result.savedFiles || []));
     erroredFiles.push(...(result.erroredFiles || []));
   } catch (error) {
-    console.error("Error uploading files to backend:", error);
+    _reportFileError(config.onFileError, {
+      op: "upload",
+      message: _errMessage(error),
+    });
     // Mark all files as errored if the API call fails
     files.forEach(({ id }) => erroredFiles.push(id));
   }
@@ -401,12 +503,12 @@ const notifyArchive = (event: SceneArchiveEvent) => {
  * they would all read-modify-write one object with no locking — upstream leaned
  * on Firebase transactions, which this backend has none of.
  */
-const _canPersistScene = (): boolean => {
-  const meetingDetails = _getMeetingDetails();
+const _canPersistScene = (roomId?: string | null): boolean => {
+  const meetingDetails = _getBackendConfig(roomId)?.meetingDetails;
 
   return Boolean(
     meetingDetails?.sessionId &&
-      _getToken() &&
+      meetingDetails.token &&
       meetingDetails.canPersistScene === true,
   );
 };
@@ -419,7 +521,8 @@ const _canPersistScene = (): boolean => {
  * caller has deep-cloned the entire element array — which every non-writer in
  * the meeting was doing, on its own main thread, while people draw.
  */
-export const canPersistScene = (): boolean => _canPersistScene();
+export const canPersistScene = (roomId?: string | null): boolean =>
+  _canPersistScene(roomId);
 
 /**
  * `…/sessions/<id>/files` — the session's file collection, or null pre-init.
@@ -433,15 +536,15 @@ export const canPersistScene = (): boolean => _canPersistScene();
  * saved. Rooms with no encodable character were unaffected, which is why this
  * survived: it only breaks rooms with spaces in the name.
  */
-const _sessionFilesUrl = (): string | null => {
-  const meetingDetails = _getMeetingDetails();
+const _sessionFilesUrl = (roomId?: string | null): string | null => {
+  const config = _getBackendConfig(roomId);
+  const sessionId = config?.meetingDetails?.sessionId;
 
-  if (!meetingDetails?.sessionId) {
+  if (!config || !sessionId) {
     return null;
   }
-  const api = _getBackendApi();
 
-  return `${api.baseUrl}${api.apiPrefix}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files`;
+  return `${config.baseUrl}${config.apiPrefix}/sessions/${encodeURIComponent(sessionId)}/files`;
 };
 
 /**
@@ -459,11 +562,12 @@ type SceneReadResult =
   | { status: "error" };
 
 const getBackendDocument = async (
-  _roomId: string,
+  roomId: string,
 ): Promise<SceneReadResult> => {
-  const baseUrl = _sessionFilesUrl();
+  const config = _getBackendConfig(roomId);
+  const baseUrl = _sessionFilesUrl(roomId);
 
-  if (!baseUrl || !_getToken()) {
+  if (!config || !baseUrl || !config.meetingDetails?.token) {
     return { status: "error" };
   }
 
@@ -471,7 +575,7 @@ const getBackendDocument = async (
     // The backend answers with a presigned URL rather than the bytes.
     const response = await fetch(`${baseUrl}/${SCENE_FILE_ID}`, {
       method: "GET",
-      headers: _getAuthHeaders(),
+      headers: _getAuthHeaders(config),
     });
 
     // 404 is the ordinary "nothing archived yet" case. Anything else — 5xx, a
@@ -528,14 +632,15 @@ const getBackendDocument = async (
 const KEEPALIVE_MAX_BYTES = 56 * 1024;
 
 const setBackendDocument = async (
-  _roomId: string,
+  roomId: string,
   document: StoredScene,
   opts?: { final?: boolean },
 ): Promise<void> => {
-  const baseUrl = _sessionFilesUrl();
-  const meetingDetails = _getMeetingDetails();
+  const config = _getBackendConfig(roomId);
+  const baseUrl = _sessionFilesUrl(roomId);
+  const meetingDetails = config?.meetingDetails;
 
-  if (!baseUrl || !meetingDetails) {
+  if (!config || !baseUrl || !meetingDetails) {
     return;
   }
 
@@ -568,7 +673,7 @@ const setBackendDocument = async (
   // nobody gets a second chance at. `keepalive` lets it outlive the page.
   const response = await fetch(baseUrl, {
     method: "POST",
-    headers: _getAuthHeaders(),
+    headers: _getAuthHeaders(config),
     body: formData,
     keepalive: Boolean(opts?.final) && blob.size <= KEEPALIVE_MAX_BYTES,
   });
@@ -722,6 +827,8 @@ export const loadFilesFromStorage = async (
   prefix: string,
   decryptionKey: string,
   filesIds: readonly FileId[],
+  /** The collab room whose backend config owns these files. */
+  roomId?: string | null,
 ) => {
   if (!filesIds || filesIds.length === 0) {
     return { loadedFiles: [], erroredFiles: new Map<FileId, true>() };
@@ -730,9 +837,19 @@ export const loadFilesFromStorage = async (
   const loadedFiles: BinaryFileData[] = [];
   const erroredFiles = new Map<FileId, true>();
 
+  const config = _getBackendConfig(roomId);
+
+  // No backend was armed for this surface — see `backendConfigs`. Report the
+  // ids as "not loaded" without issuing a request.
+  if (!config) {
+    _reportUnarmedBackend(roomId, "download", filesIds);
+    filesIds.forEach((id) => erroredFiles.set(id, true));
+    return { loadedFiles, erroredFiles };
+  }
+
   try {
     const { loadedFiles: downloadedFiles, erroredFiles: downloadErrors } =
-      await downloadFilesFromBackend(prefix, filesIds);
+      await downloadFilesFromBackend(config, prefix, filesIds);
 
     await Promise.all(
       downloadedFiles.map(async ({ id, buffer }) => {
@@ -755,7 +872,11 @@ export const loadFilesFromStorage = async (
           });
         } catch (error) {
           erroredFiles.set(id as FileId, true);
-          console.error("Error processing file:", id, error);
+          _reportFileError(config.onFileError, {
+            op: "decrypt",
+            fileId: id,
+            message: _errMessage(error),
+          });
         }
       }),
     );
@@ -766,7 +887,10 @@ export const loadFilesFromStorage = async (
     });
   } catch (error) {
     // Marking all files as errored if the API call fails
-    console.error("Error loading files from backend:", error);
+    _reportFileError(config.onFileError, {
+      op: "download",
+      message: _errMessage(error),
+    });
     filesIds.forEach((id) => erroredFiles.set(id, true));
   }
 

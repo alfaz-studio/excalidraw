@@ -61,6 +61,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     viewportRotation,
     elementAuthorId,
     protectForeignElements,
+    autoLockImages,
   } = props;
 
   const canvasActions = props.UIOptions?.canvasActions;
@@ -159,6 +160,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           viewportRotation={viewportRotation}
           elementAuthorId={elementAuthorId}
           protectForeignElements={protectForeignElements}
+          autoLockImages={autoLockImages}
         >
           {children}
         </App>
