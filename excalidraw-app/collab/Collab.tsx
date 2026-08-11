@@ -324,7 +324,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
         prev?.sessionId !== meetingDetails.sessionId)
     ) {
       try {
-        initializeBackend(this.portal.roomId, storageBackendUrl, meetingDetails);
+        initializeBackend(
+          this.portal.roomId,
+          storageBackendUrl,
+          meetingDetails,
+        );
       } catch (error) {
         console.error("Failed to re-initialize storage backend:", error);
       }
@@ -410,7 +414,9 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.queueSaveToFirebase.cancel();
 
     await this.saveCollabRoomToFirebase(
-      getSyncableElements(this.excalidrawAPI.getSceneElementsIncludingDeleted()),
+      getSyncableElements(
+        this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      ),
       // Not `final` (that buys keepalive for a save nobody can await) —
       // `flushed` tells the host this is the last one, so anything it derives
       // from the scene refreshes now or never.

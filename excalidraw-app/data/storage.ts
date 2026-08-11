@@ -192,7 +192,9 @@ const uploadFilesWithMulter = async (
   // Uploading sequentially
   for (const { id, buffer } of files) {
     try {
-      const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files`;
+      const url = `${baseUrl}/sessions/${encodeURIComponent(
+        meetingDetails.sessionId,
+      )}/files`;
 
       const fileMetaData = {
         conferenceFullName: meetingDetails.roomJid,
@@ -283,7 +285,9 @@ const downloadFilesFromBackend = async (
         // bucket's endpoint type cannot hold a CORS policy, so a cross-origin
         // body read can never succeed.
         const encodedFileId = encodeURIComponent(`${prefix}/${id}`);
-        const url = `${baseUrl}/sessions/${encodeURIComponent(meetingDetails.sessionId)}/files/${encodedFileId}/content`;
+        const url = `${baseUrl}/sessions/${encodeURIComponent(
+          meetingDetails.sessionId,
+        )}/files/${encodedFileId}/content`;
         const response = await fetch(url, {
           method: "GET",
           headers,
@@ -456,9 +460,7 @@ let sceneFlushHandler: (() => Promise<void>) | null = null;
  * @param {Function|null} handler - Performs a final save; null to unregister.
  * @returns {void}
  */
-export const setSceneFlushHandler = (
-  handler: (() => Promise<void>) | null,
-) => {
+export const setSceneFlushHandler = (handler: (() => Promise<void>) | null) => {
   sceneFlushHandler = handler;
 };
 
@@ -544,7 +546,9 @@ const _sessionFilesUrl = (roomId?: string | null): string | null => {
     return null;
   }
 
-  return `${config.baseUrl}${config.apiPrefix}/sessions/${encodeURIComponent(sessionId)}/files`;
+  return `${config.baseUrl}${config.apiPrefix}/sessions/${encodeURIComponent(
+    sessionId,
+  )}/files`;
 };
 
 /**
@@ -561,9 +565,7 @@ type SceneReadResult =
   | { status: "absent" }
   | { status: "error" };
 
-const getBackendDocument = async (
-  roomId: string,
-): Promise<SceneReadResult> => {
+const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
   const config = _getBackendConfig(roomId);
   const baseUrl = _sessionFilesUrl(roomId);
 
