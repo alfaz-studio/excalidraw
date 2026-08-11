@@ -505,7 +505,7 @@ const notifyArchive = (event: SceneArchiveEvent) => {
  * they would all read-modify-write one object with no locking — upstream leaned
  * on Firebase transactions, which this backend has none of.
  */
-const _canPersistScene = (roomId?: string | null): boolean => {
+const _canPersistScene = (roomId: string | null | undefined): boolean => {
   const meetingDetails = _getBackendConfig(roomId)?.meetingDetails;
 
   return Boolean(
@@ -523,7 +523,7 @@ const _canPersistScene = (roomId?: string | null): boolean => {
  * caller has deep-cloned the entire element array — which every non-writer in
  * the meeting was doing, on its own main thread, while people draw.
  */
-export const canPersistScene = (roomId?: string | null): boolean =>
+export const canPersistScene = (roomId: string | null | undefined): boolean =>
   _canPersistScene(roomId);
 
 /**
@@ -538,7 +538,7 @@ export const canPersistScene = (roomId?: string | null): boolean =>
  * saved. Rooms with no encodable character were unaffected, which is why this
  * survived: it only breaks rooms with spaces in the name.
  */
-const _sessionFilesUrl = (roomId?: string | null): string | null => {
+const _sessionFilesUrl = (roomId: string | null | undefined): string | null => {
   const config = _getBackendConfig(roomId);
   const sessionId = config?.meetingDetails?.sessionId;
 
@@ -710,7 +710,7 @@ export const saveToStorage = async (
   // what is already stored ahead of a write, so for them it would be a full
   // scene download every throttle tick, thrown away — and marking the version
   // cache afterwards would claim elements were saved that never were.
-  if (!_canPersistScene()) {
+  if (!_canPersistScene(roomId)) {
     return null;
   }
 
