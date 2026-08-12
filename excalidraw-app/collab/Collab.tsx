@@ -63,6 +63,7 @@ import {
   LOAD_IMAGES_TIMEOUT,
   WS_SUBTYPES,
   SYNC_FULL_SCENE_INTERVAL_MS,
+  VISIBILITY_FLUSH_MIN_INTERVAL_MS,
   WS_EVENTS,
 } from "../app_constants";
 import {
@@ -83,6 +84,8 @@ import {
   saveFilesToStorage,
   saveToStorage,
   initializeBackend,
+  setSceneFlushHandler,
+  canPersistScene,
   releaseBackend,
 } from "../data/storage";
 import {
@@ -143,6 +146,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   idleTimeoutId: number | null;
 
   private socketInitializationTimer?: number;
+  private lastVisibilityFlush = 0;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
@@ -244,6 +248,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     window.addEventListener("offline", this.onOfflineStatusToggle);
     window.addEventListener(EVENT.UNLOAD, this.onUnload);
 
+    // Lets the host archive the board and WAIT for it before it navigates away
+    // — the only way to beat the keepalive size cap, which silently drops the
+    // last edits of any board over 56 KiB.
+    setSceneFlushHandler(this.flushSceneNow);
+
     const unsubOnUserFollow = this.excalidrawAPI.onUserFollow((payload) => {
       this.portal.socket && this.portal.broadcastUserFollowed(payload);
     });
@@ -290,7 +299,44 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     appJotaiStore.set(isOfflineAtom, !window.navigator.onLine);
   };
 
+  componentDidUpdate(prevProps: CollabProps) {
+    // The storage backend was configured ONCE when collaboration started, from
+    // whatever meetingDetails existed at that instant. Two things change after
+    // it, and both were being ignored:
+    //
+    // - `token`. It is fetched asynchronously once the board opens, so at
+    //   startCollaboration it is frequently still empty — and the init is
+    //   gated on it. Without this the backend stayed uninitialised for the
+    //   WHOLE meeting and nothing was ever archived, silently.
+    // - `canPersistScene`. The writer is elected from the participant list, so
+    //   it flips when the elected writer leaves or roles change. A stale copy
+    //   leaves the room with no writer at all.
+    const { storageBackendUrl, meetingDetails } = this.props;
+    const prev = prevProps.meetingDetails;
+
+    if (
+      this.portal.roomId &&
+      storageBackendUrl &&
+      meetingDetails?.sessionId &&
+      meetingDetails.token &&
+      (prev?.token !== meetingDetails.token ||
+        prev?.canPersistScene !== meetingDetails.canPersistScene ||
+        prev?.sessionId !== meetingDetails.sessionId)
+    ) {
+      try {
+        initializeBackend(
+          this.portal.roomId,
+          storageBackendUrl,
+          meetingDetails,
+        );
+      } catch (error) {
+        console.error("Failed to re-initialize storage backend:", error);
+      }
+    }
+  }
+
   componentWillUnmount() {
+    setSceneFlushHandler(null);
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
     window.removeEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
@@ -335,9 +381,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       (this.fileManager.shouldPreventUnload(syncableElements) ||
         !isSavedToStorage(this.portal, syncableElements))
     ) {
-      // this won't run in time if user decides to leave the site, but
-      //  the purpose is to run in immediately after user decides to stay
-      this.saveCollabRoomToFirebase(syncableElements);
+      // Marked final so the upload goes out with `keepalive` and can outlive the
+      // page — otherwise leaving at the confirm dialog cancels it mid-flight and
+      // the last edits are gone. Still best-effort above the keepalive size cap,
+      // which is what preventUnload below is for.
+      this.saveCollabRoomToFirebase(syncableElements, { final: true });
 
       if (import.meta.env.VITE_APP_DISABLE_PREVENT_UNLOAD !== "true") {
         preventUnload(event);
@@ -349,15 +397,54 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
   });
 
+  /**
+   * Archives the board and resolves once the upload has settled.
+   *
+   * Deliberately NOT `{ final: true }`: `final` exists to buy `keepalive` for a
+   * save that cannot be awaited, and it is capped at 56 KiB. Here the page is
+   * still alive precisely because the host is awaiting us, so an ordinary
+   * request is both unbounded in size and actually observable.
+   *
+   * The pending throttled save is cancelled first so it cannot fire a second,
+   * older write behind this one.
+   *
+   * @returns {Promise<void>} Resolves when the save settles.
+   */
+  flushSceneNow = async (): Promise<void> => {
+    this.queueSaveToFirebase.cancel();
+
+    await this.saveCollabRoomToFirebase(
+      getSyncableElements(
+        this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      ),
+      // Not `final` (that buys keepalive for a save nobody can await) —
+      // `flushed` tells the host this is the last one, so anything it derives
+      // from the scene refreshes now or never.
+      { flushed: true },
+    );
+  };
+
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
+    opts?: { final?: boolean; flushed?: boolean },
   ) => {
-    syncableElements = cloneJSON(syncableElements);
+    // The clone protects the array from mutation across the await below, which
+    // only matters if there IS a write. `saveToStorage` bails non-writers out
+    // before it touches anything, so in a ten-person meeting nine clients were
+    // deep-copying the whole element array every tick purely to discard it,
+    // each blocking its own main thread while people draw.
+    //
+    // Only the copy is skipped — everything downstream still runs exactly as
+    // before, including the post-save error-indicator reset.
+    syncableElements = canPersistScene(this.portal.roomId)
+      ? cloneJSON(syncableElements)
+      : syncableElements;
     try {
       const storedElements = await saveToStorage(
         this.portal,
         syncableElements,
         this.excalidrawAPI.getAppState(),
+        opts,
       );
 
       this.resetErrorIndicator();
@@ -380,10 +467,13 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.loadImageFiles.cancel();
     this.resetErrorIndicator(true);
 
+    // Final: leaving a meeting usually navigates the page away immediately
+    // after this, which would cancel an ordinary in-flight upload.
     this.saveCollabRoomToFirebase(
       getSyncableElements(
         this.excalidrawAPI.getSceneElementsIncludingDeleted(),
       ),
+      { final: true },
     );
 
     if (this.portal.socket && this.fallbackInitializationHandler) {
@@ -911,6 +1001,21 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   private onVisibilityChange = () => {
     if (document.hidden) {
+      // A hidden tab is the last reliable signal before a page we never get an
+      // unload from — the mobile/bfcache path in particular.
+      //
+      // Rate-limited because this fires at USER frequency, not the 20s throttle:
+      // alt-tabbing while drawing would otherwise force a full cycle per hide
+      // (scene read, reconcile, write). The case this exists for — a hide that
+      // precedes a page we never hear from again — is unaffected, since that
+      // hide is the first one after any recent save.
+      const now = Date.now();
+
+      if (now - this.lastVisibilityFlush >= VISIBILITY_FLUSH_MIN_INTERVAL_MS) {
+        this.lastVisibilityFlush = now;
+        this.queueSaveToFirebase.flush();
+      }
+
       if (this.idleTimeoutId) {
         window.clearTimeout(this.idleTimeoutId);
         this.idleTimeoutId = null;

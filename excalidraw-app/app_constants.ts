@@ -4,6 +4,11 @@ export const INITIAL_SCENE_UPDATE_TIMEOUT = 5000;
 export const FILE_UPLOAD_TIMEOUT = 300;
 export const LOAD_IMAGES_TIMEOUT = 500;
 export const SYNC_FULL_SCENE_INTERVAL_MS = 20000;
+// Floor between saves forced by the tab being hidden. That fires at user
+// frequency, so without a floor alt-tabbing mid-drawing drives a full save
+// cycle per hide. Below SYNC_FULL_SCENE_INTERVAL_MS on purpose: the point is to
+// catch a page we may never hear from again, not to match the throttle.
+export const VISIBILITY_FLUSH_MIN_INTERVAL_MS = 5000;
 export const SYNC_BROWSER_TABS_TIMEOUT = 50;
 export const CURSOR_SYNC_TIMEOUT = 33; // ~30fps
 export const STALE_COLLABORATOR_TIMEOUT_MS = 120_000; // 2× IDLE_THRESHOLD — must outlive idle gap
