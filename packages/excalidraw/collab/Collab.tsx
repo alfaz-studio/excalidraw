@@ -144,6 +144,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
   private socketInitializationTimer?: number;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
+
+  /** A stored scene whose reconcile is waiting for the current stroke to finish. */
+  private pendingStoredScene: readonly ExcalidrawElement[] | null = null;
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
@@ -439,7 +442,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.resetErrorIndicator();
 
       if (this.isCollaborating()) {
-        this.handleRemoteSceneUpdate(this._reconcileElements(storedElements));
+        this.applyStoredScene(storedElements);
       }
     } catch (error) {
       console.error("Failed to save collab room:", error);
@@ -506,6 +509,10 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
     this.collaboratorLastSeen.clear();
     this.lastBroadcastedOrReceivedSceneVersion = -1;
+
+    // Belongs to the room being torn down; carried into the next one it would merge a
+    // previous board into it.
+    this.pendingStoredScene = null;
     this.portal.close();
     this.fileManager.reset();
     if (!opts?.isUnload) {
@@ -1045,6 +1052,48 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     });
   }, LOAD_IMAGES_TIMEOUT);
 
+  /**
+   * Whether the user is mid-interaction — drawing, resizing or dragging.
+   *
+   * `updateScene` replaces the scene wholesale, and doing that during a pointer interaction
+   * discards Excalidraw's in-flight `newElement`: the stroke being drawn vanishes locally
+   * while every peer keeps the broadcast copy. Silent, and unrecoverable for that stroke.
+   */
+  private isInteracting = () => {
+    const {
+      cursorButton,
+      newElement,
+      resizingElement,
+      selectedElementsAreBeingDragged,
+    } = this.excalidrawAPI.getAppState();
+
+    return (
+      cursorButton === "down" ||
+      !!newElement ||
+      !!resizingElement ||
+      selectedElementsAreBeingDragged
+    );
+  };
+
+  /**
+   * Merges what storage holds into the live scene, waiting for the pen to lift.
+   *
+   * The RAW stored elements are held rather than the reconciled result, and the reconcile is
+   * re-run at flush time: `_reconcileElements` reads the local scene when it is called, so
+   * re-running it merges against whatever has been drawn since by version. Applying a stale
+   * reconciled snapshot instead would drop those strokes — trading one bug for a worse one.
+   */
+  private applyStoredScene = (stored: readonly ExcalidrawElement[]) => {
+    if (this.isInteracting()) {
+      this.pendingStoredScene = stored;
+
+      return;
+    }
+
+    this.pendingStoredScene = null;
+    this.handleRemoteSceneUpdate(this._reconcileElements(stored));
+  };
+
   private handleRemoteSceneUpdate = (
     elements: ReconciledExcalidrawElement[],
   ) => {
@@ -1234,6 +1283,14 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
   syncElements = (elements: readonly OrderedExcalidrawElement[]) => {
     this.broadcastElements(elements);
+
+    // The flush point for a reconcile deferred past a stroke. `syncElements` runs on every
+    // scene change, and lifting the pen finalises the element — so the first change after the
+    // interaction ends lands here.
+    if (this.pendingStoredScene) {
+      this.applyStoredScene(this.pendingStoredScene);
+    }
+
     this.queueSaveToFirebase();
   };
 
