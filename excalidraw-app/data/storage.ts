@@ -419,6 +419,17 @@ export const saveFilesToStorage = async ({
  */
 const SCENE_FILE_ID = "whiteboard.excalidraw";
 
+/**
+ * The object name this room archives its scene under.
+ *
+ * Per room, not global: a surface may hold several scenes at once (the document tab keeps one
+ * board per page, each its own collab room), and they would otherwise share one object and
+ * overwrite each other. Falls back to the whiteboard's fixed name, so a caller that sets
+ * nothing behaves exactly as before.
+ */
+const _sceneFileId = (roomId: string): string =>
+  _getBackendConfig(roomId)?.meetingDetails?.sceneFileId || SCENE_FILE_ID;
+
 /** What happened to the archived scene, for the host to surface to the user. */
 export type SceneArchiveEvent =
   /** `final` marks the save the host asked for on the way out, as opposed to a
@@ -575,7 +586,7 @@ const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
 
   try {
     // The backend answers with a presigned URL rather than the bytes.
-    const response = await fetch(`${baseUrl}/${SCENE_FILE_ID}`, {
+    const response = await fetch(`${baseUrl}/${_sceneFileId(roomId)}`, {
       method: "GET",
       headers: _getAuthHeaders(config),
     });
@@ -662,12 +673,12 @@ const setBackendDocument = async (
     "metadata",
     JSON.stringify({
       conferenceFullName: meetingDetails.roomJid,
-      fileId: SCENE_FILE_ID,
+      fileId: _sceneFileId(roomId),
       fileSize: blob.size,
       timestamp: Date.now(),
     }),
   );
-  formData.append("file", blob, SCENE_FILE_ID);
+  formData.append("file", blob, _sceneFileId(roomId));
 
   // The last save of a meeting races the page going away: both `beforeUnload`
   // and `stopCollaboration` fire it without awaiting, and an ordinary fetch in

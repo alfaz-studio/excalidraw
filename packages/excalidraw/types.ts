@@ -771,6 +771,16 @@ export interface IMeetingDetails {
   jid?: string;
   token?: string;
   sceneType?: "whiteboard" | "annotation";
+
+  /**
+   * Object name the scene is archived under, within the session's file space.
+   *
+   * Defaults to the whiteboard's fixed name, which is a cross-repo contract the
+   * dashboard reads by. A surface that can have SEVERAL scenes alive at once —
+   * a document with one board per page — must set its own, or every page writes
+   * over the same object and the last save wins.
+   */
+  sceneFileId?: string;
   /**
    * Whether THIS participant archives the scene to the storage backend.
    *
