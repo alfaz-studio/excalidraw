@@ -563,22 +563,33 @@ const _sessionFilesUrl = (roomId: string | null | undefined): string | null => {
 type SceneReadResult =
   | { status: "found"; scene: StoredScene }
   | { status: "absent" }
-  | { status: "error" };
+  /** `reason` distinguishes the ways a read can fail. They all gate the write
+   *  identically, but they reach the user's telemetry as one message otherwise,
+   *  which cost a log join to tell "the request failed" from "the body was not a
+   *  scene". */
+  | { status: "error"; reason: string };
 
 const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
   const config = _getBackendConfig(roomId);
   const baseUrl = _sessionFilesUrl(roomId);
 
   if (!config || !baseUrl || !config.meetingDetails?.token) {
-    return { status: "error" };
+    return { status: "error", reason: "no-backend-config" };
   }
 
   try {
-    // The backend answers with a presigned URL rather than the bytes.
-    const response = await fetch(`${baseUrl}/${SCENE_FILE_ID}`, {
-      method: "GET",
-      headers: _getAuthHeaders(config),
-    });
+    // Read the bytes from our own API, exactly as the image loader above does
+    // and for the same reason: the presigned route hands back an object-store
+    // URL, and reading THAT body in JS needs a CORS header the bucket's
+    // endpoint type cannot be given. It fails on every board that has already
+    // been archived once, which is every board after its first save.
+    const response = await fetch(
+      `${baseUrl}/${encodeURIComponent(SCENE_FILE_ID)}/content`,
+      {
+        method: "GET",
+        headers: _getAuthHeaders(config),
+      },
+    );
 
     // 404 is the ordinary "nothing archived yet" case. Anything else — 5xx, a
     // gateway timeout, an expired token — leaves us unable to say.
@@ -586,20 +597,10 @@ const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
       return { status: "absent" };
     }
     if (!response.ok) {
-      return { status: "error" };
+      return { status: "error", reason: `http-${response.status}` };
     }
 
-    const data = await response.json();
-    if (!data?.presignedUrl) {
-      return { status: "error" };
-    }
-
-    const sceneResponse = await fetch(data.presignedUrl);
-    if (!sceneResponse.ok) {
-      return { status: "error" };
-    }
-
-    const scene = await sceneResponse.json();
+    const scene = await response.json();
 
     // An object that exists but is not a scene cannot be reconciled against and
     // is not worth preserving — overwriting it is the repair.
@@ -619,7 +620,7 @@ const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
   } catch (error) {
     console.error("Failed to load whiteboard scene from storage:", error);
 
-    return { status: "error" };
+    return { status: "error", reason: "fetch-threw" };
   }
 };
 
@@ -744,7 +745,7 @@ export const saveToStorage = async (
     // next one retries, and the user is told so they can save to disk.
     if (snapshot.status === "error") {
       const error = new Error(
-        "Whiteboard archive skipped: could not read the stored scene",
+        `Whiteboard archive skipped: could not read the stored scene (${snapshot.reason})`,
       );
 
       notifyArchive({ status: "failed", error });
@@ -799,7 +800,9 @@ export const loadFromStorage = async (
   if (result.status === "error") {
     notifyArchive({
       status: "failed",
-      error: new Error("Could not load the archived whiteboard"),
+      error: new Error(
+        `Could not load the archived whiteboard (${result.reason})`,
+      ),
     });
 
     return null;
