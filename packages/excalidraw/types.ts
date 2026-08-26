@@ -49,6 +49,8 @@ import type {
 } from "@excalidraw/element";
 import type { GlobalPoint } from "@excalidraw/math";
 
+import type { CollabAPI } from "./collab/Collab";
+
 import type { Action } from "./actions/types";
 import type { Spreadsheet } from "./charts";
 import type { ClipboardData } from "./clipboard";
@@ -753,6 +755,24 @@ export interface ExcalidrawCollabProps extends CollabTransportProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
   useTestEnv?: boolean;
 
+  /**
+   * SONACOVE: hands this instance's API to the app that rendered it.
+   *
+   * `collabAPIAtom` cannot serve that purpose: it is module-level and every mounted Collab
+   * overwrites it, so with more than one board on the page — the whiteboard stays mounted
+   * behind a visibility swap while the document tab mounts its own layer — it names whichever
+   * mounted last. Everyone else then talks to that one.
+   */
+  onCollabAPI?: (api: CollabAPI) => void;
+
+  /**
+   * SONACOVE: fired once the room's transport is attached, which is when edits start
+   * broadcasting — well before `startCollaboration` resolves, since that additionally waits
+   * out the peer-presence window and the stored-scene fetch. A surface that tells the user
+   * whether their marks are shared has to distinguish the two.
+   */
+  onRoomOpen?: (roomId: string) => void;
+
   // SONACOVE: mirrors ExcalidrawProps.elementAuthorId — the collab layer stamps
   // it onto outgoing elements. See elementOwnership.ts.
   elementAuthorId?: string;
@@ -762,6 +782,9 @@ export interface ExcalidrawAppProps extends CollabTransportProps {
   excalidraw: ExcalidrawProps;
   getExcalidrawAPI?: Function;
   getCollabAPI?: Function;
+
+  /** SONACOVE: forwarded to Collab — see `ExcalidrawCollabProps.onRoomOpen`. */
+  onRoomOpen?: (roomId: string) => void;
 }
 
 export interface IMeetingDetails {
@@ -771,6 +794,16 @@ export interface IMeetingDetails {
   jid?: string;
   token?: string;
   sceneType?: "whiteboard" | "annotation";
+
+  /**
+   * Object name the scene is archived under, within the session's file space.
+   *
+   * Defaults to the whiteboard's fixed name, which is a cross-repo contract the
+   * dashboard reads by. A surface that can have SEVERAL scenes alive at once —
+   * a document with one board per page — must set its own, or every page writes
+   * over the same object and the last save wins.
+   */
+  sceneFileId?: string;
   /**
    * Whether THIS participant archives the scene to the storage backend.
    *

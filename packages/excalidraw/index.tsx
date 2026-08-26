@@ -346,7 +346,7 @@ export { generateCollaborationLinkData } from "../../excalidraw-app/data/index";
 // Scene-archive outcomes, for a host that wants to tell the user their board is
 // kept (and, more importantly, when it is not). Same host-hook shape as
 // setFileSaveOverride above.
-export { setSceneArchiveListener } from "../../excalidraw-app/data/storage";
+export { addSceneArchiveListener } from "../../excalidraw-app/data/storage";
 export type { SceneArchiveEvent } from "../../excalidraw-app/data/storage";
 
 // Archive the board and WAIT for it. For a host that is about to navigate away

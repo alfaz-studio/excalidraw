@@ -419,17 +419,46 @@ export const saveFilesToStorage = async ({
  */
 const SCENE_FILE_ID = "whiteboard.excalidraw";
 
-/** What happened to the archived scene, for the host to surface to the user. */
-export type SceneArchiveEvent =
-  /** `final` marks the save the host asked for on the way out, as opposed to a
-   *  routine throttled tick. Anything the host derives from the scene — a
-   *  preview it otherwise rate-limits — must refresh on this one, because there
-   *  is no later save to correct it. */
-  | { status: "saved"; final?: boolean }
-  | { status: "restored" }
-  | { status: "failed"; error: unknown };
+/**
+ * The object name this room archives its scene under.
+ *
+ * Per room, not global: a surface may hold several scenes at once (the document tab keeps one
+ * board per page, each its own collab room), and they would otherwise share one object and
+ * overwrite each other. Falls back to the whiteboard's fixed name, so a caller that sets
+ * nothing behaves exactly as before.
+ */
+const _sceneFileIdFor = (config: BackendConfig | null): string =>
+  config?.meetingDetails?.sceneFileId || SCENE_FILE_ID;
 
-let sceneArchiveListener: ((event: SceneArchiveEvent) => void) | null = null;
+/**
+ * What happened to the archived scene, for the host to surface to the user.
+ *
+ * `sceneFileId` names WHICH scene. Several boards can be archiving at once — the whiteboard
+ * stays mounted behind a visibility swap while the document tab keeps one scene per page — and
+ * a listener that cannot tell them apart acts on another surface's outcome. It is the stable
+ * discriminator: `whiteboard.excalidraw` for the board, `pdfdoc-<hash>-<page>.excalidraw` for a
+ * document page.
+ */
+export type SceneArchiveEvent = {
+  sceneFileId: string;
+} & /** `final` marks the save the host asked for on the way out, as opposed to a
+ *  routine throttled tick. Anything the host derives from the scene — a
+ *  preview it otherwise rate-limits — must refresh on this one, because there
+ *  is no later save to correct it. */ (
+  | { status: "saved"; final?: boolean }
+  | { status: "restored"; savedAt?: number }
+  | { status: "failed"; error: unknown }
+);
+
+/**
+ * A SET, not a slot.
+ *
+ * One slot meant the last surface to mount silently unregistered the others — and since the
+ * events carried no identity, whichever listener survived also received outcomes belonging to
+ * boards it knew nothing about. The whiteboard's listener uploads a preview on every `saved`,
+ * so a document page's save would have uploaded a whiteboard thumbnail.
+ */
+const sceneArchiveListeners = new Set<(event: SceneArchiveEvent) => void>();
 
 /**
  * Registers a host callback for scene-archive outcomes.
@@ -442,10 +471,14 @@ let sceneArchiveListener: ((event: SceneArchiveEvent) => void) | null = null;
  * @param {Function|null} listener - Called on every outcome; null to unregister.
  * @returns {void}
  */
-export const setSceneArchiveListener = (
-  listener: ((event: SceneArchiveEvent) => void) | null,
+export const addSceneArchiveListener = (
+  listener: (event: SceneArchiveEvent) => void,
 ) => {
-  sceneArchiveListener = listener;
+  sceneArchiveListeners.add(listener);
+
+  return () => {
+    sceneArchiveListeners.delete(listener);
+  };
 };
 
 /**
@@ -491,10 +524,14 @@ export const flushSceneArchive = async (): Promise<void> => {
 
 /** Never let a host listener's failure break the save path. */
 const notifyArchive = (event: SceneArchiveEvent) => {
-  try {
-    sceneArchiveListener?.(event);
-  } catch (error) {
-    console.error("Scene archive listener threw:", error);
+  for (const listener of sceneArchiveListeners) {
+    try {
+      listener(event);
+    } catch (error) {
+      // Per listener: one host's bad callback must not deprive the others of the event, nor
+      // break the save path it is reporting on.
+      console.error("Scene archive listener threw:", error);
+    }
   }
 };
 
@@ -538,8 +575,8 @@ export const canPersistScene = (roomId: string | null | undefined): boolean =>
  * saved. Rooms with no encodable character were unaffected, which is why this
  * survived: it only breaks rooms with spaces in the name.
  */
-const _sessionFilesUrl = (roomId: string | null | undefined): string | null => {
-  const config = _getBackendConfig(roomId);
+/** The files endpoint for an ALREADY-RESOLVED config — see `setBackendDocument`'s `pinned`. */
+const _filesUrlFor = (config: BackendConfig | null): string | null => {
   const sessionId = config?.meetingDetails?.sessionId;
 
   if (!config || !sessionId) {
@@ -561,7 +598,7 @@ const _sessionFilesUrl = (roomId: string | null | undefined): string | null => {
  * nothing. That is how a blip wipes a term's worth of a recurring class's board.
  */
 type SceneReadResult =
-  | { status: "found"; scene: StoredScene }
+  | { status: "found"; scene: StoredScene; savedAt?: number }
   | { status: "absent" }
   /** `reason` distinguishes the ways a read can fail. They all gate the write
    *  identically, but they reach the user's telemetry as one message otherwise,
@@ -569,12 +606,35 @@ type SceneReadResult =
    *  scene". */
   | { status: "error"; reason: string };
 
-const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
-  const config = _getBackendConfig(roomId);
-  const baseUrl = _sessionFilesUrl(roomId);
+/**
+ * Rooms this client has read and found EMPTY, and has not written to since.
+ *
+ * Only the designated writer is recorded. It is the only client that can put a scene there, so
+ * its own "absent" answer stays true until it writes — no request can tell it anything it does
+ * not already know. Every other client keeps reading, because for them the answer can change
+ * under them at any time.
+ *
+ * This matters on a surface that switches rooms constantly: a document tab keeps one room per
+ * page, and most pages of most decks are never drawn on, so without this a reader paging
+ * through a deck issues a 404 per page per visit — for good measure, repeatedly, since
+ * revisiting a page reads it again.
+ */
+const knownEmptyRooms = new Set<string>();
+
+const getBackendDocument = async (
+  roomId: string,
+  /** See `setBackendDocument`'s `pinned` — the same teardown race applies to the read. */
+  pinned?: BackendConfig | null,
+): Promise<SceneReadResult> => {
+  const config = pinned ?? _getBackendConfig(roomId);
+  const baseUrl = _filesUrlFor(config);
 
   if (!config || !baseUrl || !config.meetingDetails?.token) {
     return { status: "error", reason: "no-backend-config" };
+  }
+
+  if (knownEmptyRooms.has(roomId)) {
+    return { status: "absent" };
   }
 
   try {
@@ -584,7 +644,7 @@ const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
     // endpoint type cannot be given. It fails on every board that has already
     // been archived once, which is every board after its first save.
     const response = await fetch(
-      `${baseUrl}/${encodeURIComponent(SCENE_FILE_ID)}/content`,
+      `${baseUrl}/${encodeURIComponent(_sceneFileIdFor(config))}/content`,
       {
         method: "GET",
         headers: _getAuthHeaders(config),
@@ -594,12 +654,23 @@ const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
     // 404 is the ordinary "nothing archived yet" case. Anything else — 5xx, a
     // gateway timeout, an expired token — leaves us unable to say.
     if (response.status === 404) {
+      // Remembered for the writer only — see `knownEmptyRooms`.
+      if (_canPersistScene(roomId)) {
+        knownEmptyRooms.add(roomId);
+      }
+
       return { status: "absent" };
     }
     if (!response.ok) {
       return { status: "error", reason: `http-${response.status}` };
     }
 
+    // The object's own mtime. Absent unless the content route forwards S3's
+    // `Last-Modified`; `savedAt` is optional precisely so a deployment that does
+    // not simply reports nothing rather than a wrong time.
+    const lastModified = Date.parse(
+      response.headers.get("last-modified") ?? "",
+    );
     const scene = await response.json();
 
     // An object that exists but is not a scene cannot be reconciled against and
@@ -615,6 +686,7 @@ const getBackendDocument = async (roomId: string): Promise<SceneReadResult> => {
     // Version is derived, never trusted from the file.
     return {
       status: "found",
+      savedAt: Number.isNaN(lastModified) ? undefined : lastModified,
       scene: { sceneVersion: getSceneVersion(elements), elements },
     };
   } catch (error) {
@@ -638,9 +710,24 @@ const setBackendDocument = async (
   roomId: string,
   document: StoredScene,
   opts?: { final?: boolean },
+  /**
+   * The config resolved when the save STARTED.
+   *
+   * A save is fired without being awaited — `stopCollaboration` does exactly that on the way
+   * out — and `destroySocketClient` releases the room's config a moment later. Re-resolving it
+   * here therefore finds nothing precisely on the final save of a session, and the write is
+   * skipped silently: no POST, no error, and the last edits of a meeting are lost. Passing the
+   * config the caller already holds removes that window.
+   */
+  pinned?: BackendConfig | null,
 ): Promise<void> => {
-  const config = _getBackendConfig(roomId);
-  const baseUrl = _sessionFilesUrl(roomId);
+  // The room is about to stop being empty, so the memo above no longer holds. Dropped before
+  // the write rather than after: a write that fails leaves the room in a state this client
+  // cannot vouch for, and re-reading is the safe answer.
+  knownEmptyRooms.delete(roomId);
+
+  const config = pinned ?? _getBackendConfig(roomId);
+  const baseUrl = _filesUrlFor(config);
   const meetingDetails = config?.meetingDetails;
 
   if (!config || !baseUrl || !meetingDetails) {
@@ -663,12 +750,12 @@ const setBackendDocument = async (
     "metadata",
     JSON.stringify({
       conferenceFullName: meetingDetails.roomJid,
-      fileId: SCENE_FILE_ID,
+      fileId: _sceneFileIdFor(config),
       fileSize: blob.size,
       timestamp: Date.now(),
     }),
   );
-  formData.append("file", blob, SCENE_FILE_ID);
+  formData.append("file", blob, _sceneFileIdFor(config));
 
   // The last save of a meeting races the page going away: both `beforeUnload`
   // and `stopCollaboration` fire it without awaiting, and an ordinary fetch in
@@ -696,6 +783,12 @@ export const saveToStorage = async (
   opts?: { final?: boolean; flushed?: boolean },
 ) => {
   const { roomId, roomKey, socket } = portal;
+
+  // Pinned for the whole save. `stopCollaboration` fires this without awaiting it and then
+  // tears the session down, and that teardown releases the room's config — so by the time the
+  // write runs, re-resolving would find nothing. That is precisely the FINAL save of a
+  // session, the one whose loss nobody gets a second chance at.
+  const pinnedConfig = _getBackendConfig(portal.roomId);
 
   // Check if missing required fields (error case)
   if (!roomId || !roomKey || !socket) {
@@ -737,7 +830,7 @@ export const saveToStorage = async (
   try {
     // Read-modify-write, not a transaction: the backend offers no compare-and-set,
     // which is exactly why there is a single designated writer above.
-    const snapshot = await getBackendDocument(roomId);
+    const snapshot = await getBackendDocument(roomId, pinnedConfig);
 
     // Could not read: refuse to write. Overwriting a scene we failed to read
     // would discard whatever it held — and this client's own copy may be the
@@ -748,7 +841,11 @@ export const saveToStorage = async (
         `Whiteboard archive skipped: could not read the stored scene (${snapshot.reason})`,
       );
 
-      notifyArchive({ status: "failed", error });
+      notifyArchive({
+        status: "failed",
+        error,
+        sceneFileId: _sceneFileIdFor(pinnedConfig),
+      });
 
       return null;
     }
@@ -770,6 +867,7 @@ export const saveToStorage = async (
       roomId,
       { sceneVersion: getSceneVersion(merged), elements: merged },
       opts,
+      pinnedConfig,
     );
 
     // Restored rather than returned as-is: `merged` may mutate in the meantime.
@@ -777,12 +875,20 @@ export const saveToStorage = async (
   } catch (error) {
     // Surfaced, not swallowed: the user believes the board is kept, and only
     // they can do anything about it (save it to disk before leaving).
-    notifyArchive({ status: "failed", error });
+    notifyArchive({
+      status: "failed",
+      error,
+      sceneFileId: _sceneFileIdFor(pinnedConfig),
+    });
     throw error;
   }
 
   StorageSceneVersionCache.set(socket, storedElements);
-  notifyArchive({ status: "saved", final: opts?.flushed });
+  notifyArchive({
+    status: "saved",
+    final: opts?.flushed,
+    sceneFileId: _sceneFileIdFor(pinnedConfig),
+  });
 
   return storedElements;
 };
@@ -803,6 +909,7 @@ export const loadFromStorage = async (
       error: new Error(
         `Could not load the archived whiteboard (${result.reason})`,
       ),
+      sceneFileId: _sceneFileIdFor(_getBackendConfig(roomId)),
     });
 
     return null;
@@ -818,7 +925,14 @@ export const loadFromStorage = async (
 
   // Content appearing on a board the user expected to be blank needs explaining.
   if (elements.length > 0) {
-    notifyArchive({ status: "restored" });
+    notifyArchive({
+      status: "restored",
+      // When the stored scene was last written, so a host can tell marks made before this
+      // meeting from marks made during it — the difference between "these were already here"
+      // and the ordinary case of a page you drew on a moment ago.
+      savedAt: result.savedAt,
+      sceneFileId: _sceneFileIdFor(_getBackendConfig(roomId)),
+    });
   }
 
   if (socket) {

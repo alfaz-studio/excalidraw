@@ -120,6 +120,7 @@ export interface CollabAPI {
   isCollaborating: () => boolean;
   onPointerUpdate: CollabInstance["onPointerUpdate"];
   startCollaboration: CollabInstance["startCollaboration"];
+  leaveRoom: CollabInstance["leaveRoom"];
   stopCollaboration: CollabInstance["stopCollaboration"];
   syncElements: CollabInstance["syncElements"];
   fetchImageFilesFromFirebase: CollabInstance["fetchImageFilesFromFirebase"];
@@ -144,6 +145,22 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
   private socketInitializationTimer?: number;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
+
+  /** A stored scene whose reconcile is waiting for the current stroke to finish. */
+  private pendingStoredScene: readonly ExcalidrawElement[] | null = null;
+
+  /**
+   * Bumped whenever a collab session starts or ends.
+   *
+   * Several paths fetch a scene and apply it after an await — the storage read on joining an
+   * empty room, the merge of a persisted scene when a peer sends nothing, the reconcile that
+   * follows a save. Each was written when a session lasted as long as the component did, so
+   * "am I still collaborating" was the same question as "is this still the session I fetched
+   * for". On a surface that switches rooms — a document tab keeps one per page — those come
+   * apart, and a fetch that lands after a page turn merges the previous page's marks into the
+   * one now on screen. Capture this before an await, compare after.
+   */
+  private sessionGeneration = 0;
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
@@ -278,6 +295,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       isCollaborating: this.isCollaborating,
       onPointerUpdate: this.onPointerUpdate,
       startCollaboration: this.startCollaboration,
+      leaveRoom: this.leaveRoom,
       syncElements: this.syncElements,
       fetchImageFilesFromFirebase: this.fetchImageFilesFromFirebase,
       stopCollaboration: this.stopCollaboration,
@@ -288,6 +306,10 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     };
 
     appJotaiStore.set(collabAPIAtom, collabAPI);
+
+    // The atom above is shared by every mounted board; this is how the app that rendered THIS
+    // one gets THIS one. See `onCollabAPI`.
+    this.props.onCollabAPI?.(collabAPI);
 
     if (this.props.useTestEnv) {
       window.collab = window.collab || ({} as Window["collab"]);
@@ -425,6 +447,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       return;
     }
 
+    const generation = this.sessionGeneration;
+
     try {
       const storedElements = await saveToStorage(
         this.portal,
@@ -438,15 +462,91 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
       this.resetErrorIndicator();
 
+      if (generation !== this.sessionGeneration) {
+        return;
+      }
+
       if (this.isCollaborating()) {
-        this.handleRemoteSceneUpdate(this._reconcileElements(storedElements));
+        this.applyStoredScene(storedElements);
       }
     } catch (error) {
       console.error("Failed to save collab room:", error);
     }
   };
 
+  /**
+   * Archives what is on the board for the room being left, and detaches from it.
+   *
+   * Split out of `stopCollaboration` so `leaveRoom` can leave a room WITHOUT the second
+   * archive a full stop would perform — that one runs after the caller has repainted, and
+   * would write the incoming page's marks into the outgoing page's storage.
+   *
+   * Every statement here is synchronous: the archive reads the scene as it stands now and
+   * hands it on by value, so a repaint immediately afterwards cannot corrupt it.
+   */
+  private archiveAndDetach = (opts: { keepCollaborating: boolean }) => {
+    this.queueBroadcastAllElements.cancel();
+    this.queueSaveToFirebase.cancel();
+    this.loadImageFiles.cancel();
+    this.resetErrorIndicator(true);
+
+    // Only what a room actually holds gets archived. Without a socket there is no room to
+    // write to and `saveToStorage` would bail anyway — but loudly, on `console.error`, which
+    // on a surface that leaves a room per page turn is a steady stream of alarming noise
+    // about a save that was never possible.
+    if (this.portal.socket) {
+      this.saveCollabRoomToFirebase(
+        getSyncableElements(
+          this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+        ),
+      );
+    }
+
+    if (this.portal.socket && this.fallbackInitializationHandler) {
+      this.portal.socket.off(
+        "connect_error",
+        this.fallbackInitializationHandler,
+      );
+    }
+
+    LocalData.fileStorage.reset();
+    this.destroySocketClient({ keepCollaborating: opts.keepCollaborating });
+  };
+
+  /**
+   * Leaves the current room — archiving what it holds — without ending the session.
+   *
+   * The half of a room change that has to happen AT the change. A surface that keeps one room
+   * per page joins on a debounce, so leaving and joining are deliberately separated in time;
+   * fusing them into one "switch" would archive the outgoing room 450ms late, by which point
+   * the board is showing the page that replaced it, and the wrong marks get written.
+   *
+   * ⚠️ Synchronous, and callers depend on that: it is what lets them repaint immediately
+   * afterwards. The archive reads the scene as it stands now, so the repaint cannot corrupt
+   * it, and with the room detached the repaint can be neither broadcast nor archived anywhere.
+   *
+   * Also the only way to abandon a join that is still in flight. `destroySocketClient` bumps
+   * the session generation, which `startCollaboration` re-checks once its transport connects —
+   * so a join whose page has since been turned away from closes its socket instead of opening
+   * a session on a room nobody is looking at any more.
+   *
+   * @param {object} opts - `keepCollaborating` when another room follows immediately, so the
+   * flag does not flap and re-commit the toolbar on every page turn.
+   * @returns {void}
+   */
+  leaveRoom = (opts?: { keepCollaborating?: boolean }) => {
+    this.archiveAndDetach({
+      keepCollaborating: opts?.keepCollaborating ?? false,
+    });
+  };
+
   stopCollaboration = (keepRemoteState = true) => {
+    if (!keepRemoteState) {
+      this.archiveAndDetach({ keepCollaborating: false });
+
+      return;
+    }
+
     this.queueBroadcastAllElements.cancel();
     this.queueSaveToFirebase.cancel();
     this.loadImageFiles.cancel();
@@ -465,10 +565,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       );
     }
 
-    if (!keepRemoteState) {
-      LocalData.fileStorage.reset();
-      this.destroySocketClient();
-    } else if (window.confirm(t("alerts.collabStopOverridePrompt"))) {
+    if (window.confirm(t("alerts.collabStopOverridePrompt"))) {
       // hack to ensure that we prefer we disregard any new browser state
       // that could have been saved in other tabs while we were collaborating
       resetBrowserStateVersions();
@@ -494,7 +591,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
   };
 
-  private destroySocketClient = (opts?: { isUnload: boolean }) => {
+  private destroySocketClient = (opts?: {
+    isUnload?: boolean;
+
+    /** Set by `leaveRoom`: the session continues in another room — see below. */
+    keepCollaborating?: boolean;
+  }) => {
     // Every teardown path funnels through here, and `portal.close()` below nulls
     // the roomId — so this is the only place the config is reliably released.
     releaseBackend(this.portal.roomId);
@@ -506,16 +608,28 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
     this.collaboratorLastSeen.clear();
     this.lastBroadcastedOrReceivedSceneVersion = -1;
+
+    // Belongs to the room being torn down — if carried into the next one, it would merge a
+    // stale board into it.
+    this.pendingStoredScene = null;
+    this.sessionGeneration++;
     this.portal.close();
     this.fileManager.reset();
     if (!opts?.isUnload) {
-      this.setIsCollaborating(false);
       this.setActiveRoomLink(null);
       this.collaborators = new Map();
       this.excalidrawAPI.updateScene({
         collaborators: this.collaborators,
       });
-      LocalData.resumeSave("collaboration");
+
+      // A switch re-joins in the same breath, so the session never actually ends. Dropping the
+      // flag and raising it again re-commits excalidraw's whole toolbar on every page turn —
+      // which is how a relocated laser button ended up duplicated once per turn — and churns
+      // React exactly while someone is flipping through a deck.
+      if (!opts?.keepCollaborating) {
+        this.setIsCollaborating(false);
+        LocalData.resumeSave("collaboration");
+      }
     }
   };
 
@@ -696,8 +810,22 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     try {
       const { meetingDetails } = this.props;
+      const generation = this.sessionGeneration;
+      const socket = await createSocket();
+
+      // The room was left while its transport was still connecting. Nothing checked this
+      // before, so the session opened anyway — on a surface that switches rooms, that meant a
+      // live socket on the page you had already turned away from, and the marks you drew next
+      // being broadcast and archived under it.
+      if (generation !== this.sessionGeneration) {
+        socket.close();
+        LocalData.resumeSave("collaboration");
+
+        return null;
+      }
+
       this.portal.socket = this.portal.open(
-        await createSocket(),
+        socket,
         roomId,
         roomKey,
         meetingDetails
@@ -711,6 +839,13 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       );
 
       this.flushPendingBackendConfig();
+
+      // The room is LIVE here — outgoing edits broadcast from this point. What still lies
+      // ahead is the SEED: waiting to learn whether anyone else is present, then two round
+      // trips for the stored scene. Callers that ask "are my marks reaching anyone" must be
+      // answered now and not when `startCollaboration` finally resolves, or they report a
+      // healthy session as unshared for well over a second.
+      this.props.onRoomOpen?.(roomId);
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
     } catch (error) {
@@ -891,10 +1026,18 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       if (this.portal.socket) {
         this.portal.socket.off("first-in-room");
       }
+      const generation = this.sessionGeneration;
       const sceneData = await this.initializeRoom({
         fetchScene: true,
         roomLinkData: existingRoomLinkData,
       });
+
+      // The room was left while its scene was being fetched — resolving now would seed the
+      // session that replaced it with this one's contents.
+      if (generation !== this.sessionGeneration) {
+        return;
+      }
+
       scenePromise.resolve(sceneData);
     });
 
@@ -941,8 +1084,6 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       );
     }
     if (fetchScene && roomLinkData && this.portal.socket && this.sceneEnabled) {
-      this.excalidrawAPI.resetScene();
-
       try {
         const elements = await loadFromStorage(
           roomLinkData.roomId,
@@ -950,12 +1091,20 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           this.portal.socket,
         );
         if (elements) {
-          this.setLastBroadcastedOrReceivedSceneVersion(
-            getSceneVersion(elements),
-          );
-
+          // Reconciled against the live scene rather than replacing it, and NOT preceded by a
+          // `resetScene()`.
+          //
+          // The reset used to run BEFORE this fetch, so every join blanked the board for two
+          // round trips (the storage API answers with a presigned URL, then the object store
+          // answers with the bytes). A caller that seeds the board before joining — the
+          // document tab paints a page's known marks the instant you turn to it — had that
+          // seed wiped mid-join and watched it pop back in a second later.
+          //
+          // Reconciling also keeps anything drawn DURING the join: a plain replace discarded
+          // strokes made in that window, silently. Same shape as `mergePersistedScene`, which
+          // is what the not-first-in-room path already does.
           return {
-            elements,
+            elements: this._reconcileElements(elements),
             scrollToContent: true,
           };
         }
@@ -988,6 +1137,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     roomId: string;
     roomKey: string;
   }) => {
+    const generation = this.sessionGeneration;
+
     try {
       const elements = await loadFromStorage(
         roomLinkData.roomId,
@@ -995,7 +1146,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         this.portal.socket,
       );
 
-      if (elements?.length) {
+      if (elements?.length && generation === this.sessionGeneration) {
         this.handleRemoteSceneUpdate(this._reconcileElements(elements));
       }
     } catch (error) {
@@ -1044,6 +1195,54 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
   }, LOAD_IMAGES_TIMEOUT);
+
+  /**
+   * Whether the user is mid-interaction — drawing, resizing or dragging.
+   *
+   * The gap this closes is `selectedElementsAreBeingDragged`. Reconciliation protects an
+   * element the user is actively editing by ID — `shouldDiscardRemoteElement` forces the local
+   * copy to win for `newElement`, `resizingElement` and `editingTextElement` whatever the
+   * versions say — but a plain drag of ALREADY-EXISTING elements has no such guard. It falls
+   * through to the version/nonce comparison, so a stored snapshot that happens to out-version
+   * the local copy replaces elements out from under the cursor mid-drag.
+   *
+   * The other three are covered here as defence in depth. They are cheap to include, and the
+   * id-guard that protects them lives in another module with no test tying the two together.
+   */
+  private isInteracting = () => {
+    const {
+      cursorButton,
+      newElement,
+      resizingElement,
+      selectedElementsAreBeingDragged,
+    } = this.excalidrawAPI.getAppState();
+
+    return (
+      cursorButton === "down" ||
+      !!newElement ||
+      !!resizingElement ||
+      selectedElementsAreBeingDragged
+    );
+  };
+
+  /**
+   * Merges what storage holds into the live scene, waiting for the interaction to end.
+   *
+   * The RAW stored elements are held rather than the reconciled result, and the reconcile is
+   * re-run at flush time: `_reconcileElements` reads the local scene when it is called, so
+   * re-running it merges against whatever has been drawn since by version. Applying a stale
+   * reconciled snapshot instead would drop those strokes — trading one bug for a worse one.
+   */
+  private applyStoredScene = (stored: readonly ExcalidrawElement[]) => {
+    if (this.isInteracting()) {
+      this.pendingStoredScene = stored;
+
+      return;
+    }
+
+    this.pendingStoredScene = null;
+    this.handleRemoteSceneUpdate(this._reconcileElements(stored));
+  };
 
   private handleRemoteSceneUpdate = (
     elements: ReconciledExcalidrawElement[],
@@ -1234,6 +1433,14 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
   syncElements = (elements: readonly OrderedExcalidrawElement[]) => {
     this.broadcastElements(elements);
+
+    // The flush point for a reconcile deferred past a stroke. `syncElements` runs on every
+    // scene change, and lifting the pen finalises the element — so the first change after the
+    // interaction ends lands here.
+    if (this.pendingStoredScene) {
+      this.applyStoredScene(this.pendingStoredScene);
+    }
+
     this.queueSaveToFirebase();
   };
 
