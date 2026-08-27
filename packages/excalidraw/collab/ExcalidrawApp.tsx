@@ -358,6 +358,32 @@ const normalizeToExcalidrawLang = (code: string): string => {
   return code;
 };
 
+/**
+ * Which Collab this board may drive: its own, or — only when it renders none —
+ * whichever board last claimed the shared atom.
+ *
+ * SONACOVE: `own ?? shared` looks harmless and is not. `<Collab>` renders only
+ * once `excalidrawAPI` exists, so a board's own API arrives a commit AFTER the
+ * effect below first becomes runnable. With `??`, that gap is filled by the
+ * atom — which, on a page that already has a board up, names the OTHER one. The
+ * effect then calls `initializeScene` with this board's `collabDetails` and the
+ * other board's Collab, and `startCollaboration` drives that board into this
+ * board's room: its scene, its files, our room's storage prefix. Sona's
+ * whiteboard images 404ing under the annotation room's prefix was this.
+ *
+ * The gap is a wait, not a hole — the effect re-runs the moment the real API
+ * lands — so the correct value during it is `null`.
+ *
+ * @param own - This board's Collab, once mounted.
+ * @param shared - The module-level atom; names whichever board mounted last.
+ * @param isCollabDisabled - Whether this board renders no Collab of its own.
+ */
+export const resolveCollabAPI = (
+  own: CollabAPI | null,
+  shared: CollabAPI | null,
+  isCollabDisabled: boolean,
+): CollabAPI | null => (isCollabDisabled ? shared : own);
+
 const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
@@ -408,11 +434,13 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   // last — and `onChange` below then asks THAT board whether it is collaborating and hands it
   // this board's elements. The document tab's marks stopped broadcasting entirely for exactly
   // that reason: the gate was answered by a whiteboard that was not in a room.
-  //
-  // The atom stays as the fallback so a caller that renders Collab some other way is unaffected.
   const [sharedCollabAPI] = useAtom(collabAPIAtom);
   const [ownCollabAPI, setOwnCollabAPI] = useState<CollabAPI | null>(null);
-  const collabAPI = ownCollabAPI ?? sharedCollabAPI;
+  const collabAPI = resolveCollabAPI(
+    ownCollabAPI,
+    sharedCollabAPI,
+    isCollabDisabled,
+  );
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
