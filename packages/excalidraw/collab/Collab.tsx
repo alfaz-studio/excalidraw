@@ -304,8 +304,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       setCollabError: this.setErrorDialog,
     };
 
-    // The ONLY way out, deliberately. A module-level slot beside it names whichever board
-    // mounted last, and a caller reading that acts on someone else's room — see `onCollabAPI`.
+    // The only way out, deliberately: a shared slot would name whichever board mounted last.
     this.props.onCollabAPI?.(collabAPI);
 
     if (this.props.useTestEnv) {

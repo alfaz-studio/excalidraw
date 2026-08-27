@@ -399,20 +399,8 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
-  // THIS board's Collab, and nothing else — `<Collab>` hands it over via `onCollabAPI`.
-  //
-  // It used to fall back to a module-level atom that every mounted Collab overwrote, which on a
-  // page with a second board named the OTHER one. Two bugs came out of that. `onChange` asked
-  // THAT board whether it was collaborating and handed it this board's elements, so the
-  // document tab's marks stopped broadcasting — the gate was answered by a whiteboard that was
-  // not in a room. Worse, `<Collab>` renders only once `excalidrawAPI` exists, so this arrives
-  // a commit AFTER the effect below first becomes runnable, and the fallback filled that gap:
-  // the effect called `initializeScene` with this board's `collabDetails` and the other board's
-  // Collab, and `startCollaboration` drove that board into this board's room. That is how the
-  // whiteboard ended up fetching its images under the annotation room's storage prefix.
-  //
-  // The gap is a wait, not a hole — the effect re-runs the moment this lands — so `null` is the
-  // right answer during it, and the atom is gone rather than merely distrusted.
+  // THIS board's Collab only. Null until `<Collab>` mounts a commit later, which the effect
+  // below waits out — a shared fallback there would hand it another board's room.
   const [collabAPI, setCollabAPI] = useState<CollabAPI | null>(null);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);

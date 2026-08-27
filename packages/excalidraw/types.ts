@@ -756,14 +756,11 @@ export interface ExcalidrawCollabProps extends CollabTransportProps {
   useTestEnv?: boolean;
 
   /**
-   * SONACOVE: hands this instance's API to the app that rendered it. The only route out —
-   * there is deliberately no module-level registry beside it.
+   * SONACOVE: hands this instance's API to the app that rendered it, and the only route out.
    *
-   * There was one (`collabAPIAtom`), and every mounted Collab overwrote it, so with more than
-   * one board on the page — the whiteboard stays mounted behind a visibility swap while the
-   * document tab mounts its own layer — it named whichever mounted last and everyone else
-   * talked to that one. Anything reading a shared slot instead of this prop acts on another
-   * board's room. Don't reintroduce it.
+   * A module-level registry cannot serve that purpose — several boards mount in one page (the
+   * whiteboard stays mounted behind a visibility swap while the document tab mounts its own
+   * layer), so a shared slot names whichever mounted last and everyone else drives that one.
    */
   onCollabAPI?: (api: CollabAPI) => void;
 
