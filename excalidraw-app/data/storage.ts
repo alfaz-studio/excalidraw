@@ -155,6 +155,7 @@ const _reportUnarmedBackend = (
     _reportFileError(onFileError, {
       op,
       fileId,
+      prefix: roomId,
       message: "backend not initialized",
     });
   }
@@ -222,6 +223,7 @@ const uploadFilesWithMulter = async (
         _reportFileError(config.onFileError, {
           op: "upload",
           fileId: id,
+          prefix,
           status: response.status,
           message: `${response.statusText} ${text}`.trim(),
         });
@@ -234,6 +236,7 @@ const uploadFilesWithMulter = async (
         _reportFileError(config.onFileError, {
           op: "upload",
           fileId: id,
+          prefix,
           status: response.status,
           message: "Invalid response",
         });
@@ -246,6 +249,7 @@ const uploadFilesWithMulter = async (
       _reportFileError(config.onFileError, {
         op: "upload",
         fileId: id,
+        prefix,
         message: _errMessage(error),
       });
       erroredFiles.push(id);
@@ -304,6 +308,7 @@ const downloadFilesFromBackend = async (
           _reportFileError(config.onFileError, {
             op: "download",
             fileId: id,
+            prefix,
             status: response.status,
             message: response.statusText,
           });
@@ -313,6 +318,7 @@ const downloadFilesFromBackend = async (
         _reportFileError(config.onFileError, {
           op: "download",
           fileId: id,
+          prefix,
           message: _errMessage(error),
         });
       }
@@ -401,6 +407,7 @@ export const saveFilesToStorage = async ({
   } catch (error) {
     _reportFileError(config.onFileError, {
       op: "upload",
+      prefix,
       message: _errMessage(error),
     });
     // Mark all files as errored if the API call fails
@@ -994,6 +1001,7 @@ export const loadFilesFromStorage = async (
           _reportFileError(config.onFileError, {
             op: "decrypt",
             fileId: id,
+            prefix,
             message: _errMessage(error),
           });
         }
@@ -1008,6 +1016,7 @@ export const loadFilesFromStorage = async (
     // Marking all files as errored if the API call fails
     _reportFileError(config.onFileError, {
       op: "download",
+      prefix,
       message: _errMessage(error),
     });
     filesIds.forEach((id) => erroredFiles.set(id, true));

@@ -730,6 +730,7 @@ export interface ExcalidrawFileError {
   fileId?: string;
   status?: number;
   message?: string;
+  prefix?: string;
 }
 
 /**
