@@ -128,11 +128,7 @@ import DebugCanvas, {
 } from "../../../excalidraw-app/components/DebugCanvas";
 import { AIComponents } from "../../../excalidraw-app/components/AI";
 
-import Collab, {
-  collabAPIAtom,
-  isCollaboratingAtom,
-  isOfflineAtom,
-} from "./Collab";
+import Collab, { isCollaboratingAtom, isOfflineAtom } from "./Collab";
 
 import type { CollabAPI } from "./Collab";
 
@@ -358,32 +354,6 @@ const normalizeToExcalidrawLang = (code: string): string => {
   return code;
 };
 
-/**
- * Which Collab this board may drive: its own, or — only when it renders none —
- * whichever board last claimed the shared atom.
- *
- * SONACOVE: `own ?? shared` looks harmless and is not. `<Collab>` renders only
- * once `excalidrawAPI` exists, so a board's own API arrives a commit AFTER the
- * effect below first becomes runnable. With `??`, that gap is filled by the
- * atom — which, on a page that already has a board up, names the OTHER one. The
- * effect then calls `initializeScene` with this board's `collabDetails` and the
- * other board's Collab, and `startCollaboration` drives that board into this
- * board's room: its scene, its files, our room's storage prefix. Sona's
- * whiteboard images 404ing under the annotation room's prefix was this.
- *
- * The gap is a wait, not a hole — the effect re-runs the moment the real API
- * lands — so the correct value during it is `null`.
- *
- * @param own - This board's Collab, once mounted.
- * @param shared - The module-level atom; names whichever board mounted last.
- * @param isCollabDisabled - Whether this board renders no Collab of its own.
- */
-export const resolveCollabAPI = (
-  own: CollabAPI | null,
-  shared: CollabAPI | null,
-  isCollabDisabled: boolean,
-): CollabAPI | null => (isCollabDisabled ? shared : own);
-
 const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
@@ -429,18 +399,21 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
-  // THIS board's collab API, not the shared atom's. `collabAPIAtom` is module-level and every
-  // mounted Collab overwrites it, so with a second board on the page it names whichever mounted
-  // last — and `onChange` below then asks THAT board whether it is collaborating and hands it
-  // this board's elements. The document tab's marks stopped broadcasting entirely for exactly
-  // that reason: the gate was answered by a whiteboard that was not in a room.
-  const [sharedCollabAPI] = useAtom(collabAPIAtom);
-  const [ownCollabAPI, setOwnCollabAPI] = useState<CollabAPI | null>(null);
-  const collabAPI = resolveCollabAPI(
-    ownCollabAPI,
-    sharedCollabAPI,
-    isCollabDisabled,
-  );
+  // THIS board's Collab, and nothing else — `<Collab>` hands it over via `onCollabAPI`.
+  //
+  // It used to fall back to a module-level atom that every mounted Collab overwrote, which on a
+  // page with a second board named the OTHER one. Two bugs came out of that. `onChange` asked
+  // THAT board whether it was collaborating and handed it this board's elements, so the
+  // document tab's marks stopped broadcasting — the gate was answered by a whiteboard that was
+  // not in a room. Worse, `<Collab>` renders only once `excalidrawAPI` exists, so this arrives
+  // a commit AFTER the effect below first becomes runnable, and the fallback filled that gap:
+  // the effect called `initializeScene` with this board's `collabDetails` and the other board's
+  // Collab, and `startCollaboration` drove that board into this board's room. That is how the
+  // whiteboard ended up fetching its images under the annotation room's storage prefix.
+  //
+  // The gap is a wait, not a hole — the effect re-runs the moment this lands — so `null` is the
+  // right answer during it, and the atom is gone rather than merely distrusted.
+  const [collabAPI, setCollabAPI] = useState<CollabAPI | null>(null);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
@@ -987,7 +960,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         )}
         {excalidrawAPI && !isCollabDisabled && (
           <Collab
-            onCollabAPI={setOwnCollabAPI}
+            onCollabAPI={setCollabAPI}
             onRoomOpen={props.onRoomOpen}
             collabServerUrl={props.collabServerUrl}
             collabDetails={props.collabDetails}

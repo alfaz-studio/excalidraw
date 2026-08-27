@@ -99,7 +99,6 @@ import type {
   SyncableExcalidrawElement,
 } from "../../../excalidraw-app/data";
 
-export const collabAPIAtom = atom<CollabAPI | null>(null);
 export const isCollaboratingAtom = atom(false);
 export const isOfflineAtom = atom(false);
 
@@ -305,10 +304,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       setCollabError: this.setErrorDialog,
     };
 
-    appJotaiStore.set(collabAPIAtom, collabAPI);
-
-    // The atom above is shared by every mounted board; this is how the app that rendered THIS
-    // one gets THIS one. See `onCollabAPI`.
+    // The ONLY way out, deliberately. A module-level slot beside it names whichever board
+    // mounted last, and a caller reading that acts on someone else's room — see `onCollabAPI`.
     this.props.onCollabAPI?.(collabAPI);
 
     if (this.props.useTestEnv) {
