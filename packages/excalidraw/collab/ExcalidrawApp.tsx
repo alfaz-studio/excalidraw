@@ -403,7 +403,16 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
-  const [collabAPI] = useAtom(collabAPIAtom);
+  // THIS board's collab API, not the shared atom's. `collabAPIAtom` is module-level and every
+  // mounted Collab overwrites it, so with a second board on the page it names whichever mounted
+  // last — and `onChange` below then asks THAT board whether it is collaborating and hands it
+  // this board's elements. The document tab's marks stopped broadcasting entirely for exactly
+  // that reason: the gate was answered by a whiteboard that was not in a room.
+  //
+  // The atom stays as the fallback so a caller that renders Collab some other way is unaffected.
+  const [sharedCollabAPI] = useAtom(collabAPIAtom);
+  const [ownCollabAPI, setOwnCollabAPI] = useState<CollabAPI | null>(null);
+  const collabAPI = ownCollabAPI ?? sharedCollabAPI;
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
@@ -950,6 +959,8 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         )}
         {excalidrawAPI && !isCollabDisabled && (
           <Collab
+            onCollabAPI={setOwnCollabAPI}
+            onRoomOpen={props.onRoomOpen}
             collabServerUrl={props.collabServerUrl}
             collabDetails={props.collabDetails}
             collabSocketFactory={props.collabSocketFactory}
