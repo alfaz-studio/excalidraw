@@ -730,6 +730,7 @@ export interface ExcalidrawFileError {
   fileId?: string;
   status?: number;
   message?: string;
+  prefix?: string;
 }
 
 /**
@@ -756,12 +757,11 @@ export interface ExcalidrawCollabProps extends CollabTransportProps {
   useTestEnv?: boolean;
 
   /**
-   * SONACOVE: hands this instance's API to the app that rendered it.
+   * SONACOVE: hands this instance's API to the app that rendered it, and the only route out.
    *
-   * `collabAPIAtom` cannot serve that purpose: it is module-level and every mounted Collab
-   * overwrites it, so with more than one board on the page — the whiteboard stays mounted
-   * behind a visibility swap while the document tab mounts its own layer — it names whichever
-   * mounted last. Everyone else then talks to that one.
+   * A module-level registry cannot serve that purpose — several boards mount in one page (the
+   * whiteboard stays mounted behind a visibility swap while the document tab mounts its own
+   * layer), so a shared slot names whichever mounted last and everyone else drives that one.
    */
   onCollabAPI?: (api: CollabAPI) => void;
 

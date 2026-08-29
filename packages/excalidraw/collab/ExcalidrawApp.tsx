@@ -128,11 +128,7 @@ import DebugCanvas, {
 } from "../../../excalidraw-app/components/DebugCanvas";
 import { AIComponents } from "../../../excalidraw-app/components/AI";
 
-import Collab, {
-  collabAPIAtom,
-  isCollaboratingAtom,
-  isOfflineAtom,
-} from "./Collab";
+import Collab, { isCollaboratingAtom, isOfflineAtom } from "./Collab";
 
 import type { CollabAPI } from "./Collab";
 
@@ -403,16 +399,9 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
     useCallbackRefState<ExcalidrawImperativeAPI>();
 
   const [, setShareDialogState] = useAtom(shareDialogStateAtom);
-  // THIS board's collab API, not the shared atom's. `collabAPIAtom` is module-level and every
-  // mounted Collab overwrites it, so with a second board on the page it names whichever mounted
-  // last — and `onChange` below then asks THAT board whether it is collaborating and hands it
-  // this board's elements. The document tab's marks stopped broadcasting entirely for exactly
-  // that reason: the gate was answered by a whiteboard that was not in a room.
-  //
-  // The atom stays as the fallback so a caller that renders Collab some other way is unaffected.
-  const [sharedCollabAPI] = useAtom(collabAPIAtom);
-  const [ownCollabAPI, setOwnCollabAPI] = useState<CollabAPI | null>(null);
-  const collabAPI = ownCollabAPI ?? sharedCollabAPI;
+  // THIS board's Collab only. Null until `<Collab>` mounts a commit later, which the effect
+  // below waits out — a shared fallback there would hand it another board's room.
+  const [collabAPI, setCollabAPI] = useState<CollabAPI | null>(null);
   const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
     return isCollaborationLink(window.location.href);
   });
@@ -959,7 +948,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         )}
         {excalidrawAPI && !isCollabDisabled && (
           <Collab
-            onCollabAPI={setOwnCollabAPI}
+            onCollabAPI={setCollabAPI}
             onRoomOpen={props.onRoomOpen}
             collabServerUrl={props.collabServerUrl}
             collabDetails={props.collabDetails}
