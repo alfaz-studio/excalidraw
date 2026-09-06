@@ -681,6 +681,14 @@ export interface ExcalidrawProps {
   // stay editable. See elementOwnership.ts.
   protectForeignElements?: boolean;
 
+  // SONACOVE: onProtectedEditBlocked — called when protection actually refuses
+  // something, so the host can say so. Without it the refusal is silent: a
+  // foreign element is filtered out before hit-testing, so "nothing erased
+  // because the path missed" and "nothing erased because it was not yours" look
+  // identical from outside. Fired at most once per eraser stroke, and only when
+  // a handler is passed — the extra hit-test costs nothing otherwise.
+  onProtectedEditBlocked?: (reason: "erase") => void;
+
   // SONACOVE: lock an image as it is inserted, and open the action bar over it
   // so the lock is visible. The eraser skips locked elements, so this leaves
   // only the strokes drawn on top of an image erasable. `locked` rides the

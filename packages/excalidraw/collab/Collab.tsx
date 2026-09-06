@@ -323,12 +323,16 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   };
 
   componentDidUpdate(prevProps: ExcalidrawCollabProps) {
-    // Re-initialize storage backend when the token changes (initial fetch or refresh)
+    // Re-initialize storage backend when the token changes (initial fetch or refresh), or
+    // when the elected writer changes — the writer is elected from the participant list, so a
+    // stale copy leaves the room archiving nothing until the next token refresh.
     const { storageBackendUrl, meetingDetails } = this.props;
+    const prev = prevProps.meetingDetails;
     if (
       storageBackendUrl &&
       meetingDetails?.token &&
-      meetingDetails.token !== prevProps.meetingDetails?.token
+      (meetingDetails.token !== prev?.token ||
+        meetingDetails.canPersistScene !== prev?.canPersistScene)
     ) {
       this.armBackend(storageBackendUrl, meetingDetails);
     }

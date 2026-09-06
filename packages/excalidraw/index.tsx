@@ -61,6 +61,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     viewportRotation,
     elementAuthorId,
     protectForeignElements,
+    onProtectedEditBlocked,
     autoLockImages,
   } = props;
 
@@ -160,6 +161,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           viewportRotation={viewportRotation}
           elementAuthorId={elementAuthorId}
           protectForeignElements={protectForeignElements}
+          onProtectedEditBlocked={onProtectedEditBlocked}
           autoLockImages={autoLockImages}
         >
           {children}
