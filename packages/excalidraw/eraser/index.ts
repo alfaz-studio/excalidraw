@@ -45,6 +45,10 @@ export class EraserTrail extends AnimatedTrail {
   private elementsToErase: Set<ExcalidrawElement["id"]> = new Set();
   private groupsToErase: Set<ExcalidrawElement["id"]> = new Set();
 
+  // SONACOVE: one report per stroke — the callback exists to explain a refusal
+  // once, not to fire per frame while the pointer is held over the same mark.
+  private reportedProtectedBlock = false;
+
   constructor(animationFrameHandler: AnimationFrameHandler, app: App) {
     super(animationFrameHandler, app, {
       streamline: 0.2,
@@ -75,6 +79,7 @@ export class EraserTrail extends AnimatedTrail {
     this.endPath();
     super.startPath(x, y);
     this.elementsToErase.clear();
+    this.reportedProtectedBlock = false;
   }
 
   addPointToPath(x: number, y: number, restore = false) {
@@ -107,6 +112,31 @@ export class EraserTrail extends AnimatedTrail {
     const candidateElements = this.app.visibleElements.filter((el) =>
       isElementEditable(el, this.app.props),
     );
+
+    // SONACOVE: the filter above is why a refusal is otherwise silent — a
+    // foreign element is never hit-tested, so nothing anywhere computes "the
+    // stroke crossed a mark it may not erase". Compute it here, once per
+    // stroke, only when someone is listening.
+    const { onProtectedEditBlocked } = this.app.props;
+
+    if (onProtectedEditBlocked && !this.reportedProtectedBlock) {
+      const blocked = this.app.visibleElements.filter(
+        (el) => !isElementEditable(el, this.app.props),
+      );
+
+      if (blocked.length) {
+        const blockedMap = arrayToMap(blocked);
+
+        if (
+          blocked.some((el) =>
+            eraserTest(pathSegment, el, blockedMap, this.app.state.zoom.value),
+          )
+        ) {
+          this.reportedProtectedBlock = true;
+          onProtectedEditBlocked("erase");
+        }
+      }
+    }
 
     const candidateElementsMap = arrayToMap(candidateElements);
 
