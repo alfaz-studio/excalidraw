@@ -915,7 +915,10 @@ export const loadFromStorage = async (
     // no archive to fail to load, and saying so pages someone. The same line
     // `_reportUnarmedBackend` draws for file ops; a room that IS armed but has
     // no config still reports, because that one is a real gap.
-    if (result.reason === "no-backend-config" && !expectedBackends.has(roomId)) {
+    if (
+      result.reason === "no-backend-config" &&
+      !expectedBackends.has(roomId)
+    ) {
       return null;
     }
 
