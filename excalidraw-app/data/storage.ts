@@ -911,6 +911,17 @@ export const loadFromStorage = async (
   // board" and "we could not tell", and only the second one means the writer
   // must not go on to overwrite it.
   if (result.status === "error") {
+    // Unless storage was never armed for this room — an annotation surface has
+    // no archive to fail to load, and saying so pages someone. The same line
+    // `_reportUnarmedBackend` draws for file ops; a room that IS armed but has
+    // no config still reports, because that one is a real gap.
+    if (
+      result.reason === "no-backend-config" &&
+      !expectedBackends.has(roomId)
+    ) {
+      return null;
+    }
+
     notifyArchive({
       status: "failed",
       error: new Error(
