@@ -23,7 +23,26 @@ type IframeDataWithSandbox = MarkRequired<IframeData, "sandbox">;
 const embeddedLinkCache = new Map<string, IframeDataWithSandbox>();
 
 const RE_YOUTUBE =
-  /^(?:http(?:s)?:\/\/)?(?:www\.)?youtu(?:be\.com|\.be)\/(embed\/|watch\?v=|shorts\/|playlist\?list=|embed\/videoseries\?list=)?([a-zA-Z0-9_-]+)/;
+  /^(?:http(?:s)?:\/\/)?(?:(?:www|m|music)\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\/(embed\/|watch\?v=|shorts\/|live\/|v\/|playlist\?list=|embed\/videoseries\?list=)?([a-zA-Z0-9_-]+)/;
+
+// Bare section paths must not read as video ids (e.g. /live alone is not a video).
+const RE_YOUTUBE_RESERVED = new Set([
+  "live",
+  "v",
+  "watch",
+  "embed",
+  "shorts",
+  "playlist",
+  "attribution_link",
+  "feed",
+  "channel",
+  "user",
+  "c",
+  "results",
+  "hashtag",
+  "gaming",
+  "music",
+]);
 
 const RE_VIMEO =
   /^(?:http(?:s)?:\/\/)?(?:(?:w){3}\.)?(?:player\.)?vimeo\.com\/(?:video\/)?([^?\s]+)(?:\?.*)?$/;
@@ -85,6 +104,39 @@ const parseYouTubeLikeTimestamp = (url: string): number => {
   return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds);
 };
 
+// Share-sheet variants never match a path-prefix regex, so unwrap them first.
+const normalizeYouTubeLink = (link: string): string => {
+  let url: URL;
+  try {
+    url = new URL(link.startsWith("http") ? link : `https://${link}`);
+  } catch (error) {
+    return link;
+  }
+  if (
+    url.hostname.replace(/^(www|m|music)\./, "").toLowerCase() !== "youtube.com"
+  ) {
+    return link;
+  }
+  // Attribution links wrap the real watch URL in the `u` param.
+  if (url.pathname === "/attribution_link") {
+    const wrapped = url.searchParams.get("u");
+    if (wrapped) {
+      return wrapped.startsWith("/")
+        ? `https://www.youtube.com${wrapped}`
+        : wrapped;
+    }
+    return link;
+  }
+  // `watch` with params before `v` never matches `watch?v=` positionally.
+  if (url.pathname === "/watch") {
+    const id = url.searchParams.get("v");
+    if (id && !url.search.startsWith("?v=")) {
+      return `https://www.youtube.com/watch?v=${id}`;
+    }
+  }
+  return link;
+};
+
 const parseGoogleDriveVideoLink = (
   url: string,
 ): { fileId: string; resourceKey?: string; timestamp?: number } | null => {
@@ -133,6 +185,9 @@ const parseGoogleDriveVideoLink = (
 const ALLOWED_DOMAINS = new Set([
   "youtube.com",
   "youtu.be",
+  "youtube-nocookie.com",
+  "m.youtube.com",
+  "music.youtube.com",
   "vimeo.com",
   "player.vimeo.com",
   "drive.google.com",
@@ -152,6 +207,9 @@ const ALLOWED_DOMAINS = new Set([
 const ALLOW_SAME_ORIGIN = new Set([
   "youtube.com",
   "youtu.be",
+  "youtube-nocookie.com",
+  "m.youtube.com",
+  "music.youtube.com",
   "vimeo.com",
   "player.vimeo.com",
   "drive.google.com",
@@ -187,16 +245,25 @@ export const getEmbedLink = (
 
   let type: "video" | "generic" = "generic";
   let aspectRatio = { w: 560, h: 840 };
-  const ytLink = link.match(RE_YOUTUBE);
+  const normalizedYtLink = normalizeYouTubeLink(link);
+  const ytLink = normalizedYtLink.match(RE_YOUTUBE);
   if (ytLink?.[2]) {
-    const startTime = parseYouTubeLikeTimestamp(originalLink);
+    if (!ytLink[1] && RE_YOUTUBE_RESERVED.has(ytLink[2])) {
+      return null;
+    }
+    // Unwrapped links carry time inside `u`; reordered watch URLs keep it outside.
+    const startTime =
+      parseYouTubeLikeTimestamp(normalizedYtLink) ||
+      parseYouTubeLikeTimestamp(link);
     const time = startTime > 0 ? `&start=${startTime}` : ``;
-    const isPortrait = link.includes("shorts");
+    const isPortrait = ytLink[0].includes("shorts");
     type = "video";
     switch (ytLink[1]) {
       case "embed/":
       case "watch?v=":
       case "shorts/":
+      case "live/":
+      case "v/":
         link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
       case "playlist?list=":

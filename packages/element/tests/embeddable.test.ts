@@ -231,3 +231,51 @@ describe("Google Drive video embedding", () => {
     ).toBe(true);
   });
 });
+
+describe("YouTube share-variant embeds", () => {
+  it.each([
+    "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    "https://www.youtube.com/live/dQw4w9WgXcQ",
+    "https://www.youtube.com/v/dQw4w9WgXcQ",
+    "https://www.youtube.com/attribution_link?a=xyz&u=/watch%3Fv%3DdQw4w9WgXcQ",
+    "https://www.youtube.com/watch?feature=shared&v=dQw4w9WgXcQ",
+  ])("should embed as video: %s", (url) => {
+    const result = getEmbedLink(url);
+
+    expect(result?.type).toBe("video");
+    if (result?.type === "video" || result?.type === "generic") {
+      expect(result.link).toBe(
+        "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1",
+      );
+    }
+    expect(result?.intrinsicSize).toEqual({ w: 560, h: 315 });
+  });
+
+  it("should keep the timestamp on reordered watch params", () => {
+    const result = getEmbedLink(
+      "https://www.youtube.com/watch?t=90&v=dQw4w9WgXcQ",
+    );
+
+    expect(result?.type).toBe("video");
+    if (result?.type === "video" || result?.type === "generic") {
+      expect(result.link).toContain("start=90");
+    }
+  });
+
+  it("should validate the new YouTube hosts by default", () => {
+    for (const url of [
+      "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+      "https://www.youtube.com/live/dQw4w9WgXcQ",
+    ]) {
+      expect(embeddableURLValidator(url, undefined)).toBe(true);
+    }
+  });
+
+  it("should not mistake a section page for a video", () => {
+    expect(getEmbedLink("https://www.youtube.com/feed/trending")).toBeNull();
+  });
+});
