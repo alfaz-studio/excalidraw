@@ -54,6 +54,16 @@ const RE_GH_GIST_EMBED =
 
 const RE_MSFORMS = /^(?:https?:\/\/)?forms\.microsoft\.com\//;
 
+// Kahoot assignment links unwrap to the official player embed; the live-PIN
+// join page and the player host iframe as-is (three lists move together here:
+// this matcher, ALLOWED_DOMAINS and ALLOW_SAME_ORIGIN — see below).
+const RE_KAHOOT_CHALLENGE =
+  /^(?:https?:\/\/)?(?:www\.)?kahoot\.it\/challenge\/([^/?#\s]+)/i;
+const RE_KAHOOT_EMBED =
+  /^(?:https?:\/\/)?(?:www\.)?embed\.kahoot\.it\/([^/?#\s]+)/i;
+const RE_KAHOOT_LIVE =
+  /^(?:https?:\/\/)?(?:www\.)?(?:kahoot\.it\/(?:\?|v2\/)?|play\.kahoot\.it\/)/i;
+
 // not anchored to start to allow <blockquote> twitter embeds
 const RE_TWITTER =
   /(?:https?:\/\/)?(?:(?:w){3}\.)?(?:twitter|x)\.com\/[^/]+\/status\/(\d+)/;
@@ -202,6 +212,10 @@ const ALLOWED_DOMAINS = new Set([
   "giphy.com",
   "reddit.com",
   "forms.microsoft.com",
+  // Kahoot classroom embeds (challenge player, live-PIN join page, player host).
+  "kahoot.it",
+  "play.kahoot.it",
+  "embed.kahoot.it",
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -220,6 +234,10 @@ const ALLOW_SAME_ORIGIN = new Set([
   "stackblitz.com",
   "reddit.com",
   "forms.microsoft.com",
+  // Interactive quiz/player frames rely on storage and cookies to join.
+  "kahoot.it",
+  "play.kahoot.it",
+  "embed.kahoot.it",
 ]);
 
 export const createSrcDoc = (body: string) => {
@@ -386,6 +404,30 @@ export const getEmbedLink = (
 
   if (RE_MSFORMS.test(link) && !link.includes("embed=true")) {
     link += link.includes("?") ? "&embed=true" : "?embed=true";
+  }
+
+  const kahootChallenge = link.match(RE_KAHOOT_CHALLENGE);
+  const kahootEmbed = link.match(RE_KAHOOT_EMBED);
+  if (kahootChallenge?.[1] || kahootEmbed?.[1] || RE_KAHOOT_LIVE.test(link)) {
+    type = "generic";
+    if (kahootChallenge?.[1]) {
+      link = `https://embed.kahoot.it/${kahootChallenge[1]}`;
+    } else if (kahootEmbed?.[1]) {
+      link = `https://embed.kahoot.it/${kahootEmbed[1]}`;
+    }
+    aspectRatio = { w: 560, h: 315 };
+    embeddedLinkCache.set(originalLink, {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    });
+    return {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    };
   }
 
   if (RE_TWITTER.test(link)) {
