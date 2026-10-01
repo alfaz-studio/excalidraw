@@ -94,7 +94,7 @@ describe("appState", () => {
           appState: {
             currentItemFontSize: 16,
             currentItemStrokeColor: "#c92a2a",
-            currentItemStrokeWidth: 4,
+            currentItemStrokeWidthKey: "bold",
           },
         }}
       />,
@@ -111,6 +111,6 @@ describe("appState", () => {
     expect(h.elements.every((element) => element.isDeleted)).toBe(true);
     expect(h.state.currentItemFontSize).toBe(16);
     expect(h.state.currentItemStrokeColor).toBe("#c92a2a");
-    expect(h.state.currentItemStrokeWidth).toBe(4);
+    expect(h.state.currentItemStrokeWidthKey).toBe("bold");
   });
 });

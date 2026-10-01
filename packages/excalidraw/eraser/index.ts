@@ -35,9 +35,7 @@ import type { ElementsMap, ExcalidrawElement } from "@excalidraw/element/types";
 
 import { isElementEditable } from "../elementOwnership";
 
-import { AnimatedTrail } from "../animated-trail";
-
-import type { AnimationFrameHandler } from "../animation-frame-handler";
+import { AnimatedTrail } from "../animatedTrail";
 
 import type App from "../components/App";
 
@@ -49,8 +47,8 @@ export class EraserTrail extends AnimatedTrail {
   // once, not to fire per frame while the pointer is held over the same mark.
   private reportedProtectedBlock = false;
 
-  constructor(animationFrameHandler: AnimationFrameHandler, app: App) {
-    super(animationFrameHandler, app, {
+  constructor(app: App) {
+    super(app, {
       streamline: 0.2,
       size: 5,
       keepHead: true,

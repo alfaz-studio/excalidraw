@@ -13,9 +13,9 @@ import { wrapText } from "./textWrapping";
 import { isIframeElement } from "./typeChecks";
 
 import type {
-  ExcalidrawElement,
   ExcalidrawIframeLikeElement,
   IframeData,
+  NonDeletedExcalidrawElement,
 } from "./types";
 
 type IframeDataWithSandbox = MarkRequired<IframeData, "sandbox">;
@@ -23,7 +23,7 @@ type IframeDataWithSandbox = MarkRequired<IframeData, "sandbox">;
 const embeddedLinkCache = new Map<string, IframeDataWithSandbox>();
 
 const RE_YOUTUBE =
-  /^(?:http(?:s)?:\/\/)?(?:www\.)?youtu(?:be\.com|\.be)\/(embed\/|watch\?v=|shorts\/|playlist\?list=|embed\/videoseries\?list=)?([a-zA-Z0-9_-]+)/;
+  /^(?:http(?:s)?:\/\/)?(?:www\.)?youtu(?:be\.com|\.be)\/(embed\/|watch\?v=|shorts\/|live\/|playlist\?list=|embed\/videoseries\?list=)?([a-zA-Z0-9_-]+)/;
 
 const RE_VIMEO =
   /^(?:http(?:s)?:\/\/)?(?:(?:w){3}\.)?(?:player\.)?vimeo\.com\/(?:video\/)?([^?\s]+)(?:\?.*)?$/;
@@ -401,7 +401,7 @@ export const getEmbedLink = (
 
 export const createPlaceholderEmbeddableLabel = (
   element: ExcalidrawIframeLikeElement,
-): ExcalidrawElement => {
+): NonDeletedExcalidrawElement => {
   let text: string;
   if (isIframeElement(element)) {
     text = "IFrame element";
