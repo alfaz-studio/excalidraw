@@ -38,11 +38,11 @@ const Footer = ({
     >
       {/* footer-left is not faded out in zen mode: it holds the zoom controls,
           which stay visible (chrome-less). Its children opt in individually. */}
-      {(defaultUIEnabled || (zoomUIEnabled && app.isNavigationEnabled())) && (
+      {(defaultUIEnabled || (zoomUIEnabled && app.isZoomUIOffered())) && (
         <div className="layer-ui__wrapper__footer-left zen-mode-transition">
           <Stack.Col gap={2}>
             <Section heading="canvasActions">
-              {zoomUIEnabled && app.isNavigationEnabled() && (
+              {zoomUIEnabled && app.isZoomUIOffered() && (
                 <ZoomActions
                   disableShortcuts={UIOptions.canvasActions.disableShortcuts}
                   renderAction={actionManager.renderAction}

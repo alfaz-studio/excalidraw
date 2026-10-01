@@ -35,6 +35,7 @@ import {
   getToolShortcut,
   HandToolButton,
   isToolButtonDisabled,
+  isToolHidden,
   LassoToolButton,
   LineToolButton,
   RectangleToolButton,
@@ -120,7 +121,7 @@ const ExtraToolsDropdown = ({
         onSelect={() => setIsExtraToolsMenuOpen(false)}
         className="App-toolbar__extra-tools-dropdown"
       >
-        {UIOptions.tools?.image !== false && (
+        {!isToolHidden(app, "image") && (
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "image" })}
             icon={ImageIcon}
@@ -132,56 +133,66 @@ const ExtraToolsDropdown = ({
             {t("toolBar.image")}
           </DropdownMenu.Item>
         )}
-        <DropdownMenu.Item
-          onSelect={() => app.setActiveTool({ type: "frame" })}
-          icon={frameToolIcon}
-          shortcut={KEYS.F.toLocaleUpperCase()}
-          data-testid="toolbar-frame"
-          selected={frameToolSelected}
-          disabled={isToolButtonDisabled(app, "frame")}
-        >
-          {t("toolBar.frame")}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onSelect={() => app.setActiveTool({ type: "embeddable" })}
-          icon={EmbedIcon}
-          data-testid="toolbar-embeddable"
-          selected={embeddableToolSelected}
-          disabled={isToolButtonDisabled(app, "embeddable")}
-        >
-          {t("toolBar.embeddable")}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onSelect={() => app.setActiveTool({ type: "autoshape" })}
-          icon={drawShapeToolIcon}
-          shortcut={getToolShortcut("autoshape")}
-          data-testid="toolbar-autoshape"
-          selected={drawShapeToolSelected}
-          disabled={isToolButtonDisabled(app, "autoshape")}
-        >
-          {t("toolBar.autoshape")}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onSelect={() => app.setActiveTool({ type: "laser" })}
-          icon={laserPointerToolIcon}
-          data-testid="toolbar-laser"
-          selected={laserToolSelected}
-          shortcut={KEYS.K.toLocaleUpperCase()}
-          disabled={isToolButtonDisabled(app, "laser")}
-        >
-          {t("toolBar.laser")}
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          onSelect={() => app.setActiveTool({ type: "bucketfill" })}
-          icon={bucketFillIcon}
-          data-testid="toolbar-bucketfill"
-          selected={bucketFillToolSelected}
-          shortcut={KEYS.B.toLocaleUpperCase()}
-          disabled={isToolButtonDisabled(app, "bucketfill")}
-        >
-          {t("toolBar.bucketfill")}
-        </DropdownMenu.Item>
-        {isFullStylesPanel && (
+        {!isToolHidden(app, "frame") && (
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "frame" })}
+            icon={frameToolIcon}
+            shortcut={KEYS.F.toLocaleUpperCase()}
+            data-testid="toolbar-frame"
+            selected={frameToolSelected}
+            disabled={isToolButtonDisabled(app, "frame")}
+          >
+            {t("toolBar.frame")}
+          </DropdownMenu.Item>
+        )}
+        {!isToolHidden(app, "embeddable") && (
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "embeddable" })}
+            icon={EmbedIcon}
+            data-testid="toolbar-embeddable"
+            selected={embeddableToolSelected}
+            disabled={isToolButtonDisabled(app, "embeddable")}
+          >
+            {t("toolBar.embeddable")}
+          </DropdownMenu.Item>
+        )}
+        {!isToolHidden(app, "autoshape") && (
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "autoshape" })}
+            icon={drawShapeToolIcon}
+            shortcut={getToolShortcut("autoshape")}
+            data-testid="toolbar-autoshape"
+            selected={drawShapeToolSelected}
+            disabled={isToolButtonDisabled(app, "autoshape")}
+          >
+            {t("toolBar.autoshape")}
+          </DropdownMenu.Item>
+        )}
+        {!isToolHidden(app, "laser") && (
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "laser" })}
+            icon={laserPointerToolIcon}
+            data-testid="toolbar-laser"
+            selected={laserToolSelected}
+            shortcut={KEYS.K.toLocaleUpperCase()}
+            disabled={isToolButtonDisabled(app, "laser")}
+          >
+            {t("toolBar.laser")}
+          </DropdownMenu.Item>
+        )}
+        {!isToolHidden(app, "bucketfill") && (
+          <DropdownMenu.Item
+            onSelect={() => app.setActiveTool({ type: "bucketfill" })}
+            icon={bucketFillIcon}
+            data-testid="toolbar-bucketfill"
+            selected={bucketFillToolSelected}
+            shortcut={KEYS.B.toLocaleUpperCase()}
+            disabled={isToolButtonDisabled(app, "bucketfill")}
+          >
+            {t("toolBar.bucketfill")}
+          </DropdownMenu.Item>
+        )}
+        {isFullStylesPanel && !isToolHidden(app, "lasso") && (
           <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "lasso" })}
             icon={LassoIcon}
@@ -287,7 +298,9 @@ export const Toolbar = ({
           </>
         )}
 
-        <HandToolButton {...toolProps} hideKeyBinding />
+        {!app.props.lockedViewport && (
+          <HandToolButton {...toolProps} hideKeyBinding />
+        )}
         {isCompactStylesPanel ? (
           <SelectionToolPopover {...toolProps} setAppState={setAppState} />
         ) : appState.preferredSelectionTool.type === "lasso" ? (

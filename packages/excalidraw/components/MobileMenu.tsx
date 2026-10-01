@@ -118,6 +118,10 @@ export const MobileMenu = ({
   };
 
   const renderToolbar = () => {
+    // SONACOVE: hideToolbar — mobile host mirror of the desktop flag
+    if (app.props.UIOptions.hideToolbar) {
+      return null;
+    }
     return <MobileToolbar app={app} setAppState={setAppState} />;
   };
 

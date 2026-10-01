@@ -136,8 +136,10 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
       ...canvasActions,
     },
     tools: {
+      ...props.UIOptions?.tools,
       image: props.UIOptions?.tools?.image ?? true,
     },
+    hideToolbar: props.UIOptions?.hideToolbar ?? false,
   };
 
   if (canvasActions?.export) {
@@ -374,6 +376,13 @@ const areEqual = (prevProps: ExcalidrawProps, nextProps: ExcalidrawProps) => {
   const isUIOptionsSame = prevUIOptionsKeys.every((key) => {
     if (key === "getFormFactor") {
       return true;
+    }
+    if (key === "tools") {
+      // compare by value so hosts inlining `{ tools: { … } }` don't bust the memo
+      return isShallowEqual(
+        prevUIOptions.tools ?? {},
+        nextUIOptions.tools ?? {},
+      );
     }
     if (key === "canvasActions") {
       const canvasOptionKeys = Object.keys(

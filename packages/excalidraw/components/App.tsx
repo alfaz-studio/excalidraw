@@ -826,6 +826,10 @@ class App extends React.Component<AppProps, AppState> {
         this.getSceneElementsMapIncludingDeleted,
       history: {
         clear: this.resetHistory,
+        undo: this.undo,
+        redo: this.redo,
+        canUndo: this.canUndo,
+        canRedo: this.canRedo,
       },
       setViewport: this.viewport.setViewport,
       getViewportOffsets: this.viewport.getOffsets,
@@ -990,6 +994,16 @@ class App extends React.Component<AppProps, AppState> {
       return props.interaction.enabled?.navigation === true;
     }
     return props.interaction !== false;
+  }
+
+  /**
+   * SONACOVE: lockedViewport — whether the zoom UI (zoom in/out/reset buttons,
+   * and the hand tool that pans) should be offered. Navigation may be allowed
+   * by `interaction`, but a locked viewport derives scroll/zoom from the scene
+   * box, so zoom and pan controls would be inert; hide them.
+   */
+  public isZoomUIOffered(): boolean {
+    return !this.props.lockedViewport && this.isNavigationEnabled();
   }
 
   /**
@@ -3539,6 +3553,31 @@ class App extends React.Component<AppProps, AppState> {
   private resetHistory = () => {
     this.history.clear();
   };
+
+  /**
+   * Host-facing undo/redo (public `api.history`). Delegates to the registered
+   * undo/redo actions so the gesture guard, orderByFractionalIndex and capture
+   * semantics stay identical to the keyboard shortcuts. Executed with the
+   * "api" source so a host can drive a non-interactive (annotation) editor's
+   * history without unlocking the rest of the UI.
+   */
+  private undo = () => {
+    const action = this.actionManager.actions.undo;
+    if (action) {
+      this.actionManager.executeAction(action, "api");
+    }
+  };
+
+  private redo = () => {
+    const action = this.actionManager.actions.redo;
+    if (action) {
+      this.actionManager.executeAction(action, "api");
+    }
+  };
+
+  private canUndo = () => !this.history.isUndoStackEmpty;
+
+  private canRedo = () => !this.history.isRedoStackEmpty;
 
   private resetStore = () => {
     this.store.clear();

@@ -367,15 +367,19 @@ const LayerUI = ({
                           "zen-mode": appState.zenModeEnabled,
                         })}
                       >
-                        <Toolbar
-                          app={app}
-                          appState={appState}
-                          setAppState={setAppState}
-                          UIOptions={UIOptions}
-                          onPenModeToggle={onPenModeToggle}
-                          onLockToggle={onLockToggle}
-                          heading={heading}
-                        />
+                        {/* SONACOVE: hideToolbar — hide only the tool row; the
+                            properties panel, menus, footer and dialogs stay */}
+                        {!UIOptions.hideToolbar && (
+                          <Toolbar
+                            app={app}
+                            appState={appState}
+                            setAppState={setAppState}
+                            UIOptions={UIOptions}
+                            onPenModeToggle={onPenModeToggle}
+                            onLockToggle={onLockToggle}
+                            heading={heading}
+                          />
+                        )}
                         {isCollaborating && (
                           <Island
                             style={{

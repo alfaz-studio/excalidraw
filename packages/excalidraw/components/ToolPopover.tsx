@@ -8,7 +8,7 @@ import { Popover } from "radix-ui";
 import { trackEvent } from "../analytics";
 
 import { IconButton } from "./IconButton";
-import { isToolButtonDisabled } from "./Tools";
+import { isToolButtonDisabled, isToolHidden } from "./Tools";
 
 import "./ToolPopover.scss";
 
@@ -80,6 +80,15 @@ export const ToolPopover = ({
     return () => unsubscribe?.();
   }, [app]);
 
+  // SONACOVE: tools switched off via `UIOptions.tools` drop out of the group;
+  // the group itself disappears when nothing is left
+  const visibleOptions = options.filter(
+    (option) => !isToolHidden(app, option.type),
+  );
+  if (visibleOptions.length === 0) {
+    return null;
+  }
+
   const popover = (
     <Popover.Root open={isPopupOpen}>
       <Popover.Trigger asChild>
@@ -109,7 +118,7 @@ export const ToolPopover = ({
           collisionBoundary={container ?? undefined}
           collisionPadding={8}
         >
-          {options.map(({ type, icon, title }) => (
+          {visibleOptions.map(({ type, icon, title }) => (
             <IconButton
               className={clsx(className, {
                 active: currentType === type,

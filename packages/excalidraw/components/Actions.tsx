@@ -921,7 +921,9 @@ export const MobileShapeActions = ({
         }}
       >
         <div style={{ pointerEvents: "auto" }}>
-          <ZoomActions disableShortcuts renderAction={renderAction} />
+          {app.isZoomUIOffered() && (
+            <ZoomActions disableShortcuts renderAction={renderAction} />
+          )}
         </div>
         <div className="compact-action-item">{renderAction("undo")}</div>
         <div className="compact-action-item">{renderAction("redo")}</div>

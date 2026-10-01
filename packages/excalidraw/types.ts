@@ -1336,9 +1336,21 @@ export type SaveAsImageOptions = {
 export type UIOptions = Partial<{
   dockedSidebarBreakpoint: number;
   canvasActions: CanvasActions;
-  tools: {
-    image: boolean;
-  };
+  /**
+   * Switch individual tools off with `{ [tool]: false }`. A disabled tool
+   * renders no toolbar / menu / command-palette entry and cannot be activated
+   * (shortcuts and `setActiveTool` included). Unlisted tools stay enabled.
+   */
+  tools: Partial<Record<ToolType, boolean>>;
+  /**
+   * SONACOVE: hide only the main tool row (the shapes/tools toolbar), while
+   * keeping every other native UI element — the properties panel, main menu,
+   * footer undo/redo and dialogs all stay. Used by hosts that render their own
+   * toolbar (e.g. Sonacove's annotation bar).
+   *
+   * @default false
+   */
+  hideToolbar: boolean;
   /**
    * Optionally control the editor form factor and desktop UI mode from the host app.
    * If not provided, we will take care of it internally.
@@ -1443,6 +1455,7 @@ export type AppClassProperties = {
 
   isInteractionEnabled: App["isInteractionEnabled"];
   isNavigationEnabled: App["isNavigationEnabled"];
+  isZoomUIOffered: App["isZoomUIOffered"];
 };
 
 export type PointerDownState = Readonly<{
@@ -1554,6 +1567,18 @@ export interface ExcalidrawImperativeAPI {
   >["getSceneElementsMapIncludingDeleted"];
   history: {
     clear: InstanceType<typeof App>["resetHistory"];
+    /**
+     * Undo the last local change, exactly as the built-in Cmd/Ctrl+Z action.
+     * No-op while a gesture is in progress (drag, resize, text edit, …), which
+     * would otherwise be mutated under the user's cursor.
+     */
+    undo: () => void;
+    /** Redo the last undone change, exactly as the built-in Cmd/Ctrl+Shift+Z action. */
+    redo: () => void;
+    /** Whether there is anything to undo right now (drives host toolbar buttons). */
+    canUndo: () => boolean;
+    /** Whether there is anything to redo right now. */
+    canRedo: () => boolean;
   };
   getSceneElements: InstanceType<typeof App>["getSceneElements"];
   getAppState: () => InstanceType<typeof App>["state"];
