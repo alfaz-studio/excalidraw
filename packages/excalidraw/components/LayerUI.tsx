@@ -32,11 +32,8 @@ import {
   type ColorDefaultKey,
 } from "../actions/colorTargets";
 
-import {
-  SelectedShapeActions,
-  CompactShapeActions,
-  ShapesSwitcher,
-} from "./Actions";
+import { SelectedShapeActions, CompactShapeActions } from "./Actions";
+import { Toolbar } from "./Toolbar";
 import { LoadingMessage } from "./LoadingMessage";
 import { MobileMenu } from "./MobileMenu";
 import { PasteChartDialog } from "./PasteChartDialog";
@@ -62,10 +59,7 @@ import { HelpDialog } from "./HelpDialog";
 import { ImageExportDialog } from "./ImageExportDialog";
 import { Island } from "./Island";
 import { JSONExportDialog } from "./JSONExportDialog";
-import { HandToolButton } from "./Tools";
 import { LaserPointerButton } from "./LaserPointerButton";
-import { LockButton } from "./LockButton";
-import { HintViewer } from "./HintViewer";
 import { Toast } from "./Toast";
 import {
   ViewportStatusBadge,
@@ -373,79 +367,35 @@ const LayerUI = ({
                           "zen-mode": appState.zenModeEnabled,
                         })}
                       >
-                        <Island
-                          padding={spacing.islandPadding}
-                          className={clsx("App-toolbar", {
-                            "zen-mode": appState.zenModeEnabled,
-                            "App-toolbar--compact": isCompactStylesPanel,
-                          })}
-                        >
-                          {!UIOptions.canvasActions.disableHints && (
-                            <HintViewer
-                              appState={appState}
-                              isMobile={editorInterface.formFactor === "phone"}
-                              editorInterface={editorInterface}
-                              app={app}
-                            />
-                          )}
-                          {heading}
-                          <Stack.Row gap={spacing.toolbarInnerRowGap}>
-                            <PenModeButton
-                              checked={appState.penMode}
-                              onChange={() => onPenModeToggle(null)}
-                              title={t("toolBar.penMode")}
-                              penDetected={appState.penDetected}
-                            />
-                            {!UIOptions.canvasActions.hideLockButton && (
-                                <LockButton
-                                  checked={appState.activeTool.locked}
-                                  onChange={onLockToggle}
-                                  title={t("toolBar.lock")}
-                                />
-                              ) && <div className="App-toolbar__divider" />}
-
-                            <ShapesSwitcher
-                              allowedShapes={
-                                UIOptions.canvasActions.allowedShapes
+                        <Toolbar
+                          app={app}
+                          appState={appState}
+                          setAppState={setAppState}
+                          UIOptions={UIOptions}
+                          onPenModeToggle={onPenModeToggle}
+                          onLockToggle={onLockToggle}
+                          heading={heading}
+                        />
+                        {isCollaborating && (
+                          <Island
+                            style={{
+                              marginLeft: spacing.collabMarginLeft,
+                              alignSelf: "center",
+                              height: "fit-content",
+                            }}
+                          >
+                            <LaserPointerButton
+                              title={t("toolBar.laser")}
+                              checked={
+                                appState.activeTool.type === TOOL_TYPE.laser
                               }
-                              appState={appState}
-                              setAppState={setAppState}
-                              activeTool={appState.activeTool}
-                              UIOptions={UIOptions}
-                              app={app}
-                              disableShortcuts={
-                                UIOptions.canvasActions.disableShortcuts
+                              onChange={() =>
+                                app.setActiveTool({ type: TOOL_TYPE.laser })
                               }
+                              isMobile
                             />
-                            <div className="App-toolbar__divider" />
-                            <HandToolButton
-                              app={app}
-                              activeTool={appState.activeTool}
-                              hideKeyBinding
-                            />
-                          </Stack.Row>
-                        </Island>
-                        {!UIOptions.canvasActions.hideLaserOnCollaboration &&
-                          isCollaborating && (
-                            <Island
-                              style={{
-                                marginLeft: spacing.collabMarginLeft,
-                                alignSelf: "center",
-                                height: "fit-content",
-                              }}
-                            >
-                              <LaserPointerButton
-                                title={t("toolBar.laser")}
-                                checked={
-                                  appState.activeTool.type === TOOL_TYPE.laser
-                                }
-                                onChange={() =>
-                                  app.setActiveTool({ type: TOOL_TYPE.laser })
-                                }
-                                isMobile
-                              />
-                            </Island>
-                          )}
+                          </Island>
+                        )}
                       </Stack.Row>
                     </Stack.Col>
                   </div>

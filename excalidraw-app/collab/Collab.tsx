@@ -6,7 +6,13 @@ import {
   reconcileElements,
 } from "@excalidraw/excalidraw";
 import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
-import { APP_NAME, cloneJSON, EVENT, toBrandedType } from "@excalidraw/common";
+import {
+  APP_NAME,
+  cloneJSON,
+  EVENT,
+  randomId,
+  toBrandedType,
+} from "@excalidraw/common";
 import {
   IDLE_THRESHOLD,
   ACTIVE_THRESHOLD,
@@ -155,7 +161,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
-  private clientId = crypto.randomUUID();
+  private clientId = randomId();
 
   /**
    * SONACOVE: identity stamped onto this client's elements by Portal. The

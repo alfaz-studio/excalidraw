@@ -12133,9 +12133,7 @@ class App extends React.Component<AppProps, AppState> {
   };
 
   private handleAppOnDrop = async (event: React.DragEvent<HTMLDivElement>) => {
-    // No point in proceeding with the file drag drop if the storageBackendUrl is not
-    // available as we won't be able to store the files
-    if (!this.isFileDropEnabled() || !this.props.storageBackendUrl) {
+    if (!this.isFileDropEnabled()) {
       return;
     }
     const { shiftKey, clientX, clientY } = event;
@@ -12468,14 +12466,11 @@ class App extends React.Component<AppProps, AppState> {
     type,
     top,
     left,
-    anchor,
   }: {
     element: NonDeletedExcalidrawElement | null;
     type: "element" | "canvas";
     top: number;
     left: number;
-    /** The box it is opening from, so it can place itself around it. */
-    anchor?: { top: number; bottom: number };
   }) => {
     trackEvent("contextMenu", "openContextMenu", type);
 
@@ -12508,7 +12503,6 @@ class App extends React.Component<AppProps, AppState> {
           contextMenu: {
             top,
             left,
-            anchor,
             items: this.getContextMenuItems(type),
           },
         });

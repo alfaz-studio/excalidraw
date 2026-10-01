@@ -275,7 +275,6 @@ const UnlockPopup = ({
           type: "element",
           top,
           left,
-          anchor: { top, bottom: top + barSize.height },
         });
       },
     },

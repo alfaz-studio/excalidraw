@@ -15,7 +15,7 @@ export class ExcalidrawFontFace {
   }/dist/prod/`;
 
   constructor(family: string, uri: string, descriptors?: FontFaceDescriptors) {
-    this.urls = [];
+    this.urls = ExcalidrawFontFace.createUrls(uri);
 
     const sources = this.urls
       .map((url) => `url(${url}) ${ExcalidrawFontFace.getFormat(url)}`)

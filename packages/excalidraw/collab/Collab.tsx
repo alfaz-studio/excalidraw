@@ -16,6 +16,7 @@ import {
   isDevEnv,
   isTestEnv,
   preventUnload,
+  randomId,
   resolvablePromise,
   throttleRAF,
 } from "@excalidraw/common";
@@ -176,7 +177,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
-  private clientId = crypto.randomUUID();
+  private clientId = randomId();
 
   /**
    * SONACOVE: the identity stamped onto this client's elements. Prefers the

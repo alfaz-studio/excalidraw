@@ -1045,8 +1045,6 @@ export const ShapesSwitcher = ({
 
   // const { TTDDialogTriggerTunnel } = useTunnels();
 
-  const hasStorageBackend = Boolean(app.props.storageBackendUrl);
-
   // Track whether we've already rendered the linear popover group
   let linearPopoverRendered = false;
 
@@ -1057,11 +1055,6 @@ export const ShapesSwitcher = ({
           (shape) => !allowedShapes || allowedShapes.includes(shape.value),
         )
         .map(({ value, icon, key, numericKey, fillable, toolbar }) => {
-          // Hide image tool option if no storageBackendUrl is provided
-          if (value === "image" && !hasStorageBackend) {
-            return null;
-          }
-
           if (
             toolbar === false ||
             UIOptions.tools?.[
@@ -1077,13 +1070,16 @@ export const ShapesSwitcher = ({
           // ── Shape group rendered outside .map(), skip here ──
           if (
             GROUPED_SHAPE_TYPES.has(value) &&
-            UIOptions.canvasActions.groupShapes !== false
+            UIOptions.canvasActions.groupShapes === true
           ) {
             return null;
           }
 
           // ── Linear tools popover (arrow, line) ──
-          if (GROUPED_LINEAR_TYPES.has(value)) {
+          if (
+            GROUPED_LINEAR_TYPES.has(value) &&
+            UIOptions.canvasActions.groupShapes === true
+          ) {
             if (linearPopoverRendered) {
               return null;
             }
@@ -1200,7 +1196,7 @@ export const ShapesSwitcher = ({
             />
           );
         })}
-      {UIOptions.canvasActions.groupShapes !== false && (
+      {UIOptions.canvasActions.groupShapes === true && (
         <>
           <div className="App-toolbar__divider" />
           <ToolPopover

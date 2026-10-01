@@ -330,8 +330,6 @@ export interface AppState {
     items: ContextMenuItems;
     top: number;
     left: number;
-    /** SONACOVE: the box it was opened from — see Popover's `anchor`. */
-    anchor?: { top: number; bottom: number };
   } | null;
   showWelcomeScreen: boolean;
   isLoading: boolean;
