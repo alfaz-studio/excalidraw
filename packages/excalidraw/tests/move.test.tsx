@@ -1,11 +1,12 @@
 import React from "react";
 import { vi } from "vitest";
-import { KEYS, reseed } from "@excalidraw/common";
+import { KEYS, reseed, DEFAULT_ZOOM } from "@excalidraw/common";
 import { bindBindingElement } from "@excalidraw/element";
 import "@excalidraw/utils/test-utils";
 
 import type {
   ExcalidrawArrowElement,
+  ExcalidrawBindableElement,
   NonDeleted,
 } from "@excalidraw/element/types";
 
@@ -84,17 +85,19 @@ describe("move element", () => {
       // bind line to two rectangles
       bindBindingElement(
         arrow.get() as NonDeleted<ExcalidrawArrowElement>,
-        rectA.get(),
+        rectA.get() as NonDeleted<ExcalidrawBindableElement>,
         "orbit",
         "start",
         h.app.scene,
+        DEFAULT_ZOOM,
       );
       bindBindingElement(
         arrow.get() as NonDeleted<ExcalidrawArrowElement>,
-        rectB.get(),
+        rectB.get() as NonDeleted<ExcalidrawBindableElement>,
         "orbit",
         "end",
         h.app.scene,
+        DEFAULT_ZOOM,
       );
     });
 

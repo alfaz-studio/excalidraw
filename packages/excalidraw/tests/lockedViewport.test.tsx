@@ -143,10 +143,13 @@ describe("<Excalidraw lockedViewport>", () => {
     expect(h.state.scrollY).toBeCloseTo(0, 4);
   });
 
-  it("ignores scrollToContent", async () => {
+  it("ignores programmatic viewport changes", async () => {
     await renderLocked();
 
-    h.app.scrollToContent();
+    h.app.viewport.setViewport({
+      target: h.elements,
+      fit: "scale-down",
+    });
 
     expect(h.state.zoom.value).toBeCloseTo(0.5, 6);
     expect(h.state.scrollX).toBeCloseTo(0, 4);

@@ -6,7 +6,11 @@ import { useTunnels } from "../../context/tunnels";
 import { useUIAppState } from "../../context/ui-appState";
 
 import { t } from "../../i18n";
-import { useEditorInterface, useExcalidrawSetAppState } from "../App";
+import {
+  useAppProps,
+  useEditorInterface,
+  useExcalidrawSetAppState,
+} from "../App";
 import { UserList } from "../UserList";
 import DropdownMenu from "../dropdownMenu/DropdownMenu";
 import DropdownMenuSub from "../dropdownMenu/DropdownMenuSub";
@@ -35,6 +39,7 @@ const MainMenu = Object.assign(
       const { MainMenuTunnel } = useTunnels();
       const editorInterface = useEditorInterface();
       const appState = useUIAppState();
+      const appProps = useAppProps();
       const setAppState = useExcalidrawSetAppState();
 
       return (
@@ -70,7 +75,8 @@ const MainMenu = Object.assign(
                     <UserList
                       mobile={true}
                       collaborators={appState.collaborators}
-                      userToFollow={appState.userToFollow?.socketId || null}
+                      userToFollow={appProps.userToFollow?.socketId || null}
+                      currentUserControls={appProps.currentUserControls}
                     />
                   </fieldset>
                 )}

@@ -1,8 +1,15 @@
 {
   "labels": {
+    "signUp": "Sign up",
+    "signIn": "Sign in",
+    "upgrade": "Upgrade",
     "paste": "Paste",
     "pasteAsPlaintext": "Paste as plaintext",
     "pasteCharts": "Paste charts",
+    "chartType_bar": "Bar chart",
+    "chartType_line": "Line chart",
+    "chartType_radar": "Radar chart",
+    "chartType_plaintext": "Plain text",
     "selectAll": "Select all",
     "multiSelect": "Add element to selection",
     "moveCanvas": "Move canvas",
@@ -21,6 +28,7 @@
     "copyStyles": "Copy styles",
     "pasteStyles": "Paste styles",
     "stroke": "Stroke",
+    "textColor": "Text color",
     "changeStroke": "Change stroke color",
     "background": "Background",
     "changeBackground": "Change background color",
@@ -31,6 +39,9 @@
     "strokeStyle_dashed": "Dashed",
     "strokeStyle_dotted": "Dotted",
     "sloppiness": "Sloppiness",
+    "pressure": "Pressure",
+    "pressure_constant": "Constant",
+    "pressure_variable": "Variable",
     "opacity": "Opacity",
     "textAlign": "Text align",
     "edges": "Edges",
@@ -49,7 +60,14 @@
     "arrowhead_crowfoot_many": "Crow's foot (many)",
     "arrowhead_crowfoot_one": "Crow's foot (one)",
     "arrowhead_crowfoot_one_or_many": "Crow's foot (one or many)",
+    "arrowhead_cardinality_one": "Cardinality (one)",
+    "arrowhead_cardinality_many": "Cardinality (many)",
+    "arrowhead_cardinality_one_or_many": "Cardinality (one or many)",
+    "arrowhead_cardinality_exactly_one": "Cardinality (exactly one)",
+    "arrowhead_cardinality_zero_or_one": "Cardinality (zero or one)",
+    "arrowhead_cardinality_zero_or_many": "Cardinality (zero or many)",
     "more_options": "More options",
+    "cardinality": "Cardinality",
     "arrowtypes": "Arrow type",
     "arrowtype_sharp": "Sharp arrow",
     "arrowtype_round": "Curved arrow",
@@ -95,6 +113,7 @@
     "group": "Group selection",
     "ungroup": "Ungroup selection",
     "collaborators": "Collaborators",
+    "you": "You",
     "toggleGrid": "Toggle grid",
     "addToLibrary": "Add to library",
     "removeFromLibrary": "Remove from library",
@@ -173,7 +192,16 @@
     "tab": "Tab",
     "shapeSwitch": "Switch shape",
     "preferences": "Preferences",
-    "preferences_toolLock": "Tool lock"
+    "preferences_toolLock": "Tool lock",
+    "boxSelectionMode": "Select on",
+    "boxSelectionContain": "Wrap",
+    "boxSelectionOverlap": "Overlap",
+    "arrowBinding": "Arrow binding",
+    "midpointSnapping": "Snap to midpoints",
+    "showHints": "Show hints",
+    "inputDevice": "Input",
+    "inputDeviceTrackpad": "Trackpad",
+    "inputDeviceMouse": "Mouse"
   },
   "elementLink": {
     "title": "Link to object",
@@ -223,6 +251,7 @@
     "undo": "Undo",
     "redo": "Redo",
     "resetLibrary": "Reset library",
+    "reset": "Reset",
     "createNewRoom": "Create new room",
     "fullScreen": "Full screen",
     "darkMode": "Dark mode",
@@ -310,12 +339,19 @@
     "eraser": "Eraser",
     "frame": "Frame tool",
     "magicframe": "Wireframe to code",
+    "stickynote": "Sticky note",
     "embeddable": "Web Embed",
     "laser": "Laser pointer",
+    "autoshape": "Draw to shape",
+    "bucketfill": "Bucket fill",
     "hand": "Hand (panning tool)",
     "extraTools": "More tools",
     "mermaidToExcalidraw": "Mermaid to Excalidraw",
     "convertElementType": "Toggle shape type"
+  },
+  "bucketfill": {
+    "noRegion": "Couldn't find an enclosed region to fill here.",
+    "tooComplex": "This region is too complex to fill."
   },
   "element": {
     "rectangle": "Rectangle",
@@ -329,6 +365,7 @@
     "group": "Group",
     "frame": "Frame",
     "magicframe": "Wireframe to code",
+    "stickynote": "Sticky note",
     "embeddable": "Web Embed",
     "selection": "Selection",
     "iframe": "IFrame"
@@ -347,13 +384,17 @@
     "freeDraw": "Click and drag, release when you're finished",
     "text": "Tip: you can also add text by double-clicking anywhere with the selection tool",
     "embeddable": "Click-drag to create a website embed",
+    "stickynote": "Click to place a note, or drag to size it",
+    "autoshape": "Draw rectangles, circles, diamonds, lines and arrows",
     "text_selected": "Double-click or press {{shortcut}} to edit text",
     "text_editing": "Press {{shortcut_1}} or {{shortcut_2}} to finish editing",
     "linearElementMulti": "Click on last point or press {{shortcut_1}} or {{shortcut_2}} to finish",
     "lockAngle": "You can constrain angle by holding {{shortcut}}",
     "resize": "You can constrain proportions by holding {{shortcut_1}} while resizing,\nhold {{shortcut_2}} to resize from the center",
     "resizeImage": "You can resize freely by holding {{shortcut_1}},\nhold {{shortcut_2}} to resize from the center",
+    "resizeStickyNote": "hold {{shortcut_1}} to resize freely, {{shortcut_2}} to resize from the center",
     "rotate": "You can constrain angles by holding {{shortcut}} while rotating",
+    "toggleArrowhead": "Double-click to toggle the arrowhead",
     "lineEditor_info": "Hold {{shortcut_1}} and Double-click or press {{shortcut_2}} to edit points",
     "lineEditor_line_info": "Double-click or press {{shortcut}} to edit points",
     "lineEditor_pointSelected": "Press {{shortcut_1}} to remove point(s),\n{{shortcut_2}} to duplicate, or drag to move",
@@ -396,6 +437,10 @@
   },
   "errorDialog": {
     "title": "Error"
+  },
+  "progressDialog": {
+    "title": "Saving",
+    "defaultMessage": "Preparing to save..."
   },
   "exportDialog": {
     "disk_title": "Save to disk",
@@ -578,7 +623,11 @@
     "colors": "Colors",
     "shades": "Shades",
     "hexCode": "Hex code",
-    "noShades": "No shades available for this color"
+    "noShades": "No shades available for this color",
+    "invalidColor": "Not a valid color",
+    "invalidHexLength": "Hex code must be 3, 4, 6, or 8 characters",
+    "topPicksTip": "Tip: drag any color onto your top picks to pin it",
+    "resetTopPicks": "Reset to default top picks"
   },
   "overwriteConfirm": {
     "action": {
@@ -611,14 +660,24 @@
       }
     }
   },
+  "fileDrop": {
+    "replace": "Drop to replace content",
+    "add": "Drop to add to canvas",
+    "importLibrary": "Drop to import library",
+    "replaceHint": "Hold <shift>Shift</shift> to keep existing content",
+    "keepHint": "Your existing content will be kept",
+    "libraryHint": "Library files will append",
+    "replacedToast": "Content replaced. {{shortcut}} to undo"
+  },
   "mermaid": {
     "title": "Mermaid to Excalidraw",
     "button": "Insert",
-    "description": "Currently only <flowchartLink>Flowchart</flowchartLink>,<sequenceLink> Sequence, </sequenceLink> and <classLink>Class </classLink>Diagrams are supported. The other types will be rendered as image in Excalidraw.",
+    "description": "Currently only <flowchartLink>Flowchart</flowchartLink>, <sequenceLink>Sequence</sequenceLink>, <classLink>Class</classLink>, and <erdLink>Entity Relationship</erdLink> Diagrams are supported. The other types will be rendered as image in Excalidraw.",
     "syntax": "Mermaid Syntax",
     "preview": "Preview",
     "label": "Mermaid",
-    "inputPlaceholder": "Write Mermaid diagram defintion here..."
+    "inputPlaceholder": "Write Mermaid diagram definition here...",
+    "autoFixAvailable": "Auto-fix is available"
   },
   "ttd": {
     "error": "Error!"
@@ -643,7 +702,7 @@
     "placeholder": {
       "title": "Let's design your diagram",
       "description": "Describe the diagram you want to create, and we'll generate it for you.",
-      "hint": "At the moment we know Flowchart, Sequence, and Class diagrams."
+      "hint": "At the moment we know Flowchart, Sequence, Class, State, and Entity Relationship diagrams."
     },
     "preview": "Preview",
     "insert": "Insert",
@@ -675,7 +734,9 @@
     },
     "sceneFonts": "In this scene",
     "availableFonts": "Available fonts",
-    "empty": "No fonts found"
+    "empty": "No fonts found",
+    "topPicksTip": "Tip: drag any font onto your top picks to pin it",
+    "resetTopPicks": "Reset to default top picks"
   },
   "userList": {
     "empty": "No users found",

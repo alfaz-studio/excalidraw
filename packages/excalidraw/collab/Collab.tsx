@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-restricted-imports */
 import {
   CaptureUpdateAction,
   getSceneVersion,
@@ -49,6 +50,7 @@ import type {
   ExcalidrawCollabProps,
   ExcalidrawFileError,
   IMeetingDetails,
+  UserToFollow,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -126,6 +128,7 @@ export interface CollabAPI {
   setUsername: CollabInstance["setUsername"];
   getUsername: CollabInstance["getUsername"];
   getActiveRoomLink: CollabInstance["getActiveRoomLink"];
+  setUserToFollow: (userToFollow: UserToFollow | null) => void;
   setCollabError: CollabInstance["setErrorDialog"];
 }
 
@@ -139,6 +142,16 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   portal: Portal;
   fileManager: FileManager;
   excalidrawAPI: ExcalidrawCollabProps["excalidrawAPI"];
+
+  /** SONACOVE: socket ids following this client (was AppState.followedBy upstream). */
+  private followedBy = new Set<SocketId>();
+
+  /** SONACOVE: the user this client follows (was AppState.userToFollow upstream). */
+  private userToFollow: UserToFollow | null = null;
+
+  setUserToFollow = (userToFollow: UserToFollow | null) => {
+    this.userToFollow = userToFollow;
+  };
   activeIntervalId: number | null;
   idleTimeoutId: number | null;
 
@@ -301,6 +314,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       setUsername: this.setUsername,
       getUsername: this.getUsername,
       getActiveRoomLink: this.getActiveRoomLink,
+      setUserToFollow: this.setUserToFollow,
       setCollabError: this.setErrorDialog,
     };
 
@@ -979,7 +993,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
             // we're not following the user
             // (shouldn't happen, but could be late message or bug upstream)
-            if (appState.userToFollow?.socketId !== socketId) {
+            if (this.props.userToFollow?.socketId !== socketId) {
               console.warn(
                 `receiving remote client's (from ${socketId}) viewport bounds even though we're not subscribed to it!`,
               );
@@ -988,8 +1002,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
             // cross-follow case, ignore updates in this case
             if (
-              appState.userToFollow &&
-              appState.followedBy.has(appState.userToFollow.socketId)
+              this.props.userToFollow &&
+              this.followedBy.has(this.props.userToFollow.socketId)
             ) {
               return;
             }
@@ -998,8 +1012,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               appState: zoomToFitBounds({
                 appState,
                 bounds: sceneBounds,
-                fitToViewport: true,
-                viewportZoomFactor: 1,
+                fit: "contain",
               }).appState,
             });
 
@@ -1044,9 +1057,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.portal.socket.on(
       WS_EVENTS.USER_FOLLOW_ROOM_CHANGE,
       (followedBy: SocketId[]) => {
-        this.excalidrawAPI.updateScene({
-          appState: { followedBy: new Set(followedBy) },
-        });
+        this.followedBy = new Set(followedBy);
 
         this.relayVisibleSceneBounds({ force: true });
       },
@@ -1406,7 +1417,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   relayVisibleSceneBounds = (props?: { force: boolean }) => {
     const appState = this.excalidrawAPI.getAppState();
 
-    if (this.portal.socket && (appState.followedBy.size > 0 || props?.force)) {
+    if (this.portal.socket && (this.followedBy.size > 0 || props?.force)) {
       this.portal.broadcastVisibleSceneBounds(
         {
           sceneBounds: getVisibleSceneBounds(appState),

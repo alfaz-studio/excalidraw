@@ -7,7 +7,8 @@ import { Popover } from "radix-ui";
 
 import { trackEvent } from "../analytics";
 
-import { ToolButton } from "./ToolButton";
+import { IconButton } from "./IconButton";
+import { isToolButtonDisabled } from "./Tools";
 
 import "./ToolPopover.scss";
 
@@ -18,7 +19,8 @@ import type { AppClassProperties } from "../types";
 type ToolOption = {
   type: string;
   icon: React.ReactNode;
-  title?: string;
+  title: string;
+  fillable?: boolean;
 };
 
 type ToolPopoverProps = {
@@ -28,12 +30,12 @@ type ToolPopoverProps = {
   defaultOption: string;
   className?: string;
   wrapperClassName?: string;
-  namePrefix: string;
-  title: string;
+  namePrefix?: string;
+  title?: string;
+  fillable?: boolean;
   "data-testid": string;
   onToolChange: (type: string) => void;
   displayedOption: ToolOption;
-  fillable?: boolean;
 };
 
 export const ToolPopover = ({
@@ -45,15 +47,15 @@ export const ToolPopover = ({
   wrapperClassName,
   namePrefix,
   title,
+  fillable,
   "data-testid": dataTestId,
   onToolChange,
   displayedOption,
-  fillable = false,
 }: ToolPopoverProps) => {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const currentType = activeTool.type;
   const isActive = displayedOption.type === currentType;
-  const SIDE_OFFSET = 32 / 2 + 10;
+  const SIDE_OFFSET = 16;
   const { container } = useExcalidrawContainer();
 
   // Close popup when user actively switches to a tool outside this group
@@ -81,17 +83,16 @@ export const ToolPopover = ({
   const popover = (
     <Popover.Root open={isPopupOpen}>
       <Popover.Trigger asChild>
-        <ToolButton
-          className={clsx(className, {
-            fillable,
-            active: options.some((o) => o.type === activeTool.type),
-          })}
-          type="radio"
+        <IconButton
+          className={clsx({ fillable: fillable ?? displayedOption.fillable })}
+          type="toggle"
           icon={displayedOption.icon}
           checked={isActive}
-          name="editor-current-shape"
-          title={title}
-          aria-label={title}
+          disabled={options.every((option) =>
+            isToolButtonDisabled(app, option.type),
+          )}
+          title={capitalizeString(displayedOption.title)}
+          aria-label={capitalizeString(displayedOption.title)}
           data-testid={dataTestId}
           onPointerDown={() => {
             // A single click on the trigger both toggles the group popover AND
@@ -121,20 +122,20 @@ export const ToolPopover = ({
           collisionPadding={8}
         >
           {options.map(({ type, icon, title }) => (
-            <ToolButton
+            <IconButton
               className={clsx(className, {
                 active: currentType === type,
               })}
               key={type}
-              type="radio"
+              type="toggle"
               icon={icon}
               checked={currentType === type}
-              name={`${namePrefix}-option`}
+              disabled={isToolButtonDisabled(app, type)}
               title={title || capitalizeString(type)}
               keyBindingLabel=""
               aria-label={title || capitalizeString(type)}
               data-testid={`toolbar-${type}`}
-              onChange={() => {
+              onSelect={() => {
                 if (app.state.activeTool.type !== type) {
                   trackEvent("toolbar", type, "ui");
                 }
