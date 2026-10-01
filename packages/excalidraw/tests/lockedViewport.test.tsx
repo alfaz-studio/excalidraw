@@ -182,4 +182,28 @@ describe("<Excalidraw lockedViewport>", () => {
 
     expect(h.state.scrollX).not.toBeCloseTo(0, 4);
   });
+
+  // D8: lockedViewport also hides the zoom UI and the hand tool
+  it("offers no zoom UI and no hand tool while locked", async () => {
+    await renderLocked();
+
+    expect(h.app.isZoomUIOffered()).toBe(false);
+    expect(document.querySelector(".zoom-in-button")).toBeNull();
+    expect(document.querySelector(".zoom-out-button")).toBeNull();
+    // the hand tool button is keyed by its tool value
+    expect(document.querySelector('[data-testid="toolbar-hand"]')).toBeNull();
+  });
+
+  it("offers the zoom UI and hand tool when unlocked", async () => {
+    mockBoundingClientRect({ width: 960, height: 540 });
+    await render(
+      <div>
+        <Excalidraw lockedViewport={undefined} />
+      </div>,
+    );
+    await waitFor(() => expect(h.state.width).toBe(960));
+
+    expect(h.app.isZoomUIOffered()).toBe(true);
+    expect(document.querySelector(".zoom-in-button")).not.toBeNull();
+  });
 });
