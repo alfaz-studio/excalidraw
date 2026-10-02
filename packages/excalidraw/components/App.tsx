@@ -1213,7 +1213,8 @@ class App extends React.Component<AppProps, AppState> {
     ref: HTMLIFrameElement | null,
   ) {
     if (ref) {
-      // JSX types lack `credentialless`, so set it here for COEP require-corp embed compat.
+      // Belt-and-braces alongside the JSX spread above: re-created nodes keep
+      // the attribute even if a render path ever drops the spread.
       ref.setAttribute("credentialless", "");
       this.iFrameRefs.set(element.id, ref);
     }
@@ -1739,6 +1740,12 @@ class App extends React.Component<AppProps, AppState> {
                     <iframe
                       ref={(ref) => this.cacheEmbeddableRef(el, ref)}
                       className="excalidraw__embeddable"
+                      // Must exist at creation (pre-navigation): the COEP
+                      // check runs on the initial load, so a ref-set attribute
+                      // arrives too late. Spread + cast since JSX types lack it.
+                      {...{ credentialless: "" } as {
+                        credentialless?: string;
+                      }}
                       srcDoc={
                         src?.type === "document"
                           ? src.srcdoc(this.state.theme)
