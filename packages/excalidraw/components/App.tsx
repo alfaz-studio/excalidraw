@@ -1213,6 +1213,8 @@ class App extends React.Component<AppProps, AppState> {
     ref: HTMLIFrameElement | null,
   ) {
     if (ref) {
+      // JSX types lack `credentialless`, so set it here for COEP require-corp embed compat.
+      ref.setAttribute("credentialless", "");
       this.iFrameRefs.set(element.id, ref);
     }
   }
