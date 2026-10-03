@@ -608,6 +608,25 @@ const gesture: Gesture = {
   initialScale: null,
 };
 
+// ============================================================================
+// SONACOVE: embed-interact A/B/C switch — DELETE THIS WHOLE BLOCK to revert.
+// Toggled at runtime via `?embed-interact=a|b|c` (no rebuild); default "a".
+// A = new embeds go interactive at once + drag bar to move them.
+// B = select-then-interact kept, but new embeds auto-activate once (no bar).
+// C = embeds always interactive; the drag bar (always shown) is the only move.
+// ============================================================================
+type EmbedInteractMode = "a" | "b" | "c"; // the only three modes; anything else falls back.
+const DEFAULT_EMBED_INTERACT_MODE: EmbedInteractMode = "a"; // single default — change here to flip the trial.
+const getEmbedInteractMode = (): EmbedInteractMode => { // one helper owns the query-param read.
+  try { // try/catch: window/location may not exist (SSR/tests).
+    const raw = new URLSearchParams(window.location.search).get("embed-interact"); // read live each call so toggling the param needs no rebuild.
+    return raw === "b" || raw === "c" ? raw : DEFAULT_EMBED_INTERACT_MODE; // "a" or garbage both mean default.
+  } catch { // non-browser (or blocked location) — stay on default.
+    return DEFAULT_EMBED_INTERACT_MODE; // safe fallback, never throws to callers.
+  }
+};
+// ==================== END SONACOVE embed-interact switch ====================
+
 class App extends React.Component<AppProps, AppState> {
   canvas: AppClassProperties["canvas"];
   interactiveCanvas: AppClassProperties["interactiveCanvas"] = null;
@@ -649,6 +668,8 @@ class App extends React.Component<AppProps, AppState> {
   /** embeds that have been inserted to DOM (as a perf optim, we don't want to
    * insert to DOM before user initially scrolls to them) */
   private initializedEmbeds = new Set<ExcalidrawIframeLikeElement["id"]>();
+  // SONACOVE (mode A): embed ids that earned the drag bar on first validation. // instance Set (not state): mutated alongside the auto-activate setState so the same render picks it up.
+  private embedDragBarIds = new Set<ExcalidrawIframeLikeElement["id"]>(); // DELETE with the embed-interact block.
 
   private handleToastClose = () => {
     this.setToast(null);
@@ -1447,6 +1468,8 @@ class App extends React.Component<AppProps, AppState> {
 
   private updateEmbeddables = () => {
     const iframeLikes = new Set<ExcalidrawIframeLikeElement["id"]>();
+    // SONACOVE (embed-interact A/B): first-seen validated id to auto-activate below. // one setState after the loop (not per id) so multi-inserts settle in one render.
+    let autoActivate: ExcalidrawEmbeddableElement | null = null; // DELETE with the embed-interact block.
 
     let updated = false;
     this.scene.getNonDeletedElements().filter((element) => {
@@ -1461,6 +1484,16 @@ class App extends React.Component<AppProps, AppState> {
           );
 
           this.updateEmbedValidationStatus(element, validated);
+          // SONACOVE: first-seen hook covers paste AND panel inserts uniformly. // both arrive via scene (insertEmbeddableElement / updateScene), so hooking validation — not insertion — catches both.
+          if (validated) { // only usable embeds go interactive; blocked links stay placeholders.
+            const mode = getEmbedInteractMode(); // read live: ?embed-interact=b flips without rebuild.
+            if (mode === "a") { // MODE A: interactive at once + drag bar to move it.
+              this.embedDragBarIds.add(element.id); // flag the bar now; the setState below re-renders it in.
+              autoActivate = element; // remember for the single post-loop setState.
+            } else if (mode === "b") { // MODE B: keep select-then-interact, just skip the fiddly first center-click.
+              autoActivate = element; // same hook as A, minus the bar.
+            } // MODE C: nothing here — always-interactive comes from pointerEvents in renderEmbeddables.
+          }
         }
       } else if (isIframeElement(element)) {
         iframeLikes.add(element.id);
@@ -1471,6 +1504,16 @@ class App extends React.Component<AppProps, AppState> {
     if (updated) {
       this.scene.triggerUpdate();
     }
+    // SONACOVE (embed-interact A/B): mirror the center-click activation (active + selected). // guarded: next pass sees the id validated, so this runs exactly once per embed — no setState loop.
+    if (autoActivate) { // a genuinely new embed validated this pass.
+      const el = autoActivate; // narrow the nullable for the closure.
+      if (this.state.activeEmbeddable?.element !== el) { // skip if already active (e.g. racing render).
+        this.setState({ // same shape handleIframeLikeCenterClick sets, minus its 100ms mobile delay.
+          activeEmbeddable: { element: el, state: "active" }, // pointerEvents flip to "all" in render.
+          selectedElementIds: { [el.id]: true }, // keep transform handles visible on the fresh embed.
+        });
+      }
+    }
 
     // GC
     this.iFrameRefs.forEach((ref, id) => {
@@ -1478,6 +1521,38 @@ class App extends React.Component<AppProps, AppState> {
         this.iFrameRefs.delete(id);
       }
     });
+    // SONACOVE (embed-interact A): GC ids for deleted embeds so the Set can't grow. // cheap: only ids missing from the scene are dropped.
+    this.embedDragBarIds.forEach((id) => { // DELETE with the embed-interact block.
+      if (!iframeLikes.has(id)) { // embed deleted (or its validation reset) — forget its bar.
+        this.embedDragBarIds.delete(id); // keeps the flagged set to live embeds only.
+      }
+    });
+  };
+
+  // SONACOVE (embed-interact A/C): drag-bar move — DELETE THIS METHOD to revert. // ~40 lines: pointerdown on the bar → window move translates scene x/y → pointerup ends.
+  private handleEmbedDragBarPointerDown = ( // bound arrow so JSX can pass (e, el) inline.
+    e: React.PointerEvent<HTMLDivElement>, // React pointer event from the bar div.
+    el: ExcalidrawIframeLikeElement, // the embed to move (scene object — mutated in place).
+  ) => { // runs on the bar's onPointerDown; the bar has pointer-events:all even when the iframe doesn't.
+    e.stopPropagation(); // keep canvas from starting its own drag/select under us.
+    e.preventDefault(); // avoid text selection / iframe focus stealing the gesture.
+    const startClient = { clientX: e.clientX, clientY: e.clientY }; // pointer origin, client px (matches the coord helper's shape).
+    const startScene = viewportCoordsToSceneCoords(startClient, this.state); // zoom-aware scene origin (same helper the canvas uses).
+    const origX = el.x; // element origin — deltas apply onto these, not onto drifting reads.
+    const origY = el.y; // (reads each move would accumulate rounding error).
+    if (!this.state.selectedElementIds[el.id]) { // moving selects, like a canvas drag does.
+      this.setState({ selectedElementIds: { [el.id]: true } }); // replace selection with the dragged embed.
+    }
+    const onMove = (mv: PointerEvent) => { // window-level: keeps firing even over the iframe.
+      const cur = viewportCoordsToSceneCoords({ clientX: mv.clientX, clientY: mv.clientY }, this.state); // current scene point under the same zoom/scroll.
+      this.scene.mutateElement(el as any, { x: origX + (cur.x - startScene.x), y: origY + (cur.y - startScene.y) }); // translate by scene delta; mutateElement triggers the update.
+    };
+    const onUp = () => { // drop: gesture over, stop listening.
+      window.removeEventListener("pointermove", onMove); // paired add below — no leak across drags.
+    };
+    window.addEventListener("pointermove", onMove); // capture-free: works while the pointer is over the iframe.
+    window.addEventListener("pointerup", onUp, { once: true }); // auto-removes; pointercancel is rare enough to skip.
+    window.addEventListener("pointercancel", onUp, { once: true }); // touch interruptions (e.g. gesture takeover) end the drag too.
   };
 
   private renderEmbeddables() {
@@ -1667,6 +1742,17 @@ class App extends React.Component<AppProps, AppState> {
           const isHovered =
             this.state.activeEmbeddable?.element === el &&
             this.state.activeEmbeddable?.state === "hover";
+          // SONACOVE (embed-interact): one read per render, then three small paths. // DELETE the mode branches (keep the isActive line) to revert.
+          const embedInteractMode = getEmbedInteractMode(); // live query-param read; constant default when absent.
+          const embedPointerEvents = // MODE C forces interactive; A/B keep the select-then-interact gate.
+            embedInteractMode === "c" // MODE C: always interactive — canvas drag can't grab the frame, the bar below is the only move.
+              ? POINTER_EVENTS.enabled // "all": every embed accepts input with no click first.
+              : isActive // MODES A/B: unchanged gate — active embeds interactive, rest click-through.
+              ? POINTER_EVENTS.enabled // active (incl. auto-activated newcomers) accepts input.
+              : POINTER_EVENTS.disabled; // inactive stays a passive frame until center-clicked.
+          const showEmbedDragBar = // MODE A: newcomers flagged at first validation; MODE C: every embed, always.
+            embedInteractMode === "c" || // MODE C: bar is the ONLY move path (frame itself never yields to canvas).
+            (embedInteractMode === "a" && this.embedDragBarIds.has(el.id)); // MODE A: bar rides the top edge of auto-activated embeds.
 
           return (
             <div
@@ -1696,6 +1782,17 @@ class App extends React.Component<AppProps, AppState> {
                 )}px`,
               }}
             >
+              {showEmbedDragBar && ( // SONACOVE (embed-interact A/C): grip bar; sibling of inner so it floats above the iframe. // pointer-events:all inline beats the disabled inner; stopPropagation keeps canvas out.
+                <div
+                  className="excalidraw__embeddable-dragbar" // styled in css/styles.scss (pill + 6-dot grip, top edge).
+                  style={{ pointerEvents: POINTER_EVENTS.enabled as any }} // clickable even when the frame beneath is passive.
+                  title="Drag to move" // hover tooltip explains the grip.
+                  aria-label="Drag to move embed" // screen-reader name for the handle.
+                  onPointerDown={(e) => this.handleEmbedDragBarPointerDown(e, el)} // move path: scene translate via viewportCoordsToSceneCoords.
+                >
+                  <span className="excalidraw__embeddable-dragbar__dots" aria-hidden="true" /> {/* visual grip only; hidden from AT. */}
+                </div>
+              )}
               <div
                 //this is a hack that addresses isse with embedded excalidraw.com embeddable
                 //https://github.com/excalidraw/excalidraw/pull/6691#issuecomment-1607383938
@@ -1718,9 +1815,7 @@ class App extends React.Component<AppProps, AppState> {
                   width: isVisible ? `${el.width}px` : 0,
                   height: isVisible ? `${el.height}px` : 0,
                   transform: isVisible ? `rotate(${el.angle}rad)` : "none",
-                  pointerEvents: isActive
-                    ? POINTER_EVENTS.enabled
-                    : POINTER_EVENTS.disabled,
+                  pointerEvents: embedPointerEvents, // SONACOVE (embed-interact): mode-aware — "c" always all, else the active gate.
                 }}
               >
                 {isHovered && (

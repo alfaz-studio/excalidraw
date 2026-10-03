@@ -261,8 +261,9 @@ export const getEmbedLink = (
     matchHostname(link, ALLOW_SAME_ORIGIN) || "",
   );
 
-  let type: "video" | "generic" = "generic";
-  let aspectRatio = { w: 560, h: 840 };
+  // Default intrinsic size for generic (non-video) embeds. // landscape 4:3 so pasted links read well without resizing.
+  let type: "video" | "generic" = "generic"; // embed kind, refined per matcher below.
+  let aspectRatio = { w: 800, h: 600 }; // fallback size; each video branch overrides with 16:9.
   const normalizedYtLink = normalizeYouTubeLink(link);
   const ytLink = normalizedYtLink.match(RE_YOUTUBE);
   if (ytLink?.[2]) {
@@ -292,7 +293,8 @@ export const getEmbedLink = (
         link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
     }
-    aspectRatio = isPortrait ? { w: 315, h: 560 } : { w: 560, h: 315 };
+    // Portrait only for /shorts; everything else is landscape 16:9. // bigger defaults so fresh embeds are usable without an immediate resize.
+    aspectRatio = isPortrait ? { w: 540, h: 960 } : { w: 960, h: 540 }; // 9:16 shorts vs 16:9 video.
     embeddedLinkCache.set(originalLink, {
       link,
       intrinsicSize: aspectRatio,
@@ -313,9 +315,9 @@ export const getEmbedLink = (
     const error = !/^\d+$/.test(target)
       ? new URIError("Invalid embed link format")
       : undefined;
-    type = "video";
-    link = `https://player.vimeo.com/video/${target}?api=1`;
-    aspectRatio = { w: 560, h: 315 };
+    type = "video"; // vimeo serves a 16:9 player.
+    link = `https://player.vimeo.com/video/${target}?api=1`; // normalize to the player embed URL.
+    aspectRatio = { w: 960, h: 540 }; // 16:9, matches YouTube landscape default.
     //warning deliberately ommited so it is displayed only once per link
     //same link next time will be served from cache
     embeddedLinkCache.set(originalLink, {
@@ -335,8 +337,8 @@ export const getEmbedLink = (
 
   const googleDriveVideo = parseGoogleDriveVideoLink(link);
   if (googleDriveVideo) {
-    type = "video";
-    const searchParams = new URLSearchParams();
+    type = "video"; // drive preview is a 16:9 video player.
+    const searchParams = new URLSearchParams(); // carry resourcekey/timestamp into the preview URL.
     if (googleDriveVideo.resourceKey) {
       searchParams.set("resourcekey", googleDriveVideo.resourceKey);
     }
@@ -347,8 +349,8 @@ export const getEmbedLink = (
     const search = searchParams.toString();
     link = `https://drive.google.com/file/d/${googleDriveVideo.fileId}/preview${
       search ? `?${search}` : ""
-    }`;
-    aspectRatio = { w: 560, h: 315 };
+    }`; // normalized preview URL keeps file id + params.
+    aspectRatio = { w: 960, h: 540 }; // 16:9, matches other video defaults.
     embeddedLinkCache.set(originalLink, {
       link,
       intrinsicSize: aspectRatio,
@@ -412,10 +414,10 @@ export const getEmbedLink = (
     type = "generic";
     if (kahootChallenge?.[1]) {
       link = `https://embed.kahoot.it/${kahootChallenge[1]}`;
-    } else if (kahootEmbed?.[1]) {
-      link = `https://embed.kahoot.it/${kahootEmbed[1]}`;
-    }
-    aspectRatio = { w: 560, h: 315 };
+    } else if (kahootEmbed?.[1]) { // official player host passes through untouched.
+      link = `https://embed.kahoot.it/${kahootEmbed[1]}`; // canonical player URL for the slug.
+    } // live-PIN join page keeps its URL as-is (matched, not rewritten).
+    aspectRatio = { w: 960, h: 540 }; // 16:9 player; enlarged like other video sizes.
     embeddedLinkCache.set(originalLink, {
       link,
       intrinsicSize: aspectRatio,

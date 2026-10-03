@@ -92,7 +92,7 @@ describe("YouTube timestamp parsing", () => {
       expect(result.link).toContain("start=30");
     }
     // Shorts should have portrait aspect ratio
-    expect(result?.intrinsicSize).toEqual({ w: 315, h: 560 });
+    expect(result?.intrinsicSize).toEqual({ w: 540, h: 960 });
   });
 
   it("should handle playlist URLs with timestamps", () => {
@@ -177,7 +177,7 @@ describe("Google Drive video embedding", () => {
     if (result?.type === "video" || result?.type === "generic") {
       expect(result.link).toBe(expectedLink);
     }
-    expect(result?.intrinsicSize).toEqual({ w: 560, h: 315 });
+    expect(result?.intrinsicSize).toEqual({ w: 960, h: 540 });
   });
 
   it("should preserve resourcekey when available", () => {
@@ -250,7 +250,7 @@ describe("YouTube share-variant embeds", () => {
         "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1",
       );
     }
-    expect(result?.intrinsicSize).toEqual({ w: 560, h: 315 });
+    expect(result?.intrinsicSize).toEqual({ w: 960, h: 540 });
   });
 
   it("should keep the timestamp on reordered watch params", () => {
