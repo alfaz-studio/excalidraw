@@ -213,9 +213,13 @@ const ALLOWED_DOMAINS = new Set([
   "reddit.com",
   "forms.microsoft.com",
   // Kahoot classroom embeds (challenge player, live-PIN join page, player host).
-  "kahoot.it",
-  "play.kahoot.it",
-  "embed.kahoot.it",
+  "kahoot.it", // bare host covers www.kahoot.it (matchHostname strips www.).
+  "play.kahoot.it", // live-PIN join page host.
+  "embed.kahoot.it", // official player iframe host.
+  // Google Docs embeds (Slides publish, Forms) ship as-is via the generic path.
+  "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
+  // Desmos calculator embeds iframe as-is via the generic path.
+  "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -235,9 +239,13 @@ const ALLOW_SAME_ORIGIN = new Set([
   "reddit.com",
   "forms.microsoft.com",
   // Interactive quiz/player frames rely on storage and cookies to join.
-  "kahoot.it",
-  "play.kahoot.it",
-  "embed.kahoot.it",
+  "kahoot.it", // bare host covers www.kahoot.it (matchHostname strips www.).
+  "play.kahoot.it", // live-PIN join page host.
+  "embed.kahoot.it", // official player iframe host.
+  // Slides/Forms need storage for auth + form state, so they keep same-origin.
+  "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
+  // Desmos calculators keep state in storage, so they keep same-origin.
+  "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
 ]);
 
 export const createSrcDoc = (body: string) => {

@@ -279,3 +279,35 @@ describe("YouTube share-variant embeds", () => {
     expect(getEmbedLink("https://www.youtube.com/feed/trending")).toBeNull();
   });
 });
+
+describe("Google Docs and Desmos embeds", () => {
+  // New integration hosts embed as-is via the generic path (no URL rewrite). // validator proves ALLOWED_DOMAINS, sandbox proves ALLOW_SAME_ORIGIN.
+  it.each([
+    // Slides publish embed URL (docs host, publish path). // canonical pubembed form from File > Share > Publish to web.
+    "https://docs.google.com/presentation/d/e/2PACX-1vT1234567890abcdef/pubembed",
+    // Google Forms response URL (same docs host, forms path). // standard viewform link pasted from the browser.
+    "https://docs.google.com/forms/d/e/1FAIpQLSf1234567890abcdef/viewform",
+    // Desmos calculator URL (www variant proves the bare-host match). // matchHostname strips www. so desmos.com covers this.
+    "https://www.desmos.com/calculator/abc123xyz",
+  ])("should validate by default: %s", (url) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true); // default allowlist accepts the host.
+  });
+
+  it.each([
+    // Same three URLs, now checking the generic passthrough shape. // link unchanged, type generic, same-origin kept.
+    "https://docs.google.com/presentation/d/e/2PACX-1vT1234567890abcdef/pubembed",
+    "https://docs.google.com/forms/d/e/1FAIpQLSf1234567890abcdef/viewform",
+    "https://www.desmos.com/calculator/abc123xyz",
+  ])("should embed as-is via the generic path: %s", (url) => {
+    const result = getEmbedLink(url); // generic path returns the link untouched.
+    expect(result).toBeTruthy(); // a result object exists for the URL.
+    if (result?.type === "video" || result?.type === "generic") {
+      // narrow the union so .link/.sandbox read below.
+      expect(result.link).toBe(url); // no rewrite branch touches these hosts.
+      expect(result.type).toBe("generic"); // non-video hosts fall to the generic kind.
+      expect(result.sandbox?.allowSameOrigin).toBe(true); // both hosts sit in ALLOW_SAME_ORIGIN.
+    } else {
+      throw new Error(`expected generic embed for ${url}`); // fail loudly if a document/srcdoc branch ever claims these URLs.
+    }
+  });
+});
