@@ -1215,8 +1215,7 @@ class App extends React.Component<AppProps, AppState> {
     ref: HTMLIFrameElement | null,
   ) {
     if (ref) {
-      // Belt-and-braces alongside the JSX spread above: re-created nodes keep
-      // the attribute even if a render path ever drops the spread.
+      // Belt-and-braces alongside the JSX spread: keeps the attribute if a render path ever drops it.
       ref.setAttribute("credentialless", "");
       this.iFrameRefs.set(element.id, ref);
     }
@@ -1466,7 +1465,8 @@ class App extends React.Component<AppProps, AppState> {
 
           this.updateEmbedValidationStatus(element, validated);
           // SONACOVE: first-seen hook covers paste AND panel inserts uniformly. // both arrive via scene (insertEmbeddableElement / updateScene), so hooking validation — not insertion — catches both.
-          if (validated) { // only usable embeds go interactive; blocked links stay placeholders.
+          if (validated) {
+            // only usable embeds go interactive; blocked links stay placeholders.
             this.embedDragBarIds.add(element.id); // flag the bar now; the setState below re-renders it in.
             autoActivate = element; // remember for the single post-loop setState.
           }
@@ -1481,10 +1481,13 @@ class App extends React.Component<AppProps, AppState> {
       this.scene.triggerUpdate();
     }
     // SONACOVE: mirror the center-click activation (active + selected). // guarded: next pass sees the id validated, so this runs exactly once per embed — no setState loop.
-    if (autoActivate) { // a genuinely new embed validated this pass.
-      const el = autoActivate; // narrow the nullable for the closure.
-      if (this.state.activeEmbeddable?.element !== el) { // skip if already active (e.g. racing render).
-        this.setState({ // same shape handleIframeLikeCenterClick sets, minus its 100ms mobile delay.
+    if (autoActivate) {
+      // typed: CFA can't see the callback assignment, so it keeps `autoActivate` narrowed to null past this guard.
+      const el: ExcalidrawEmbeddableElement = autoActivate;
+      if (this.state.activeEmbeddable?.element !== el) {
+        // skip if already active (e.g. racing render).
+        this.setState({
+          // same shape handleIframeLikeCenterClick sets, minus its 100ms mobile delay.
           activeEmbeddable: { element: el, state: "active" }, // pointerEvents flip to "all" in render.
           selectedElementIds: { [el.id]: true }, // keep transform handles visible on the fresh embed.
         });
@@ -1498,32 +1501,45 @@ class App extends React.Component<AppProps, AppState> {
       }
     });
     // SONACOVE: GC ids for deleted embeds so the Set can't grow. // cheap: only ids missing from the scene are dropped.
-    this.embedDragBarIds.forEach((id) => { // walk flagged ids against the live scene set.
-      if (!iframeLikes.has(id)) { // embed deleted (or its validation reset) — forget its bar.
+    this.embedDragBarIds.forEach((id) => {
+      // walk flagged ids against the live scene set.
+      if (!iframeLikes.has(id)) {
+        // embed deleted (or its validation reset) — forget its bar.
         this.embedDragBarIds.delete(id); // keeps the flagged set to live embeds only.
       }
     });
   };
 
   // SONACOVE: drag-bar move for interactive embeds. // ~40 lines: pointerdown on the bar → window move translates scene x/y → pointerup ends.
-  private handleEmbedDragBarPointerDown = ( // bound arrow so JSX can pass (e, el) inline.
+  private handleEmbedDragBarPointerDown = (
+    // bound arrow so JSX can pass (e, el) inline.
     e: React.PointerEvent<HTMLDivElement>, // React pointer event from the bar div.
     el: ExcalidrawIframeLikeElement, // the embed to move (scene object — mutated in place).
-  ) => { // runs on the bar's onPointerDown; the bar has pointer-events:all even when the iframe doesn't.
+  ) => {
+    // runs on the bar's onPointerDown; the bar has pointer-events:all even when the iframe doesn't.
     e.stopPropagation(); // keep canvas from starting its own drag/select under us.
     e.preventDefault(); // avoid text selection / iframe focus stealing the gesture.
     const startClient = { clientX: e.clientX, clientY: e.clientY }; // pointer origin, client px (matches the coord helper's shape).
     const startScene = viewportCoordsToSceneCoords(startClient, this.state); // zoom-aware scene origin (same helper the canvas uses).
     const origX = el.x; // element origin — deltas apply onto these, not onto drifting reads.
     const origY = el.y; // (reads each move would accumulate rounding error).
-    if (!this.state.selectedElementIds[el.id]) { // moving selects, like a canvas drag does.
+    if (!this.state.selectedElementIds[el.id]) {
+      // moving selects, like a canvas drag does.
       this.setState({ selectedElementIds: { [el.id]: true } }); // replace selection with the dragged embed.
     }
-    const onMove = (mv: PointerEvent) => { // window-level: keeps firing even over the iframe.
-      const cur = viewportCoordsToSceneCoords({ clientX: mv.clientX, clientY: mv.clientY }, this.state); // current scene point under the same zoom/scroll.
-      this.scene.mutateElement(el as any, { x: origX + (cur.x - startScene.x), y: origY + (cur.y - startScene.y) }); // translate by scene delta; mutateElement triggers the update.
+    const onMove = (mv: PointerEvent) => {
+      // window-level: keeps firing even over the iframe.
+      const cur = viewportCoordsToSceneCoords(
+        { clientX: mv.clientX, clientY: mv.clientY },
+        this.state,
+      ); // current scene point under the same zoom/scroll.
+      this.scene.mutateElement(el as any, {
+        x: origX + (cur.x - startScene.x),
+        y: origY + (cur.y - startScene.y),
+      }); // translate by scene delta; mutateElement triggers the update.
     };
-    const onUp = () => { // drop: gesture over, stop listening.
+    const onUp = () => {
+      // drop: gesture over, stop listening.
       window.removeEventListener("pointermove", onMove); // paired add below — no leak across drags.
     };
     window.addEventListener("pointermove", onMove); // capture-free: works while the pointer is over the iframe.
@@ -1758,9 +1774,15 @@ class App extends React.Component<AppProps, AppState> {
                   style={{ pointerEvents: POINTER_EVENTS.enabled as any }} // clickable even when the frame beneath is passive.
                   title="Drag to move" // hover tooltip explains the grip.
                   aria-label="Drag to move embed" // screen-reader name for the handle.
-                  onPointerDown={(e) => this.handleEmbedDragBarPointerDown(e, el)} // move path: scene translate via viewportCoordsToSceneCoords.
+                  onPointerDown={(e) =>
+                    this.handleEmbedDragBarPointerDown(e, el)
+                  } // move path: scene translate via viewportCoordsToSceneCoords.
                 >
-                  <span className="excalidraw__embeddable-dragbar__dots" aria-hidden="true" /> {/* visual grip only; hidden from AT. */}
+                  <span
+                    className="excalidraw__embeddable-dragbar__dots"
+                    aria-hidden="true"
+                  />{" "}
+                  {/* visual grip only; hidden from AT. */}
                 </div>
               )}
               <div
@@ -1805,12 +1827,10 @@ class App extends React.Component<AppProps, AppState> {
                     <iframe
                       ref={(ref) => this.cacheEmbeddableRef(el, ref)}
                       className="excalidraw__embeddable"
-                      // Must exist at creation (pre-navigation): the COEP
-                      // check runs on the initial load, so a ref-set attribute
-                      // arrives too late. Spread + cast since JSX types lack it.
-                      {...{ credentialless: "" } as {
+                      // Must exist pre-navigation: COEP is checked on the initial load, so a ref-set attribute is too late. Cast since JSX types lack it.
+                      {...({ credentialless: "" } as {
                         credentialless?: string;
-                      }}
+                      })}
                       srcDoc={
                         src?.type === "document"
                           ? src.srcdoc(this.state.theme)
