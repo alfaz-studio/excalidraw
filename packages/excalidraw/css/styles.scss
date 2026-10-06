@@ -812,7 +812,8 @@ body.excalidraw-cursor-resize * {
   }
 
   // SONACOVE: grip bar for moving interactive embeds. // pill handle above the frame; pointer-events:all so it grabs even when the frame is passive.
-  .excalidraw__embeddable-dragbar { // pill sitting on the top edge, above the iframe.
+  .excalidraw__embeddable-dragbar {
+    // pill sitting on the top edge, above the iframe.
     position: absolute; // floats over the frame (container is the transformed containing block).
     top: 2px; // hugs the top edge without covering content below.
     left: 50%; // centered…
@@ -826,15 +827,21 @@ body.excalidraw-cursor-resize * {
     border-radius: 999px; // pill shape reads as "handle", not content.
     cursor: grab; // affordance: this thing moves the frame.
     pointer-events: all; // clickable even when the frame beneath is passive.
-    &:active { // while held…
+    &:active {
+      // while held…
       cursor: grabbing; // …show the closed-hand state.
     }
   }
 
-  .excalidraw__embeddable-dragbar__dots { // 6-dot grip: 2 cols × 3 rows via radial-gradient tiling.
+  .excalidraw__embeddable-dragbar__dots {
+    // 6-dot grip: 2 cols × 3 rows via radial-gradient tiling.
     width: 18px; // two dot columns + gap.
     height: 12px; // three dot rows + gaps.
-    background-image: radial-gradient(circle, #fff 1.3px, transparent 1.4px); // one dot per tile…
+    background-image: radial-gradient(
+      circle,
+      #fff 1.3px,
+      transparent 1.4px
+    ); // one dot per tile…
     background-size: 9px 6px; // …tiled 2-across, 3-down.
     background-position: center; // keeps the grid centered in the pill.
     opacity: 0.9; // near-solid so the grip reads on any embed.

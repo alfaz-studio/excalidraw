@@ -422,7 +422,8 @@ export const getEmbedLink = (
     type = "generic";
     if (kahootChallenge?.[1]) {
       link = `https://embed.kahoot.it/${kahootChallenge[1]}`;
-    } else if (kahootEmbed?.[1]) { // official player host passes through untouched.
+    } else if (kahootEmbed?.[1]) {
+      // official player host passes through untouched.
       link = `https://embed.kahoot.it/${kahootEmbed[1]}`; // canonical player URL for the slug.
     } // live-PIN join page keeps its URL as-is (matched, not rewritten).
     aspectRatio = { w: 960, h: 540 }; // 16:9 player; enlarged like other video sizes.
