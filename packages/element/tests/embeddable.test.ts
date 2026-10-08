@@ -246,8 +246,9 @@ describe("YouTube share-variant embeds", () => {
 
     expect(result?.type).toBe("video");
     if (result?.type === "video" || result?.type === "generic") {
+      // Classroom privacy: every frame serves from youtube-nocookie.com.
       expect(result.link).toBe(
-        "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1",
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1",
       );
     }
     expect(result?.intrinsicSize).toEqual({ w: 960, h: 540 });
@@ -277,6 +278,59 @@ describe("YouTube share-variant embeds", () => {
 
   it("should not mistake a section page for a video", () => {
     expect(getEmbedLink("https://www.youtube.com/feed/trending")).toBeNull();
+  });
+});
+
+describe("Second-wave classroom app embeds", () => {
+  // Pinterest shim, Wikipedia articles, Wayground join, Maps player and
+  // Nearpod student surfaces: all generic-path (no rewrite), validated by
+  // host. Validator proves ALLOWED_DOMAINS, sandbox proves ALLOW_SAME_ORIGIN.
+  it.each([
+    "https://assets.pinterest.com/ext/embed.html?id=1234567890123456",
+    "https://assets.pinterest.com/ext/embed.html?grid=teacher/class-ideas",
+    "https://en.wikipedia.org/wiki/Photosynthesis",
+    "https://de.wikipedia.org/wiki/Photosynthese",
+    "https://wayground.com/join?gc=257895",
+    "https://www.google.com/maps/embed?pb=!1m18!2m12",
+    "https://maps.google.com/maps?q=Ankara&output=embed",
+    "https://join.nearpod.com/ABCDE",
+    "https://nearpod.com/student/ABCDE",
+    "https://app.nearpod.com/presentation?pin=ABCDE",
+    "https://share.nearpod.com/xyz123",
+  ])("should validate by default: %s", (url) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true);
+  });
+
+  it("should keep interactive lesson frames same-origin but not static ones", () => {
+    // Wayground, Maps and Nearpod sessions rely on storage/cookies.
+    for (const url of [
+      "https://wayground.com/join?gc=257895",
+      "https://www.google.com/maps/embed?pb=!1m18!2m12",
+      "https://app.nearpod.com/presentation?pin=ABCDE",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(true);
+    }
+    // The Pinterest shim and Wikipedia articles carry no session.
+    for (const url of [
+      "https://assets.pinterest.com/ext/embed.html?id=1234567890123456",
+      "https://en.wikipedia.org/wiki/Photosynthesis",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(false);
+    }
+  });
+
+  it("should still refuse the unframable Pinterest host", () => {
+    // Direct Pinterest pages send SAMEORIGIN and only ever reach the board
+    // through the shim converter, so pinterest.com itself stays unlisted.
+    // (google.com validates by host like docs.google.com does — the meet
+    // normalizer is the gate that only ever stores /embed forms, and share
+    // pages X-Frame-Options-block in the browser regardless.)
+    expect(
+      embeddableURLValidator(
+        "https://www.pinterest.com/pin/1234567890123456/",
+        undefined,
+      ),
+    ).toBe(false);
   });
 });
 

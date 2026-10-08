@@ -220,6 +220,17 @@ const ALLOWED_DOMAINS = new Set([
   "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
   // Desmos calculator embeds iframe as-is via the generic path.
   "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
+  // Second-wave classroom apps, all generic-path (no URL rewrite).
+  "assets.pinterest.com", // official Pin/board widget shim (never frame pinterest.com itself).
+  "*.wikipedia.org", // article URLs on every language subdomain.
+  "wayground.com", // student join page (legacy aliases canonicalize client-side).
+  "google.com", // Maps /embed player only (share pages convert client-side).
+  "maps.google.com", // same Maps player on the maps host.
+  "join.nearpod.com", // student code-entry shell.
+  "nearpod.com", // student join + share paths (login/dashboard reject client-side).
+  "app.nearpod.com", // live lesson player.
+  "share.nearpod.com", // teacher-generated share links.
+  "np1.nearpod.com", // legacy share endpoint.
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -246,6 +257,15 @@ const ALLOW_SAME_ORIGIN = new Set([
   "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
   // Desmos calculators keep state in storage, so they keep same-origin.
   "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
+  // Interactive lesson frames keep storage like the quiz players above.
+  "wayground.com", // join-session state.
+  "google.com", // Maps embed on the main host.
+  "maps.google.com", // Maps embed on the maps host.
+  "join.nearpod.com", // join-session state.
+  "nearpod.com", // share-link sessions.
+  "app.nearpod.com", // live lesson sessions.
+  "share.nearpod.com", // share-link sessions.
+  "np1.nearpod.com", // legacy share sessions.
 ]);
 
 export const createSrcDoc = (body: string) => {
@@ -285,20 +305,22 @@ export const getEmbedLink = (
     const time = startTime > 0 ? `&start=${startTime}` : ``;
     const isPortrait = ytLink[0].includes("shorts");
     type = "video";
+    // Classroom privacy: every YouTube frame serves from youtube-nocookie.com
+    // (no tracking cookies until play), whatever host was pasted.
     switch (ytLink[1]) {
       case "embed/":
       case "watch?v=":
       case "shorts/":
       case "live/":
       case "v/":
-        link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
+        link = `https://www.youtube-nocookie.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
       case "playlist?list=":
       case "embed/videoseries?list=":
-        link = `https://www.youtube.com/embed/videoseries?list=${ytLink[2]}&enablejsapi=1${time}`;
+        link = `https://www.youtube-nocookie.com/embed/videoseries?list=${ytLink[2]}&enablejsapi=1${time}`;
         break;
       default:
-        link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
+        link = `https://www.youtube-nocookie.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
     }
     // Portrait only for /shorts; everything else is landscape 16:9. // bigger defaults so fresh embeds are usable without an immediate resize.
