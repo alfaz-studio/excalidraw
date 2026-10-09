@@ -3,6 +3,13 @@
 
 set -e
 
+# Windows dev machines run this script under WSL, which has no node of its
+# own — but WSL interop exposes the Windows install as node.exe, so fall
+# back to it rather than failing with "node: command not found".
+if ! command -v node >/dev/null 2>&1 && command -v node.exe >/dev/null 2>&1; then
+    node() { node.exe "$@"; }
+fi
+
 echo "Building Excalidraw for Jitsi Meet..."
 
 # Rebuild when the SOURCES have moved, not merely when a dist is absent.
