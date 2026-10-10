@@ -334,6 +334,100 @@ describe("Second-wave classroom app embeds", () => {
   });
 });
 
+describe("Third-wave classroom app embeds", () => {
+  // Every client-normalized shape from the meet normalizers: generic-path
+  // (no rewrite), validated by host. Validator proves ALLOWED_DOMAINS,
+  // sandbox proves ALLOW_SAME_ORIGIN.
+  it.each([
+    "https://scratch.mit.edu/projects/123456789/embed",
+    "https://codepen.io/teacher/embed/abcDEF",
+    "https://replit.com/@teacher/lesson-1?embed=true",
+    "https://www.canva.com/design/ABC123/view?embed",
+    "https://3dwarehouse.sketchup.com/embed.html?mid=abc123",
+    "https://embed.figma.com/design/abc123/Project?embed-host=share",
+    "https://view.genially.com/abc123",
+    "https://view.genial.ly/abc123",
+    "https://pitch.com/embed/abc123",
+    "https://gamma.app/embed/abc123",
+    "https://onedrive.live.com/embed?resid=ABC123&authkey=ABC",
+    "https://quizlet.com/123456789/flashcards/embed",
+    "https://embed.notion.co/abc123",
+    "https://www.mentimeter.com/embed/abc123",
+    "https://padlet.com/embed/abc123",
+    "https://learningapps.org/watch?id=abc123",
+    "https://thewessens.net/game",
+    "https://ascendmath.com/fcm/html5/fcm.html",
+    "https://activities.graspablemath.com/whiteboard/abc123",
+    "https://research.dwi.ufl.edu/op.n/file/bca9ju45kvvrvoan/embed",
+    "https://en.wiktionary.org/wiki/apple",
+    "https://quran.com/al-fatihah",
+    "https://tanzil.net/trans/en.transliteration",
+    "https://corpus.quran.com/wordbyword.jsp",
+    "https://altafsir.com/Tafasir.asp",
+    "https://quran.ksu.edu.sa/index.php",
+    "https://sunnah.com/bukhari:1",
+    "https://colonist.io/",
+    "https://drawbattle.io/ABCDEF",
+    "https://skribbl.io/?abc123",
+    "https://playscrabble.com/",
+    "https://embed.music.apple.com/us/album/abc123",
+    "https://embed.podcasts.apple.com/us/podcast/abc123",
+  ])("should validate by default: %s", (url) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true);
+  });
+
+  it("should keep interactive game/tool frames same-origin but not static readers", () => {
+    // Sessions, cloud state and study progress rely on storage/cookies.
+    for (const url of [
+      "https://scratch.mit.edu/projects/123456789/embed",
+      "https://codepen.io/teacher/embed/abcDEF",
+      "https://replit.com/@teacher/lesson-1?embed=true",
+      "https://view.genially.com/abc123",
+      "https://quizlet.com/123456789/flashcards/embed",
+      "https://padlet.com/embed/abc123",
+      "https://colonist.io/",
+      "https://drawbattle.io/ABCDEF",
+      "https://skribbl.io/?abc123",
+      "https://playscrabble.com/",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(true);
+    }
+    // Static readers and viewer decks carry no session.
+    for (const url of [
+      "https://www.canva.com/design/ABC123/view?embed",
+      "https://3dwarehouse.sketchup.com/embed.html?mid=abc123",
+      "https://gamma.app/embed/abc123",
+      "https://onedrive.live.com/embed?resid=ABC123&authkey=ABC",
+      "https://en.wiktionary.org/wiki/apple",
+      "https://quran.com/al-fatihah",
+      "https://sunnah.com/bukhari:1",
+      "https://embed.music.apple.com/us/album/abc123",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(false);
+    }
+  });
+
+  it("should not double-wrap client-converted Figma embeds", () => {
+    // The meet normalizer converts public file links to the /embed form with
+    // its own embed_host: those pass through untouched.
+    const converted =
+      "https://www.figma.com/embed?embed_host=sonacove&url=https%3A%2F%2Fwww.figma.com%2Fdesign%2Fabc%2FProject";
+    expect(getEmbedLink(converted)?.link).toBe(converted);
+    // Raw file links still take the share-host rewrite.
+    const raw = "https://www.figma.com/design/abc123/Project";
+    expect(getEmbedLink(raw)?.link).toBe(
+      `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(raw)}`,
+    );
+  });
+
+  it("should still refuse the dead Trinket host", () => {
+    // Trinket shut down 2026-08-31 (verified): unlisted, so pastes reject.
+    expect(embeddableURLValidator("https://trinket.io/embed/python/abc123", undefined)).toBe(
+      false,
+    );
+  });
+});
+
 describe("Google Docs and Desmos embeds", () => {
   // New integration hosts embed as-is via the generic path (no URL rewrite). // validator proves ALLOWED_DOMAINS, sandbox proves ALLOW_SAME_ORIGIN.
   it.each([

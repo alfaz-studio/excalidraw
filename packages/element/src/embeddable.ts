@@ -230,7 +230,43 @@ const ALLOWED_DOMAINS = new Set([
   "nearpod.com", // student join + share paths (login/dashboard reject client-side).
   "app.nearpod.com", // live lesson player.
   "share.nearpod.com", // teacher-generated share links.
-  "np1.nearpod.com", // legacy share endpoint.
+  "np1.nearpod.com", // legacy share sessions.
+  // Third-wave classroom apps, all generic-path (no URL rewrite). Hosts the
+  // direct pages refuse to frame (SAMEORIGIN/DENY) stay unlisted — the meet
+  // normalizers convert to the framable shapes client-side.
+  "scratch.mit.edu", // project /embed only (root refuses framing).
+  "codepen.io", // bare host covers www (matchHostname strips www.).
+  "replit.com", // ?embed=true read-only shape (root denies framing).
+  "canva.com", // ?embed design shape (main site refuses framing).
+  "3dwarehouse.sketchup.com", // Warehouse viewer /embed.html (editor is login-walled).
+  "embed.figma.com", // official embed host (www file links convert client-side).
+  "view.genially.com", // official view player.
+  "view.genial.ly", // same player on the short host.
+  "pitch.com", // public share-link /embed iframes.
+  "gamma.app", // /embed docs/presentations (Sites are not embeddable).
+  "onedrive.live.com", // official Share > Embed shape.
+  "quizlet.com", // official /{id}/{mode}/embed shim (root refuses framing).
+  "embed.notion.co", // published Sites embed code (workspace URLs refuse framing).
+  "mentimeter.com", // Share > Embed slides (voting stays on menti.com).
+  "padlet.com", // Share > Embed board/preview/slideshow.
+  "learningapps.org", // official /watch?id= pattern, no login.
+  "thewessens.net", // Mathenaeum games collection (static, no framing headers).
+  "ascendmath.com", // Flash Card Math free tool.
+  "activities.graspablemath.com", // activity share links (no formal embed API).
+  "research.dwi.ufl.edu", // verified UFLI /embed links (toolbox page refuses framing).
+  "*.wiktionary.org", // dictionary entries on every language subdomain.
+  "quran.com", // Quran.Foundation reader.
+  "tanzil.net", // Uthmani text source.
+  "corpus.quran.com", // word-by-word grammar.
+  "altafsir.com", // comparative tafsir library.
+  "quran.ksu.edu.sa", // KSU e-Mushaf.
+  "sunnah.com", // hadith with grading.
+  "colonist.io", // room links (no framing headers).
+  "drawbattle.io", // invite links (no framing headers).
+  "skribbl.io", // private-room links (no framing headers).
+  "playscrabble.com", // game app (client canonicalizes scrabble.com here).
+  "embed.music.apple.com", // official Copy-Embed host (direct pages deny framing).
+  "embed.podcasts.apple.com", // official Copy-Embed host (direct pages deny framing).
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -266,6 +302,18 @@ const ALLOW_SAME_ORIGIN = new Set([
   "app.nearpod.com", // live lesson sessions.
   "share.nearpod.com", // share-link sessions.
   "np1.nearpod.com", // legacy share sessions.
+  // Third-wave frames that keep storage/cookies; static readers stay strict.
+  "scratch.mit.edu", // cloud variables + project state.
+  "codepen.io", // pen runtime storage.
+  "replit.com", // run/fork session state.
+  "view.genially.com", // interactive creations.
+  "view.genial.ly", // same player on the short host.
+  "quizlet.com", // study-mode progress.
+  "padlet.com", // interactive boards.
+  "colonist.io", // game sessions.
+  "drawbattle.io", // game sessions.
+  "skribbl.io", // game sessions.
+  "playscrabble.com", // game sessions.
 ]);
 
 export const createSrcDoc = (body: string) => {
@@ -396,7 +444,10 @@ export const getEmbedLink = (
   }
 
   const figmaLink = link.match(RE_FIGMA);
-  if (figmaLink) {
+  // The meet client pre-converts public file links to the /embed form with
+  // its own embed_host: re-wrapping those would nest the embed URL, so only
+  // raw file links take the share-host rewrite below.
+  if (figmaLink && !/^https:\/\/(?:www\.)?figma\.com\/embed[?/]/.test(link)) {
     type = "generic";
     link = `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(
       link,
