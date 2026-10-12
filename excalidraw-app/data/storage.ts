@@ -77,48 +77,37 @@ const expectedBackends = new Map<string, FileErrorHandler | null>();
 /** How long an armed-on-purpose room may stay unarmed before a missed load is reported. */
 const ARM_GRACE_MS = 10_000;
 
+/** What a room's loads missed while it had no token — what arming it must run again. */
+export type UnarmedLoads = {
+  since: number;
+  scene: boolean;
+  files: Set<FileId>;
+};
+
 /**
- * Rooms whose loads ran before their token arrived. The board mounts in the background and its
- * token is minted separately, so this is the normal order, not a failure: the reports wait out
- * `ARM_GRACE_MS`, and arming the room tells the caller to run its loads again.
+ * The board mounts before its token arrives, so loading unarmed is the normal order: a miss is
+ * reported only if the room is still unarmed `ARM_GRACE_MS` later.
  */
-const unarmedLoads = new Map<
-  string,
-  { timer: ReturnType<typeof setTimeout> | null; reports: (() => void)[] }
->();
+const unarmedLoads = new Map<string, UnarmedLoads>();
 
-const _whenStillUnarmed = (roomId: string, report: () => void) => {
-  const pending = unarmedLoads.get(roomId);
-
-  if (pending && !pending.timer) {
-    report();
-    return;
-  }
-  if (pending) {
-    pending.reports.push(report);
-    return;
-  }
-
-  const entry = {
-    reports: [report],
-    timer: setTimeout(() => {
-      entry.timer = null;
-      entry.reports.splice(0).forEach((r) => r());
-    }, ARM_GRACE_MS) as ReturnType<typeof setTimeout> | null,
+const _whenStillUnarmed = (
+  roomId: string,
+  missed: { scene?: boolean; files?: readonly FileId[] },
+  report: () => void,
+) => {
+  const entry = unarmedLoads.get(roomId) ?? {
+    since: Date.now(),
+    scene: false,
+    files: new Set<FileId>(),
   };
 
   unarmedLoads.set(roomId, entry);
-};
-
-const _clearUnarmedLoads = (roomId: string) => {
-  const pending = unarmedLoads.get(roomId);
-
-  if (pending?.timer) {
-    clearTimeout(pending.timer);
-  }
-  unarmedLoads.delete(roomId);
-
-  return Boolean(pending);
+  entry.scene ||= Boolean(missed.scene);
+  missed.files?.forEach((id) => entry.files.add(id));
+  setTimeout(
+    () => unarmedLoads.get(roomId) === entry && report(),
+    entry.since + ARM_GRACE_MS - Date.now(),
+  );
 };
 
 export const expectBackend = (
@@ -135,11 +124,11 @@ export const initializeBackend = (
   storageBackendUrl?: string,
   meetingDetails?: IMeetingDetails,
   onFileError?: FileErrorHandler,
-): boolean => {
+): UnarmedLoads | undefined => {
   const baseUrl = storageBackendUrl || DEFAULT_BACKEND_BASE_URL;
 
   if (!roomId || !baseUrl) {
-    return false;
+    return;
   }
 
   backendConfigs.set(roomId, {
@@ -149,8 +138,11 @@ export const initializeBackend = (
     onFileError: onFileError || null,
   });
 
-  // True when a load already gave up on this room: the caller must re-run it.
-  return _clearUnarmedLoads(roomId);
+  // What already gave up on this room, for the caller to run again.
+  const missed = unarmedLoads.get(roomId);
+
+  unarmedLoads.delete(roomId);
+  return missed;
 };
 
 // Drop a room's config when its Collab instance goes away, so a later surface
@@ -159,7 +151,7 @@ export const releaseBackend = (roomId?: string | null) => {
   if (roomId) {
     backendConfigs.delete(roomId);
     expectedBackends.delete(roomId);
-    _clearUnarmedLoads(roomId);
+    unarmedLoads.delete(roomId);
   }
 };
 
@@ -202,7 +194,8 @@ const _reportUnarmedBackend = (
 
   const onFileError = expectedBackends.get(roomId) || null;
 
-  _whenStillUnarmed(roomId, () => {
+  // Only a download is re-run on arming: a failed upload is already retried on the next sweep.
+  _whenStillUnarmed(roomId, op === "download" ? { files: fileIds } : {}, () => {
     for (const fileId of new Set(fileIds)) {
       _reportFileError(onFileError, {
         op,
@@ -507,7 +500,7 @@ export type SceneArchiveEvent = {
  *  is no later save to correct it. */ (
   | { status: "saved"; final?: boolean }
   | { status: "restored"; savedAt?: number }
-  /** `retried`: a routine tick the next one repeats, not a load or the final save. */
+  /** `retried`: a routine tick the next one repeats, before a run of them pages. */
   | { status: "failed"; error: unknown; retried?: boolean }
 );
 
@@ -581,6 +574,17 @@ export const flushSceneArchive = async (): Promise<void> => {
   } catch (error) {
     console.error("Scene archive flush failed:", error);
   }
+};
+
+/** Failed saves in a row per scene: the next tick repeats a failed one, so only a run of them pages. */
+const failedSaves = new Map<string, number>();
+const FAILED_SAVES_BEFORE_ALERT = 3;
+
+const _isRetried = (sceneFileId: string, flushed?: boolean) => {
+  const count = (failedSaves.get(sceneFileId) ?? 0) + 1;
+
+  failedSaves.set(sceneFileId, count);
+  return !flushed && count < FAILED_SAVES_BEFORE_ALERT;
 };
 
 /** Never let a host listener's failure break the save path. */
@@ -915,7 +919,7 @@ export const saveToStorage = async (
       notifyArchive({
         status: "failed",
         error,
-        retried: !opts?.flushed,
+        retried: _isRetried(_sceneFileIdFor(pinnedConfig), opts?.flushed),
         sceneFileId: _sceneFileIdFor(pinnedConfig),
       });
 
@@ -950,13 +954,14 @@ export const saveToStorage = async (
     notifyArchive({
       status: "failed",
       error,
-      retried: !opts?.flushed,
+      retried: _isRetried(_sceneFileIdFor(pinnedConfig), opts?.flushed),
       sceneFileId: _sceneFileIdFor(pinnedConfig),
     });
     throw error;
   }
 
   StorageSceneVersionCache.set(socket, storedElements);
+  failedSaves.delete(_sceneFileIdFor(pinnedConfig));
   notifyArchive({
     status: "saved",
     final: opts?.flushed,
@@ -998,7 +1003,7 @@ export const loadFromStorage = async (
       });
 
     if (result.reason === "no-backend-config") {
-      _whenStillUnarmed(roomId, reportFailure);
+      _whenStillUnarmed(roomId, { scene: true }, reportFailure);
     } else {
       reportFailure();
     }

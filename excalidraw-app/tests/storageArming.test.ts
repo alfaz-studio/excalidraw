@@ -48,8 +48,8 @@ describe("a room whose token arrives after its first loads", () => {
         sessionId: "s",
         roomJid: "r",
         token: "t",
-      } as never),
-    ).toBe(true);
+      } as never)?.files,
+    ).toEqual(new Set([FILE]));
     vi.advanceTimersByTime(10_000);
     expect(onFileError).not.toHaveBeenCalled();
   });

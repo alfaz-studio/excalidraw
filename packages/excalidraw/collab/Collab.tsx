@@ -204,24 +204,23 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         const { roomId, roomKey } = this.portal;
 
         // Not an abort: callers of `fetchImageFilesFromFirebase` don't catch,
-        // so a surface with file storage off must resolve empty rather than
-        // reject.
-        if (!this.filesEnabled) {
+        // so a surface with file storage off, or between rooms, must resolve
+        // empty rather than reject.
+        if (!this.filesEnabled || !roomId || !roomKey) {
           return { loadedFiles: [], erroredFiles: new Map() };
         }
 
-        // Same reason: a room switch leaves this window with no room, and an abort
-        // here surfaced as an unhandled rejection.
-        if (!roomId || !roomKey) {
-          return { loadedFiles: [], erroredFiles: new Map() };
-        }
-
-        return loadFilesFromStorage(
+        const result = await loadFilesFromStorage(
           `files/rooms/${roomId}`,
           roomKey,
           fileIds,
           roomId,
         );
+
+        // Another room's files must not land on this room's board.
+        return this.portal.roomId === roomId
+          ? result
+          : { loadedFiles: [], erroredFiles: new Map() };
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -238,6 +237,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           }),
           roomId,
         });
+
+        // Uploaded under the room just left: not saved for the room now open.
+        if (this.portal.roomId !== roomId) {
+          return { savedFiles: new Map(), erroredFiles: new Map() };
+        }
 
         return {
           savedFiles: savedFiles.reduce(
@@ -361,23 +365,22 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
 
     this.pendingBackendConfig = null;
-    const missedLoads = initializeBackend(
+    const missed = initializeBackend(
       this.portal.roomId,
       storageBackendUrl,
       meetingDetails,
       this.onFileError,
     );
 
-    // The token arrived after the room's first loads gave up, so nothing else re-runs them:
-    // the stored board would stay missing and its images grey.
-    if (missedLoads && this.portal.roomKey) {
-      if (this.sceneEnabled) {
-        void this.mergePersistedScene({
-          roomId: this.portal.roomId,
-          roomKey: this.portal.roomKey,
-        });
-      }
-      this.fileManager.clearFetchErrors();
+    // Loads that gave up before the token arrived: nothing else re-runs them.
+    if (missed?.scene && this.sceneEnabled && this.portal.roomKey) {
+      void this.mergePersistedScene({
+        roomId: this.portal.roomId,
+        roomKey: this.portal.roomKey,
+      });
+    }
+    if (missed?.files.size) {
+      this.fileManager.clearFetchErrors(missed.files);
       void this.applyImageFiles(true);
     }
   };
@@ -907,21 +910,18 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.portal.socket.on(
       "client-broadcast",
       async (encryptedData: ArrayBuffer, iv: Uint8Array) => {
-        const { roomKey } = this.portal;
-        const generation = this.sessionGeneration;
-
-        if (!roomKey) {
+        if (!this.portal.roomKey) {
           return;
         }
 
+        const generation = this.sessionGeneration;
         const decryptedData = await this.decryptPayload(
           iv,
           encryptedData,
-          roomKey,
+          this.portal.roomKey,
         );
 
-        // A message from the room just left, decrypted after the leave, would put that
-        // room's images on the next room's board — where they were never uploaded.
+        // Decrypted after a leave: the room it belongs to is gone.
         if (generation !== this.sessionGeneration) {
           return;
         }
