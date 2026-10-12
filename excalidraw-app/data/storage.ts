@@ -72,7 +72,10 @@ const backendConfigs = new Map<string, BackendConfig>();
  * no requests) from "should have been armed but wasn't", which is a real failure
  * and the only case reported below.
  */
-const expectedBackends = new Map<string, FileErrorHandler | null>();
+const expectedBackends = new Map<
+  string,
+  { onFileError: FileErrorHandler | null; sceneFileId?: string }
+>();
 
 /** How long an armed-on-purpose room may stay unarmed before a missed load is reported. */
 const ARM_GRACE_MS = 10_000;
@@ -81,6 +84,7 @@ const ARM_GRACE_MS = 10_000;
 export type UnarmedLoads = {
   since: number;
   scene: boolean;
+  upload: boolean;
   files: Set<FileId>;
 };
 
@@ -92,17 +96,19 @@ const unarmedLoads = new Map<string, UnarmedLoads>();
 
 const _whenStillUnarmed = (
   roomId: string,
-  missed: { scene?: boolean; files?: readonly FileId[] },
+  missed: { scene?: boolean; upload?: boolean; files?: readonly FileId[] },
   report: () => void,
 ) => {
   const entry = unarmedLoads.get(roomId) ?? {
     since: Date.now(),
     scene: false,
+    upload: false,
     files: new Set<FileId>(),
   };
 
   unarmedLoads.set(roomId, entry);
   entry.scene ||= Boolean(missed.scene);
+  entry.upload ||= Boolean(missed.upload);
   missed.files?.forEach((id) => entry.files.add(id));
   setTimeout(
     () => unarmedLoads.get(roomId) === entry && report(),
@@ -113,9 +119,14 @@ const _whenStillUnarmed = (
 export const expectBackend = (
   roomId?: string | null,
   onFileError?: FileErrorHandler,
+  /** Names the scene in a report made before the room arms, when no config has one yet. */
+  sceneFileId?: string,
 ) => {
   if (roomId) {
-    expectedBackends.set(roomId, onFileError || null);
+    expectedBackends.set(roomId, {
+      onFileError: onFileError || null,
+      sceneFileId,
+    });
   }
 };
 
@@ -192,10 +203,11 @@ const _reportUnarmedBackend = (
     return;
   }
 
-  const onFileError = expectedBackends.get(roomId) || null;
+  const onFileError = expectedBackends.get(roomId)?.onFileError || null;
 
-  // Only a download is re-run on arming: a failed upload is already retried on the next sweep.
-  _whenStillUnarmed(roomId, op === "download" ? { files: fileIds } : {}, () => {
+  const missed = op === "download" ? { files: fileIds } : { upload: true };
+
+  _whenStillUnarmed(roomId, missed, () => {
     for (const fileId of new Set(fileIds)) {
       _reportFileError(onFileError, {
         op,
@@ -480,8 +492,13 @@ const SCENE_FILE_ID = "whiteboard.excalidraw";
  * overwrite each other. Falls back to the whiteboard's fixed name, so a caller that sets
  * nothing behaves exactly as before.
  */
-const _sceneFileIdFor = (config: BackendConfig | null): string =>
-  config?.meetingDetails?.sceneFileId || SCENE_FILE_ID;
+const _sceneFileIdFor = (
+  config: BackendConfig | null,
+  roomId?: string | null,
+): string =>
+  config?.meetingDetails?.sceneFileId ||
+  (roomId && expectedBackends.get(roomId)?.sceneFileId) ||
+  SCENE_FILE_ID;
 
 /**
  * What happened to the archived scene, for the host to surface to the user.
@@ -999,7 +1016,7 @@ export const loadFromStorage = async (
         error: new Error(
           `Could not load the archived whiteboard (${result.reason})`,
         ),
-        sceneFileId: _sceneFileIdFor(_getBackendConfig(roomId)),
+        sceneFileId: _sceneFileIdFor(_getBackendConfig(roomId), roomId),
       });
 
     if (result.reason === "no-backend-config") {

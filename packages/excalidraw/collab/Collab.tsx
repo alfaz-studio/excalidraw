@@ -383,6 +383,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.fileManager.clearFetchErrors(missed.files);
       void this.applyImageFiles(true);
     }
+    if (missed?.upload) {
+      void this.portal.queueFileUpload();
+    }
   };
 
   private flushPendingBackendConfig = () => {
@@ -745,7 +748,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Marks the room as one that is *meant* to have storage, so a later file op
     // that finds no config can tell "never armed on purpose" from a real gap.
     if (storageBackendUrl) {
-      expectBackend(roomId, this.onFileError);
+      expectBackend(roomId, this.onFileError, meetingDetails?.sceneFileId);
     }
 
     if (
