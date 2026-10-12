@@ -210,8 +210,10 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           return { loadedFiles: [], erroredFiles: new Map() };
         }
 
+        // Same reason: a room switch leaves this window with no room, and an abort
+        // here surfaced as an unhandled rejection.
         if (!roomId || !roomKey) {
-          throw new AbortError();
+          return { loadedFiles: [], erroredFiles: new Map() };
         }
 
         return loadFilesFromStorage(
@@ -359,12 +361,25 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
 
     this.pendingBackendConfig = null;
-    initializeBackend(
+    const missedLoads = initializeBackend(
       this.portal.roomId,
       storageBackendUrl,
       meetingDetails,
       this.onFileError,
     );
+
+    // The token arrived after the room's first loads gave up, so nothing else re-runs them:
+    // the stored board would stay missing and its images grey.
+    if (missedLoads && this.portal.roomKey) {
+      if (this.sceneEnabled) {
+        void this.mergePersistedScene({
+          roomId: this.portal.roomId,
+          roomKey: this.portal.roomKey,
+        });
+      }
+      this.fileManager.clearFetchErrors();
+      void this.applyImageFiles(true);
+    }
   };
 
   private flushPendingBackendConfig = () => {
@@ -892,15 +907,24 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.portal.socket.on(
       "client-broadcast",
       async (encryptedData: ArrayBuffer, iv: Uint8Array) => {
-        if (!this.portal.roomKey) {
+        const { roomKey } = this.portal;
+        const generation = this.sessionGeneration;
+
+        if (!roomKey) {
           return;
         }
 
         const decryptedData = await this.decryptPayload(
           iv,
           encryptedData,
-          this.portal.roomKey,
+          roomKey,
         );
+
+        // A message from the room just left, decrypted after the leave, would put that
+        // room's images on the next room's board — where they were never uploaded.
+        if (generation !== this.sessionGeneration) {
+          return;
+        }
 
         switch (decryptedData.type) {
           case WS_SUBTYPES.INVALID_RESPONSE:
@@ -1178,9 +1202,15 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     return reconciledElements;
   };
 
-  private loadImageFiles = throttle(async () => {
+  private loadImageFiles = throttle(
+    () => this.applyImageFiles(),
+    LOAD_IMAGES_TIMEOUT,
+  );
+
+  private applyImageFiles = async (forceFetchFiles?: boolean) => {
     const response = await this.fetchImageFilesFromFirebase({
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      forceFetchFiles,
     });
     if (!response) {
       return;
@@ -1194,7 +1224,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       erroredFiles,
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
-  }, LOAD_IMAGES_TIMEOUT);
+  };
 
   /**
    * Whether the user is mid-interaction — drawing, resizing or dragging.

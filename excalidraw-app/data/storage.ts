@@ -74,6 +74,53 @@ const backendConfigs = new Map<string, BackendConfig>();
  */
 const expectedBackends = new Map<string, FileErrorHandler | null>();
 
+/** How long an armed-on-purpose room may stay unarmed before a missed load is reported. */
+const ARM_GRACE_MS = 10_000;
+
+/**
+ * Rooms whose loads ran before their token arrived. The board mounts in the background and its
+ * token is minted separately, so this is the normal order, not a failure: the reports wait out
+ * `ARM_GRACE_MS`, and arming the room tells the caller to run its loads again.
+ */
+const unarmedLoads = new Map<
+  string,
+  { timer: ReturnType<typeof setTimeout> | null; reports: (() => void)[] }
+>();
+
+const _whenStillUnarmed = (roomId: string, report: () => void) => {
+  const pending = unarmedLoads.get(roomId);
+
+  if (pending && !pending.timer) {
+    report();
+    return;
+  }
+  if (pending) {
+    pending.reports.push(report);
+    return;
+  }
+
+  const entry = {
+    reports: [report],
+    timer: setTimeout(() => {
+      entry.timer = null;
+      entry.reports.splice(0).forEach((r) => r());
+    }, ARM_GRACE_MS) as ReturnType<typeof setTimeout> | null,
+  };
+
+  unarmedLoads.set(roomId, entry);
+};
+
+const _clearUnarmedLoads = (roomId: string) => {
+  const pending = unarmedLoads.get(roomId);
+
+  if (pending?.timer) {
+    clearTimeout(pending.timer);
+  }
+  unarmedLoads.delete(roomId);
+
+  return Boolean(pending);
+};
+
 export const expectBackend = (
   roomId?: string | null,
   onFileError?: FileErrorHandler,
@@ -88,11 +135,11 @@ export const initializeBackend = (
   storageBackendUrl?: string,
   meetingDetails?: IMeetingDetails,
   onFileError?: FileErrorHandler,
-) => {
+): boolean => {
   const baseUrl = storageBackendUrl || DEFAULT_BACKEND_BASE_URL;
 
   if (!roomId || !baseUrl) {
-    return;
+    return false;
   }
 
   backendConfigs.set(roomId, {
@@ -101,6 +148,9 @@ export const initializeBackend = (
     meetingDetails: meetingDetails || null,
     onFileError: onFileError || null,
   });
+
+  // True when a load already gave up on this room: the caller must re-run it.
+  return _clearUnarmedLoads(roomId);
 };
 
 // Drop a room's config when its Collab instance goes away, so a later surface
@@ -109,6 +159,7 @@ export const releaseBackend = (roomId?: string | null) => {
   if (roomId) {
     backendConfigs.delete(roomId);
     expectedBackends.delete(roomId);
+    _clearUnarmedLoads(roomId);
   }
 };
 
@@ -151,14 +202,16 @@ const _reportUnarmedBackend = (
 
   const onFileError = expectedBackends.get(roomId) || null;
 
-  for (const fileId of new Set(fileIds)) {
-    _reportFileError(onFileError, {
-      op,
-      fileId,
-      prefix: roomId,
-      message: "backend not initialized",
-    });
-  }
+  _whenStillUnarmed(roomId, () => {
+    for (const fileId of new Set(fileIds)) {
+      _reportFileError(onFileError, {
+        op,
+        fileId,
+        prefix: roomId,
+        message: "backend not initialized",
+      });
+    }
+  });
 };
 
 const _getAuthHeaders = (config: BackendConfig): Record<string, string> => {
@@ -454,7 +507,8 @@ export type SceneArchiveEvent = {
  *  is no later save to correct it. */ (
   | { status: "saved"; final?: boolean }
   | { status: "restored"; savedAt?: number }
-  | { status: "failed"; error: unknown }
+  /** `retried`: a routine tick the next one repeats, not a load or the final save. */
+  | { status: "failed"; error: unknown; retried?: boolean }
 );
 
 /**
@@ -678,7 +732,17 @@ const getBackendDocument = async (
     const lastModified = Date.parse(
       response.headers.get("last-modified") ?? "",
     );
-    const scene = await response.json();
+    let scene;
+
+    // Apart from the fetch: the API answers before the object store's bytes stream
+    // through it, so a body cut off mid-download is its own failure.
+    try {
+      scene = await response.json();
+    } catch (error) {
+      console.error("Failed to read whiteboard scene body:", error);
+
+      return { status: "error", reason: "body-threw" };
+    }
 
     // An object that exists but is not a scene cannot be reconciled against and
     // is not worth preserving — overwriting it is the repair.
@@ -851,6 +915,7 @@ export const saveToStorage = async (
       notifyArchive({
         status: "failed",
         error,
+        retried: !opts?.flushed,
         sceneFileId: _sceneFileIdFor(pinnedConfig),
       });
 
@@ -885,6 +950,7 @@ export const saveToStorage = async (
     notifyArchive({
       status: "failed",
       error,
+      retried: !opts?.flushed,
       sceneFileId: _sceneFileIdFor(pinnedConfig),
     });
     throw error;
@@ -922,13 +988,20 @@ export const loadFromStorage = async (
       return null;
     }
 
-    notifyArchive({
-      status: "failed",
-      error: new Error(
-        `Could not load the archived whiteboard (${result.reason})`,
-      ),
-      sceneFileId: _sceneFileIdFor(_getBackendConfig(roomId)),
-    });
+    const reportFailure = () =>
+      notifyArchive({
+        status: "failed",
+        error: new Error(
+          `Could not load the archived whiteboard (${result.reason})`,
+        ),
+        sceneFileId: _sceneFileIdFor(_getBackendConfig(roomId)),
+      });
+
+    if (result.reason === "no-backend-config") {
+      _whenStillUnarmed(roomId, reportFailure);
+    } else {
+      reportFailure();
+    }
 
     return null;
   }

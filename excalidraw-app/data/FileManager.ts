@@ -37,6 +37,11 @@ export class FileManager {
     ExcalidrawImageElement["fileId"],
     FileVersion
   >();
+  /**
+   * Bumped by `reset()`. An upload still in flight when the room changes finished
+   * under the OLD room's prefix, so its result must not mark the file saved here.
+   */
+  private epoch = 0;
 
   private _getFiles;
   private _saveFiles;
@@ -102,17 +107,21 @@ export class FileManager {
       }
     }
 
+    const epoch = this.epoch;
+
     try {
       const { savedFiles, erroredFiles } = await this._saveFiles({
         addedFiles,
       });
 
-      for (const [fileId, fileData] of savedFiles) {
-        this.savedFiles.set(fileId, this.getFileVersion(fileData));
-      }
+      if (epoch === this.epoch) {
+        for (const [fileId, fileData] of savedFiles) {
+          this.savedFiles.set(fileId, this.getFileVersion(fileData));
+        }
 
-      for (const [fileId, fileData] of erroredFiles) {
-        this.erroredFiles_save.set(fileId, this.getFileVersion(fileData));
+        for (const [fileId, fileData] of erroredFiles) {
+          this.erroredFiles_save.set(fileId, this.getFileVersion(fileData));
+        }
       }
 
       return {
@@ -120,8 +129,10 @@ export class FileManager {
         erroredFiles,
       };
     } finally {
-      for (const [fileId] of addedFiles) {
-        this.savingFiles.delete(fileId);
+      if (epoch === this.epoch) {
+        for (const [fileId] of addedFiles) {
+          this.savingFiles.delete(fileId);
+        }
       }
     }
   };
@@ -142,20 +153,26 @@ export class FileManager {
       this.fetchingFiles.set(id, true);
     }
 
+    const epoch = this.epoch;
+
     try {
       const { loadedFiles, erroredFiles } = await this._getFiles(ids);
 
-      for (const file of loadedFiles) {
-        this.savedFiles.set(file.id, this.getFileVersion(file));
-      }
-      for (const [fileId] of erroredFiles) {
-        this.erroredFiles_fetch.set(fileId, true);
+      if (epoch === this.epoch) {
+        for (const file of loadedFiles) {
+          this.savedFiles.set(file.id, this.getFileVersion(file));
+        }
+        for (const [fileId] of erroredFiles) {
+          this.erroredFiles_fetch.set(fileId, true);
+        }
       }
 
       return { loadedFiles, erroredFiles };
     } finally {
-      for (const id of ids) {
-        this.fetchingFiles.delete(id);
+      if (epoch === this.epoch) {
+        for (const id of ids) {
+          this.fetchingFiles.delete(id);
+        }
       }
     }
   };
@@ -190,7 +207,13 @@ export class FileManager {
     );
   };
 
+  /** Lets a failed download be retried, e.g. once the room's storage arms late. */
+  clearFetchErrors() {
+    this.erroredFiles_fetch.clear();
+  }
+
   reset() {
+    this.epoch++;
     this.fetchingFiles.clear();
     this.savingFiles.clear();
     this.savedFiles.clear();
