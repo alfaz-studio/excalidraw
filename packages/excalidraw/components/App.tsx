@@ -1785,7 +1785,7 @@ class App extends React.Component<AppProps, AppState> {
   private updateEmbeddables = () => {
     const iframeLikes = new Set<ExcalidrawIframeLikeElement["id"]>();
     // SONACOVE: first-seen validated id to auto-activate below. // one setState after the loop (not per id) so multi-inserts settle in one render.
-    let autoActivate: ExcalidrawEmbeddableElement | null = null; // holds the newcomer until the post-loop setState.
+    let autoActivate: NonDeleted<ExcalidrawEmbeddableElement> | null = null; // holds the newcomer until the post-loop setState.
 
     let updated = false;
     this.scene.getNonDeletedElements().filter((element) => {
@@ -1819,7 +1819,7 @@ class App extends React.Component<AppProps, AppState> {
     // SONACOVE: mirror the center-click activation (active + selected). // guarded: next pass sees the id validated, so this runs exactly once per embed — no setState loop.
     if (autoActivate) {
       // typed: CFA can't see the callback assignment, so it keeps `autoActivate` narrowed to null past this guard.
-      const el: ExcalidrawEmbeddableElement = autoActivate;
+      const el: NonDeleted<ExcalidrawEmbeddableElement> = autoActivate;
       if (this.state.activeEmbeddable?.element !== el) {
         // skip if already active (e.g. racing render).
         this.setState({

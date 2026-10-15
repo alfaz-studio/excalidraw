@@ -101,8 +101,9 @@ describe("YouTube timestamp parsing", () => {
 
     expect(result?.type).toBe("video");
     if (result?.type === "video" || result?.type === "generic") {
+      // The fork serves every YouTube frame from youtube-nocookie.com.
       expect(result.link).toBe(
-        "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&start=30",
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1&start=30",
       );
     }
   });
@@ -424,19 +425,28 @@ describe("Third-wave classroom app embeds", () => {
     // its own embed_host: those pass through untouched.
     const converted =
       "https://www.figma.com/embed?embed_host=sonacove&url=https%3A%2F%2Fwww.figma.com%2Fdesign%2Fabc%2FProject";
-    expect(getEmbedLink(converted)?.link).toBe(converted);
+    const linkOf = (url: string) => {
+      const data = getEmbedLink(url);
+      return data && data.type !== "document" ? data.link : null;
+    };
+    expect(linkOf(converted)).toBe(converted);
     // Raw file links still take the share-host rewrite.
     const raw = "https://www.figma.com/design/abc123/Project";
-    expect(getEmbedLink(raw)?.link).toBe(
-      `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(raw)}`,
+    expect(linkOf(raw)).toBe(
+      `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(
+        raw,
+      )}`,
     );
   });
 
   it("should still refuse the dead Trinket host", () => {
     // Trinket shut down 2026-08-31 (verified): unlisted, so pastes reject.
-    expect(embeddableURLValidator("https://trinket.io/embed/python/abc123", undefined)).toBe(
-      false,
-    );
+    expect(
+      embeddableURLValidator(
+        "https://trinket.io/embed/python/abc123",
+        undefined,
+      ),
+    ).toBe(false);
   });
 });
 
