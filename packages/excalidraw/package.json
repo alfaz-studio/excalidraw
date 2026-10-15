@@ -7,16 +7,16 @@
   "module": "./dist/prod/index.js",
   "exports": {
     "./common/*": {
-      "types": "./dist/types/common/src/*.d.ts"
+      "types": "./dist/types/packages/common/src/*.d.ts"
     },
     "./element/*": {
-      "types": "./dist/types/element/src/*.d.ts"
+      "types": "./dist/types/packages/element/src/*.d.ts"
     },
     "./math/*": {
-      "types": "./dist/types/math/src/*.d.ts"
+      "types": "./dist/types/packages/math/src/*.d.ts"
     },
     "./utils/*": {
-      "types": "./dist/types/utils/src/*.d.ts"
+      "types": "./dist/types/packages/utils/src/*.d.ts"
     },
     "./*": {
       "types": "./dist/types/packages/excalidraw/*.d.ts"
