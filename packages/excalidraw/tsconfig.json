@@ -1,7 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "../",
+    // Repo root, not upstream's "../" (here and in every package): the fork's collab/ imports
+    // excalidraw-app/, and every package's program reaches it through @excalidraw/excalidraw.
+    "rootDir": "../../",
     "outDir": "./dist/types"
   },
   "include": ["**/*"],
