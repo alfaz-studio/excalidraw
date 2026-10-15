@@ -150,17 +150,21 @@ export class ExcalidrawFontFace {
     const assetUrl: string = uri.replace(/^\/+/, "");
     const urls: URL[] = [];
 
-    if (typeof window.EXCALIDRAW_ASSET_PATH === "string") {
-      const normalizedBaseUrl = this.normalizeBaseUrl(
-        window.EXCALIDRAW_ASSET_PATH,
-      );
+    const assetPaths =
+      typeof window.EXCALIDRAW_ASSET_PATH === "string"
+        ? [window.EXCALIDRAW_ASSET_PATH]
+        : Array.isArray(window.EXCALIDRAW_ASSET_PATH)
+        ? window.EXCALIDRAW_ASSET_PATH
+        : [];
 
-      urls.push(new URL(assetUrl, normalizedBaseUrl));
-    } else if (Array.isArray(window.EXCALIDRAW_ASSET_PATH)) {
-      window.EXCALIDRAW_ASSET_PATH.forEach((path) => {
-        const normalizedBaseUrl = this.normalizeBaseUrl(path);
-        urls.push(new URL(assetUrl, normalizedBaseUrl));
-      });
+    for (const path of assetPaths) {
+      // SONACOVE: an unusable base (e.g. a bare relative "libs/") must cost only
+      // that source, not throw out of font registration for every face.
+      try {
+        urls.push(new URL(assetUrl, this.normalizeBaseUrl(path)));
+      } catch (error) {
+        console.warn(`Invalid EXCALIDRAW_ASSET_PATH "${path}"`, error);
+      }
     }
 
     // fallback url for bundled fonts
