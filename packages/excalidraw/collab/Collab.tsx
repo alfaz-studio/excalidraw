@@ -84,6 +84,7 @@ import {
   loadFromStorage,
   saveFilesToStorage,
   saveToStorage,
+  addSceneFlushHandler,
   initializeBackend,
   releaseBackend,
   expectBackend,
@@ -177,6 +178,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
+  private removeSceneFlushHandler: (() => void) | null = null;
   private clientId = randomId();
 
   /**
@@ -293,6 +295,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     window.addEventListener("online", this.onOfflineStatusToggle);
     window.addEventListener("offline", this.onOfflineStatusToggle);
     window.addEventListener(EVENT.UNLOAD, this.onUnload);
+
+    // The host's leave flow awaits this to archive before navigating: the
+    // unload-time saves ride keepalive, whose 64 KiB cap drops a busy board's
+    // last edits.
+    this.removeSceneFlushHandler = addSceneFlushHandler(this.flushSceneNow);
 
     const unsubOnUserFollow = this.excalidrawAPI.onUserFollow((payload) => {
       this.portal.socket && this.portal.broadcastUserFollowed(payload);
@@ -417,6 +424,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   };
 
   componentWillUnmount() {
+    this.removeSceneFlushHandler?.();
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
     window.removeEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
@@ -474,8 +482,26 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
   });
 
+  /**
+   * The leave flow's final save. Not `final` (that buys keepalive for a save
+   * nobody can await); `flushed` tells the host this is the last one.
+   */
+  flushSceneNow = async (): Promise<void> => {
+    this.queueSaveToFirebase.cancel();
+    if (!this.portal.socket) {
+      return;
+    }
+    await this.saveCollabRoomToFirebase(
+      getSyncableElements(
+        this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      ),
+      { flushed: true },
+    );
+  };
+
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
+    opts?: { flushed?: boolean },
   ) => {
     // Scene persistence off: the reconcile below would re-apply a stored
     // snapshot over whatever the user is drawing right now.
@@ -490,6 +516,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         this.portal,
         syncableElements,
         this.excalidrawAPI.getAppState(),
+        opts,
       );
 
       if (!storedElements) {

@@ -553,19 +553,23 @@ export const addSceneArchiveListener = (
 };
 
 /**
- * The live board's final-save, registered by the collab layer while it is
- * mounted. Null when no board is open.
+ * Each mounted board's final save, registered by its collab layer. A set, not a
+ * slot: several boards are mounted at once (a document keeps one per page), and
+ * with one slot the last to unmount unregistered the others.
  */
-let sceneFlushHandler: (() => Promise<void>) | null = null;
+const sceneFlushHandlers = new Set<() => Promise<void>>();
 
 /**
- * Registers the handler that {@link flushSceneArchive} drives.
+ * Registers a handler that {@link flushSceneArchive} drives.
  *
- * @param {Function|null} handler - Performs a final save; null to unregister.
- * @returns {void}
+ * @param {Function} handler - Performs a final save.
+ * @returns {Function} Unregisters the handler.
  */
-export const setSceneFlushHandler = (handler: (() => Promise<void>) | null) => {
-  sceneFlushHandler = handler;
+export const addSceneFlushHandler = (handler: () => Promise<void>) => {
+  sceneFlushHandlers.add(handler);
+  return () => {
+    sceneFlushHandlers.delete(handler);
+  };
 };
 
 /**
@@ -586,11 +590,15 @@ export const setSceneFlushHandler = (handler: (() => Promise<void>) | null) => {
  * board is open / this client is not the elected writer.
  */
 export const flushSceneArchive = async (): Promise<void> => {
-  try {
-    await sceneFlushHandler?.();
-  } catch (error) {
-    console.error("Scene archive flush failed:", error);
-  }
+  await Promise.all(
+    [...sceneFlushHandlers].map(async (handler) => {
+      try {
+        await handler();
+      } catch (error) {
+        console.error("Scene archive flush failed:", error);
+      }
+    }),
+  );
 };
 
 /** Failed saves in a row per scene: the next tick repeats a failed one, so only a run of them pages. */

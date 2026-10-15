@@ -92,7 +92,7 @@ import {
   saveFilesToStorage,
   saveToStorage,
   initializeBackend,
-  setSceneFlushHandler,
+  addSceneFlushHandler,
   canPersistScene,
   releaseBackend,
 } from "../data/storage";
@@ -161,6 +161,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
+  private removeSceneFlushHandler: (() => void) | null = null;
   private clientId = randomId();
 
   /**
@@ -265,7 +266,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     // Lets the host archive the board and WAIT for it before it navigates away
     // — the only way to beat the keepalive size cap, which silently drops the
     // last edits of any board over 56 KiB.
-    setSceneFlushHandler(this.flushSceneNow);
+    this.removeSceneFlushHandler = addSceneFlushHandler(this.flushSceneNow);
 
     const unsubOnUserFollow = this.excalidrawAPI.onUserFollow((payload) => {
       this.setUserToFollow(
@@ -353,7 +354,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   }
 
   componentWillUnmount() {
-    setSceneFlushHandler(null);
+    this.removeSceneFlushHandler?.();
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
     window.removeEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
