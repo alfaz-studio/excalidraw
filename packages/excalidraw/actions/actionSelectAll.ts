@@ -4,8 +4,6 @@ import { isLinearElement, isTextElement } from "@excalidraw/element";
 
 import { arrayToMap, KEYS } from "@excalidraw/common";
 
-import { selectGroupsForSelectedElements } from "@excalidraw/element";
-
 import { CaptureUpdateAction } from "@excalidraw/element";
 
 import type {
@@ -15,6 +13,7 @@ import type {
 } from "@excalidraw/element/types";
 
 import { canEditElement } from "../elementOwnership";
+import { selectGroupsForSelectedElements } from "../components/App.selection";
 
 import { selectAllIcon } from "../components/icons";
 

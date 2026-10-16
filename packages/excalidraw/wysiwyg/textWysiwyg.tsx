@@ -257,6 +257,7 @@ export const textWysiwyg = ({
   app,
   autoSelect = true,
   initialCaretSceneCoords = null,
+  initialSelection = null,
 }: {
   /**
    * textWysiwyg only deals with `originalText`
@@ -273,6 +274,8 @@ export const textWysiwyg = ({
   app: App;
   autoSelect?: boolean;
   initialCaretSceneCoords?: { x: number; y: number } | null;
+  /** range of `originalText` to select (takes precedence over the caret) */
+  initialSelection?: { start: number; end: number } | null;
 }): SubmitHandler => {
   const ownerDocument = excalidrawContainer?.ownerDocument ?? document;
   const ownerWindow = ownerDocument.defaultView ?? window;
@@ -724,18 +727,20 @@ export const textWysiwyg = ({
     }
   };
 
-  let pendingInitialSelection = (() => {
-    const caretIndex = getCaretIndexFromInitialSceneCoords();
+  let pendingInitialSelection =
+    initialSelection ??
+    (() => {
+      const caretIndex = getCaretIndexFromInitialSceneCoords();
 
-    if (caretIndex === null) {
-      return null;
-    }
+      if (caretIndex === null) {
+        return null;
+      }
 
-    return {
-      start: caretIndex,
-      end: caretIndex,
-    };
-  })();
+      return {
+        start: caretIndex,
+        end: caretIndex,
+      };
+    })();
 
   if (onChange) {
     editable.onpaste = async (event) => {
@@ -1073,7 +1078,9 @@ export const textWysiwyg = ({
 
     ownerWindow.removeEventListener("resize", updateWysiwygStyle);
     ownerWindow.removeEventListener("wheel", stopEvent, true);
-    ownerWindow.removeEventListener("pointerdown", onPointerDown);
+    ownerWindow.removeEventListener("pointerdown", onPointerDown, {
+      capture: true,
+    });
     ownerWindow.removeEventListener("pointerup", bindBlurEvent);
     ownerWindow.removeEventListener("blur", handleSubmit);
     ownerWindow.removeEventListener("beforeunload", handleSubmit);
@@ -1140,18 +1147,37 @@ export const textWysiwyg = ({
   };
 
   // prevent blur when changing properties from the menu
-  const onPointerDown = (event: MouseEvent) => {
+  const onPointerDown = (event: PointerEvent) => {
     const target = event?.target;
 
     // panning canvas
     if (event.button === POINTER_BUTTON.WHEEL) {
+      // before the pan starts: it focuses the container, blurring the editor
+      temporarilyDisableSubmit();
       // trying to pan by clicking inside text area itself -> handle here
       if (target instanceof ownerWindow.HTMLTextAreaElement) {
         event.preventDefault();
         app.pan.start(event);
       }
+      return;
+    }
 
-      temporarilyDisableSubmit();
+    // alt+drag on the text being edited duplicates it, as on the canvas:
+    // finish the edit keeping the text selected, then hand the press to the
+    // canvas (the editor is gone by then, so the canvas receives the drag)
+    if (
+      event.altKey &&
+      !event[KEYS.CTRL_OR_CMD] &&
+      event.button === POINTER_BUTTON.MAIN &&
+      target === editable &&
+      (app.state.activeTool.type === "selection" ||
+        app.state.activeTool.type === "lasso")
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      submittedViaKeyboard = true;
+      handleSubmit();
+      app.duplicate.handOverTextEditorPress(event, element.id);
       return;
     }
 
