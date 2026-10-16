@@ -92,32 +92,39 @@ export const ToolPopover = ({
         />
       </Popover.Trigger>
 
-      <Popover.Content
-        className="tool-popover-content"
-        sideOffset={SIDE_OFFSET}
-        collisionBoundary={container ?? undefined}
-      >
-        {visibleOptions.map(({ type, icon, title, fillable }) => (
-          <IconButton
-            className={clsx({ fillable })}
-            key={type}
-            type="toggle"
-            icon={icon}
-            checked={currentType === type}
-            disabled={isToolButtonDisabled(app, type)}
-            title={capitalizeString(type)}
-            aria-label={capitalizeString(type)}
-            data-testid={`toolbar-${type}`}
-            onSelect={() => {
-              if (app.state.activeTool.type !== type) {
-                trackEvent("toolbar", type, "ui");
-                app.setActiveTool({ type: type as any });
-                onToolChange?.(type);
-              }
-            }}
-          />
-        ))}
-      </Popover.Content>
+      {/* SONACOVE: portaled to the editor container and preferring the top
+          side, so a toolbar reparented into a transformed / overflow-hidden
+          host wrapper keeps its popover on-screen */}
+      <Popover.Portal container={container}>
+        <Popover.Content
+          className="tool-popover-content"
+          side="top"
+          sideOffset={SIDE_OFFSET}
+          collisionBoundary={container ?? undefined}
+          collisionPadding={8}
+        >
+          {visibleOptions.map(({ type, icon, title, fillable }) => (
+            <IconButton
+              className={clsx({ fillable })}
+              key={type}
+              type="toggle"
+              icon={icon}
+              checked={currentType === type}
+              disabled={isToolButtonDisabled(app, type)}
+              title={capitalizeString(type)}
+              aria-label={capitalizeString(type)}
+              data-testid={`toolbar-${type}`}
+              onSelect={() => {
+                if (app.state.activeTool.type !== type) {
+                  trackEvent("toolbar", type, "ui");
+                  app.setActiveTool({ type: type as any });
+                  onToolChange?.(type);
+                }
+              }}
+            />
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
     </Popover.Root>
   );
 };
