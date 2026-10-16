@@ -273,6 +273,11 @@ import type { TransformHandleDirection } from "@excalidraw/element";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
 import {
+  getLockedViewportState,
+  lockedViewportNeedsUpdate,
+} from "../lockedViewport";
+
+import {
   actionAddToLibrary,
   actionBringForward,
   actionBringToFront,
@@ -965,6 +970,15 @@ class App extends React.Component<AppProps, AppState> {
       return props.interaction.enabled?.navigation === true;
     }
     return props.interaction !== false;
+  }
+
+  /**
+   * SONACOVE: whether the zoom UI (zoom buttons and the panning hand tool) is
+   * offered. A locked viewport is derived from the scene box, so those controls
+   * would be inert.
+   */
+  public isZoomUIOffered(): boolean {
+    return !this.props.lockedViewport && this.isNavigationEnabled();
   }
 
   /**
@@ -4259,7 +4273,37 @@ class App extends React.Component<AppProps, AppState> {
     );
   }
 
+  /**
+   * SONACOVE: lockedViewport enforcement. Runs after every commit, so anything
+   * that slipped a scroll/zoom into state (updateScene from the host or collab,
+   * initialData, a resize) converges before the browser paints. The epsilons in
+   * lockedViewportNeedsUpdate stop it from ping-ponging once converged.
+   */
+  private maybeEnforceLockedViewport() {
+    const lock = this.props.lockedViewport;
+
+    if (!lock) {
+      return;
+    }
+
+    // an animation started before the lock would keep writing the viewport
+    // every frame; stop it instead of fighting it
+    if (this.viewport.isAnimating) {
+      this.viewport.setViewport(null);
+    }
+
+    if (!lockedViewportNeedsUpdate(lock, this.state)) {
+      return;
+    }
+
+    this.setState(
+      getLockedViewportState(lock, this.state.width, this.state.height),
+    );
+  }
+
   componentDidUpdate(prevProps: AppProps, prevState: AppState) {
+    this.maybeEnforceLockedViewport();
+
     const renderOverridesUpdatePending = this.renderOverridesUpdatePending;
     this.renderOverridesUpdatePending = false;
     // Only a requested visual update can skip the document pipeline. Real

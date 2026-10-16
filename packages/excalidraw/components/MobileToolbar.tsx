@@ -165,7 +165,9 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
       }}
     >
       {/* Hand Tool */}
-      <HandToolButton {...toolProps} hideKeyBinding />
+      {!app.props.lockedViewport && (
+        <HandToolButton {...toolProps} hideKeyBinding />
+      )}
 
       {/* Selection Tool */}
       <SelectionToolPopover {...toolProps} setAppState={setAppState} />

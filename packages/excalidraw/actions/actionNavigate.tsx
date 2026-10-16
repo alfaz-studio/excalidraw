@@ -29,6 +29,12 @@ export const actionGoToCollaborator = register<Collaborator>({
       "actionGoToCollaborator: collaborator should be defined when actionGoToCollaborator is called",
     );
 
+    // SONACOVE: following would pan/zoom on every remote broadcast, a standing
+    // tug-of-war against a locked viewport, so don't enter follow mode at all
+    if (app.props.lockedViewport) {
+      return false;
+    }
+
     if (
       !collaborator.socketId ||
       app.props.userToFollow?.socketId === collaborator.socketId ||

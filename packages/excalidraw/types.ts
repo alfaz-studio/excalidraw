@@ -1044,6 +1044,14 @@ export interface ExcalidrawProps {
   aiEnabled?: boolean;
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
+  /**
+   * SONACOVE: when set, scrollX/scrollY/zoom are fully derived (the scene box
+   * [0,width]×[0,height] aspect-fit and centered into the canvas) and every
+   * user or programmatic viewport change is ignored. The zoom actions and the
+   * hand tool are hidden. Editing tools are unaffected. Pass a memoized object,
+   * the memo comparator is shallow. See lockedViewport.ts.
+   */
+  lockedViewport?: { width: number; height: number };
   viewportStatusFrame?: ViewportStatusFrame | null;
   /**
    * Rendered inside the UserList "who's here" dropdown (desktop) and inline
@@ -1246,6 +1254,7 @@ export type AppClassProperties = {
 
   isInteractionEnabled: App["isInteractionEnabled"];
   isNavigationEnabled: App["isNavigationEnabled"];
+  isZoomUIOffered: App["isZoomUIOffered"];
 };
 
 export type PointerDownState = Readonly<{

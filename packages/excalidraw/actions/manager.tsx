@@ -86,8 +86,12 @@ export class ActionManager {
     actions.forEach((action) => this.registerAction(action));
   }
 
+  // SONACOVE: navigation actions (zoom in/out/reset/fit) are also no-ops under
+  // `lockedViewport`, whose viewport is derived
   private isActionBlockedByViewportTransition = (action: Action) =>
-    action.navigation === true && this.app.viewport.isLockedTransitionPending;
+    action.navigation === true &&
+    (this.app.viewport.isLockedTransitionPending ||
+      !!this.app.props.lockedViewport);
 
   handleKeyDown(event: React.KeyboardEvent | KeyboardEvent) {
     if (!this.app.isInteractionEnabled() && !this.app.isNavigationEnabled()) {

@@ -287,7 +287,9 @@ export const Toolbar = ({
           </>
         )}
 
-        <HandToolButton {...toolProps} hideKeyBinding />
+        {!app.props.lockedViewport && (
+          <HandToolButton {...toolProps} hideKeyBinding />
+        )}
         {isCompactStylesPanel ? (
           <SelectionToolPopover {...toolProps} setAppState={setAppState} />
         ) : appState.preferredSelectionTool.type === "lasso" ? (
