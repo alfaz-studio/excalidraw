@@ -449,6 +449,10 @@ export {
 } from "@excalidraw/utils/export";
 
 export { serializeAsJSON, serializeLibraryAsJSON } from "./data/json";
+// SONACOVE: lets a host redirect every native save (image export, scene save
+// to disk) to its own storage, e.g. Electron's whiteboard folder
+export { setFileSaveOverride } from "./data/filesystem";
+export type { FileSaveOverride, FileSaveOpts } from "./data/filesystem";
 export {
   loadFromBlob,
   loadSceneOrLibraryFromBlob,
