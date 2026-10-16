@@ -1498,6 +1498,8 @@ class App extends React.Component<AppProps, AppState> {
     ref: HTMLIFrameElement | null,
   ) {
     if (ref) {
+      // Belt-and-braces alongside the JSX spread: keeps the attribute if a render path ever drops it.
+      ref.setAttribute("credentialless", "");
       this.iFrameRefs.set(element.id, ref);
     }
   }
@@ -2045,6 +2047,10 @@ class App extends React.Component<AppProps, AppState> {
                       <iframe
                         ref={(ref) => this.cacheEmbeddableRef(el, ref)}
                         className="excalidraw__embeddable"
+                        // Must exist pre-navigation: COEP is checked on the initial load, so a ref-set attribute is too late. Cast since JSX types lack it.
+                        {...({ credentialless: "" } as {
+                          credentialless?: string;
+                        })}
                         srcDoc={
                           src?.type === "document"
                             ? src.srcdoc(this.state.theme)
