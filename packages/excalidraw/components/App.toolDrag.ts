@@ -152,7 +152,10 @@ export class AppToolDrag {
     }
     const preview = this.tool!.createElement(
       this.app,
-      viewportCoordsToSceneCoords(event, this.app.state),
+      viewportCoordsToSceneCoords(
+        this.app.warpClientCoords(event),
+        this.app.state,
+      ),
     );
     // Snap after the tool centers its element, just like click-to-place.
     const [x, y] = getGridPoint(

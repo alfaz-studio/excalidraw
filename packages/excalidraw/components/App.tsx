@@ -6854,7 +6854,10 @@ class App extends React.Component<AppProps, AppState> {
   private handleInteractiveContentPointerMove = (
     event: React.PointerEvent<HTMLCanvasElement>,
   ) => {
-    const scenePointer = viewportCoordsToSceneCoords(event, this.state);
+    const scenePointer = viewportCoordsToSceneCoords(
+      this.warpClientCoords(event),
+      this.state,
+    );
     const hitElementMightBeLocked = this.getElementAtPosition(
       scenePointer.x,
       scenePointer.y,
@@ -6893,7 +6896,10 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    const scenePointer = viewportCoordsToSceneCoords(event, this.state);
+    const scenePointer = viewportCoordsToSceneCoords(
+      this.warpClientCoords(event),
+      this.state,
+    );
     if (
       this.isLinksEnabled() &&
       this.maybeHandleElementLinkClick(event, scenePointer)
@@ -8762,7 +8768,10 @@ class App extends React.Component<AppProps, AppState> {
 
       const { x: rx, y: ry } = multiElement;
       const { lastCommittedPoint } = selectedLinearElement;
-      const sceneCoords = viewportCoordsToSceneCoords(event, this.state);
+      const sceneCoords = viewportCoordsToSceneCoords(
+        this.warpClientCoords(event),
+        this.state,
+      );
       const { start, end } =
         isBindingElement(multiElement) && isBindingEnabled(this.state)
           ? getBindingStrategyForDraggingBindingElementEndpoints(
