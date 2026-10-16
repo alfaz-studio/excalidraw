@@ -386,9 +386,21 @@ export const URL_HASH_KEYS = {
 
 export const DEFAULT_UI_OPTIONS: AppProps["UIOptions"] = {
   canvasActions: {
+    allowedShortcuts: [
+      "cut",
+      "deleteSelectedElements",
+      "redo",
+      "selectAll",
+      "undo",
+    ],
     changeViewBackgroundColor: true,
     clearCanvas: true,
+    disableLink: false,
+    disableShortcuts: false,
     export: { saveFileToDisk: true },
+    hideHelpDialog: false,
+    hideLibraries: false,
+    hideUserList: false,
     loadScene: true,
     saveToActiveFile: true,
     toggleTheme: null,

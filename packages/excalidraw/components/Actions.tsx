@@ -25,7 +25,7 @@ import { actionToggleViewMode } from "../actions/actionToggleViewMode";
 
 import "./Actions.scss";
 
-import { useExcalidrawContainer } from "./App";
+import { useAppProps, useExcalidrawContainer } from "./App";
 import Stack from "./Stack";
 import { Tooltip } from "./Tooltip";
 import { PropertiesPopover } from "./PropertiesPopover";
@@ -206,7 +206,9 @@ export const SelectedShapeActions = ({
             {renderAction("deleteSelectedElements")}
             {renderAction("group")}
             {renderAction("ungroup")}
-            {predicates.link && renderAction("hyperlink")}
+            {predicates.link &&
+              !app.props.UIOptions.canvasActions.disableLink &&
+              renderAction("hyperlink")}
             {predicates.cropEditor && renderAction("cropEditor")}
             {predicates.lineEditor && renderAction("toggleLinearEditor")}
           </div>
@@ -504,6 +506,7 @@ const CombinedExtraActions = ({
   showDelete?: boolean;
 }) => {
   const isOpen = appState.openPopup === "compactOtherProperties";
+  const appProps = useAppProps();
 
   if (!predicates.showExtraActions) {
     return null;
@@ -566,7 +569,9 @@ const CombinedExtraActions = ({
                 <div className="buttonList">
                   {renderAction("group")}
                   {renderAction("ungroup")}
-                  {predicates.linkSingleOnly && renderAction("hyperlink")}
+                  {predicates.linkSingleOnly &&
+                    !appProps.UIOptions.canvasActions.disableLink &&
+                    renderAction("hyperlink")}
                   {predicates.cropEditor && renderAction("cropEditor")}
                   {showDuplicate && renderAction("duplicateSelection")}
                   {showDelete && renderAction("deleteSelectedElements")}

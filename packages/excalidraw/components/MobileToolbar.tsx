@@ -17,6 +17,7 @@ import {
   HandToolButton,
   ImageToolButton,
   isToolButtonDisabled,
+  isToolHidden,
   SelectionToolPopover,
   TextToolButton,
   TOOLS,
@@ -261,7 +262,7 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
           className="App-toolbar__extra-tools-dropdown"
           align="start"
         >
-          {!showTextToolOutside && (
+          {!showTextToolOutside && !isToolHidden(app, "text") && (
             <DropdownMenu.Item
               onSelect={() => app.setActiveTool({ type: "text" })}
               icon={TextIcon}
@@ -274,7 +275,7 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
             </DropdownMenu.Item>
           )}
 
-          {!showImageToolOutside && (
+          {!showImageToolOutside && !isToolHidden(app, "image") && (
             <DropdownMenu.Item
               onSelect={() => app.setActiveTool({ type: "image" })}
               icon={ImageIcon}
@@ -285,18 +286,20 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
               {t("toolBar.image")}
             </DropdownMenu.Item>
           )}
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "stickynote" })}
-            icon={stickyNoteToolIcon}
-            shortcut={KEYS.N.toLocaleUpperCase()}
-            data-testid="toolbar-stickynote"
-            selected={stickyNoteToolSelected}
-            disabled={isToolButtonDisabled(app, "stickynote")}
-          >
-            {t("toolBar.stickynote")}
-          </DropdownMenu.Item>
+          {!isToolHidden(app, "stickynote") && (
+            <DropdownMenu.Item
+              onSelect={() => app.setActiveTool({ type: "stickynote" })}
+              icon={stickyNoteToolIcon}
+              shortcut={KEYS.N.toLocaleUpperCase()}
+              data-testid="toolbar-stickynote"
+              selected={stickyNoteToolSelected}
+              disabled={isToolButtonDisabled(app, "stickynote")}
+            >
+              {t("toolBar.stickynote")}
+            </DropdownMenu.Item>
+          )}
 
-          {!showFrameToolOutside && (
+          {!showFrameToolOutside && !isToolHidden(app, "frame") && (
             <DropdownMenu.Item
               onSelect={() => app.setActiveTool({ type: "frame" })}
               icon={frameToolIcon}
@@ -308,45 +311,53 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
               {t("toolBar.frame")}
             </DropdownMenu.Item>
           )}
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "embeddable" })}
-            icon={EmbedIcon}
-            data-testid="toolbar-embeddable"
-            selected={embeddableToolSelected}
-            disabled={isToolButtonDisabled(app, "embeddable")}
-          >
-            {t("toolBar.embeddable")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "autoshape" })}
-            icon={drawShapeToolIcon}
-            shortcut={getToolShortcut("autoshape")}
-            data-testid="toolbar-autoshape"
-            selected={drawShapeToolSelected}
-            disabled={isToolButtonDisabled(app, "autoshape")}
-          >
-            {t("toolBar.autoshape")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "laser" })}
-            icon={laserPointerToolIcon}
-            data-testid="toolbar-laser"
-            selected={laserToolSelected}
-            shortcut={KEYS.K.toLocaleUpperCase()}
-            disabled={isToolButtonDisabled(app, "laser")}
-          >
-            {t("toolBar.laser")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "bucketfill" })}
-            icon={bucketFillIcon}
-            data-testid="toolbar-bucketfill"
-            selected={bucketFillToolSelected}
-            shortcut={KEYS.B.toLocaleUpperCase()}
-            disabled={isToolButtonDisabled(app, "bucketfill")}
-          >
-            {t("toolBar.bucketfill")}
-          </DropdownMenu.Item>
+          {!isToolHidden(app, "embeddable") && (
+            <DropdownMenu.Item
+              onSelect={() => app.setActiveTool({ type: "embeddable" })}
+              icon={EmbedIcon}
+              data-testid="toolbar-embeddable"
+              selected={embeddableToolSelected}
+              disabled={isToolButtonDisabled(app, "embeddable")}
+            >
+              {t("toolBar.embeddable")}
+            </DropdownMenu.Item>
+          )}
+          {!isToolHidden(app, "autoshape") && (
+            <DropdownMenu.Item
+              onSelect={() => app.setActiveTool({ type: "autoshape" })}
+              icon={drawShapeToolIcon}
+              shortcut={getToolShortcut("autoshape")}
+              data-testid="toolbar-autoshape"
+              selected={drawShapeToolSelected}
+              disabled={isToolButtonDisabled(app, "autoshape")}
+            >
+              {t("toolBar.autoshape")}
+            </DropdownMenu.Item>
+          )}
+          {!isToolHidden(app, "laser") && (
+            <DropdownMenu.Item
+              onSelect={() => app.setActiveTool({ type: "laser" })}
+              icon={laserPointerToolIcon}
+              data-testid="toolbar-laser"
+              selected={laserToolSelected}
+              shortcut={KEYS.K.toLocaleUpperCase()}
+              disabled={isToolButtonDisabled(app, "laser")}
+            >
+              {t("toolBar.laser")}
+            </DropdownMenu.Item>
+          )}
+          {!isToolHidden(app, "bucketfill") && (
+            <DropdownMenu.Item
+              onSelect={() => app.setActiveTool({ type: "bucketfill" })}
+              icon={bucketFillIcon}
+              data-testid="toolbar-bucketfill"
+              selected={bucketFillToolSelected}
+              shortcut={KEYS.B.toLocaleUpperCase()}
+              disabled={isToolButtonDisabled(app, "bucketfill")}
+            >
+              {t("toolBar.bucketfill")}
+            </DropdownMenu.Item>
+          )}
           <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
             Generate
           </div>

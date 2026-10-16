@@ -63,6 +63,7 @@ const MainMenu = Object.assign(
             >
               {children}
               {editorInterface.formFactor === "phone" &&
+                !appProps.UIOptions.canvasActions.hideUserList &&
                 appState.collaborators.size > 0 && (
                   <fieldset className="UserList-Wrapper">
                     <legend>{t("labels.collaborators")}</legend>

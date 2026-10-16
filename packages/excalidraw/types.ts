@@ -1161,6 +1161,21 @@ export type CanvasActions = Partial<{
   changeViewBackgroundColor: boolean;
   clearCanvas: boolean;
   export: false | ExportOpts;
+  /**
+   * SONACOVE: ignore every action shortcut except `allowedShortcuts` (action
+   * names; defaults to cut, delete, undo, redo and select-all). Tool letter
+   * keys still switch tools, which hosts drive with synthetic keydowns.
+   */
+  disableShortcuts: boolean;
+  allowedShortcuts: string[];
+  /** SONACOVE: hide the element-link actions (context menu, properties). */
+  disableLink: boolean;
+  /** SONACOVE: hide the library sidebar trigger and "add to library". */
+  hideLibraries: boolean;
+  /** SONACOVE: hide the collaborator list (desktop and phone menu). */
+  hideUserList: boolean;
+  /** SONACOVE: hide the footer help button. */
+  hideHelpDialog: boolean;
   loadScene: boolean;
   saveToActiveFile: boolean;
   /**
@@ -1175,9 +1190,12 @@ export type CanvasActions = Partial<{
 export type UIOptions = Partial<{
   dockedSidebarBreakpoint: number;
   canvasActions: CanvasActions;
-  tools: {
-    image: boolean;
-  };
+  /**
+   * Switch individual tools off with `{ [tool]: false }`. A disabled tool
+   * renders no toolbar entry and cannot be activated (shortcuts and
+   * `setActiveTool` included). Unlisted tools stay enabled.
+   */
+  tools: Partial<Record<ToolType, boolean>>;
   /**
    * Optionally control the editor form factor and desktop UI mode from the host app.
    * If not provided, we will take care of it internally.

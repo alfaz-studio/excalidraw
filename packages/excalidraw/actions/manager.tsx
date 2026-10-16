@@ -107,6 +107,9 @@ export class ActionManager {
             ? canvasActions[action.name as keyof typeof canvasActions]
             : true) &&
           action.keyTest &&
+          // SONACOVE: `disableShortcuts` keeps only `allowedShortcuts`
+          (!canvasActions.disableShortcuts ||
+            canvasActions.allowedShortcuts.includes(action.name)) &&
           action.keyTest(
             event,
             this.getAppState(),

@@ -230,6 +230,16 @@ export const findShapeByKey = (
 export const isToolButtonDisabled = (app: AppClassProperties, type: string) =>
   app.props.activeTool != null && app.props.activeTool.type !== type;
 
+/**
+ * SONACOVE: whether the host switched the tool off via `UIOptions.tools`
+ * (`{ [tool]: false }`). Hidden tools render no toolbar entry; the editor
+ * itself also refuses them (`App.isToolSupported`), shortcuts included.
+ */
+export const isToolHidden = (app: AppClassProperties, type: string) =>
+  (
+    app.props.UIOptions.tools as Record<string, boolean | undefined> | undefined
+  )?.[type] === false;
+
 export type ToolButtonComponentProps = {
   app: AppClassProperties;
   activeTool: UIAppState["activeTool"];
@@ -279,6 +289,10 @@ const createToolButton = (
   }: ToolButtonComponentProps) => {
     const label = capitalizeString(t(`toolBar.${type}`));
     const shortcut = hideShortcut ? null : getToolShortcut(shortcutType);
+
+    if (isToolHidden(app, type)) {
+      return null;
+    }
 
     return (
       <IconButton

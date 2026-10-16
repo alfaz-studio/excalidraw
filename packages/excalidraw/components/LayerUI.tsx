@@ -406,13 +406,15 @@ const LayerUI = ({
               },
             )}
           >
-            {defaultUIEnabled && appState.collaborators.size > 0 && (
-              <UserList
-                collaborators={appState.collaborators}
-                userToFollow={appProps.userToFollow?.socketId || null}
-                currentUserControls={currentUserControls}
-              />
-            )}
+            {defaultUIEnabled &&
+              !UIOptions.canvasActions.hideUserList &&
+              appState.collaborators.size > 0 && (
+                <UserList
+                  collaborators={appState.collaborators}
+                  userToFollow={appProps.userToFollow?.socketId || null}
+                  currentUserControls={currentUserControls}
+                />
+              )}
             {renderTopRightUI?.(
               editorInterface.formFactor === "phone",
               appState,
@@ -478,25 +480,27 @@ const LayerUI = ({
       {defaultUIEnabled && (
         <>
           <DefaultMainMenu UIOptions={UIOptions} />
-          <DefaultSidebar.Trigger
-            __fallback
-            icon={sidebarRightIcon}
-            title={capitalizeString(t("toolBar.library"))}
-            onToggle={(open) => {
-              if (open) {
-                trackEvent(
-                  "sidebar",
-                  `${DEFAULT_SIDEBAR.name} (open)`,
-                  `button (${
-                    editorInterface.formFactor === "phone"
-                      ? "mobile"
-                      : "desktop"
-                  })`,
-                );
-              }
-            }}
-            tab={DEFAULT_SIDEBAR.defaultTab}
-          />
+          {!UIOptions.canvasActions.hideLibraries && (
+            <DefaultSidebar.Trigger
+              __fallback
+              icon={sidebarRightIcon}
+              title={capitalizeString(t("toolBar.library"))}
+              onToggle={(open) => {
+                if (open) {
+                  trackEvent(
+                    "sidebar",
+                    `${DEFAULT_SIDEBAR.name} (open)`,
+                    `button (${
+                      editorInterface.formFactor === "phone"
+                        ? "mobile"
+                        : "desktop"
+                    })`,
+                  );
+                }
+              }}
+              tab={DEFAULT_SIDEBAR.defaultTab}
+            />
+          )}
         </>
       )}
       {/* Keep supporting surfaces available to host-supplied UI, including
