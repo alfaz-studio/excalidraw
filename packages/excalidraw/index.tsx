@@ -114,6 +114,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     showDeprecatedFonts,
     renderScrollbars,
     lockedViewport,
+    viewportRotation,
     viewportStatusFrame,
     currentUserControls,
     imageOptions,
@@ -257,6 +258,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           showDeprecatedFonts={showDeprecatedFonts}
           renderScrollbars={renderScrollbars}
           lockedViewport={lockedViewport}
+          viewportRotation={viewportRotation}
           viewportStatusFrame={viewportStatusFrame}
           currentUserControls={currentUserControls}
           imageOptions={normalizedImageOptions}

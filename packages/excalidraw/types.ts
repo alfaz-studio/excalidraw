@@ -1052,6 +1052,15 @@ export interface ExcalidrawProps {
    * the memo comparator is shallow. See lockedViewport.ts.
    */
   lockedViewport?: { width: number; height: number };
+  /**
+   * SONACOVE: the CSS rotation (degrees, 90° steps; accumulated angles are
+   * normalized) applied by an ANCESTOR of the Excalidraw container. Canvas
+   * sizing switches to layout dims and real pointer coords are inverse-rotated
+   * at entry, so drawing keeps working while the host rotates the whole surface.
+   * Only supported together with `lockedViewport`: the pan/zoom input paths are
+   * rotation-naive, and the lock makes them no-ops. See viewportRotation.ts.
+   */
+  viewportRotation?: number;
   viewportStatusFrame?: ViewportStatusFrame | null;
   /**
    * Rendered inside the UserList "who's here" dropdown (desktop) and inline
