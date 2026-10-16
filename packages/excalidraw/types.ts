@@ -1080,6 +1080,13 @@ export interface ExcalidrawProps {
    * stroke, so the host can tell the user why nothing was erased.
    */
   onProtectedEditBlocked?: (reason: "erase") => void;
+  /**
+   * SONACOVE: lock images as they are inserted and open the element action
+   * bar over them, so the lock is visible. The eraser skips locked elements,
+   * so only strokes drawn on top of an image stay erasable. `locked` syncs, so
+   * the inserting client locking it is enough.
+   */
+  autoLockImages?: boolean;
   viewportStatusFrame?: ViewportStatusFrame | null;
   /**
    * Rendered inside the UserList "who's here" dropdown (desktop) and inline

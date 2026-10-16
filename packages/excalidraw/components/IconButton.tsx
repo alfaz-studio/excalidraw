@@ -43,6 +43,9 @@ type IconButtonProps =
       type: "icon";
       children?: React.ReactNode;
       onClick?(): void;
+      // SONACOVE: for a button that toggles a popover which closes on a
+      // document pointerdown — the trigger reads that state before it does
+      onPointerDown?(event: React.PointerEvent<HTMLButtonElement>): void;
     })
   // a stateful (pressed/unpressed) tool button
   | (IconButtonBaseProps & {
@@ -130,6 +133,9 @@ export const IconButton = React.forwardRef(
           aria-label={props["aria-label"]}
           type="button"
           onClick={onClick}
+          onPointerDown={
+            props.type === "icon" ? props.onPointerDown : undefined
+          }
           ref={innerRef}
           disabled={isLoading || props.isLoading || !!props.disabled}
         >

@@ -118,6 +118,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     elementAuthorId,
     protectForeignElements,
     onProtectedEditBlocked,
+    autoLockImages,
     viewportStatusFrame,
     currentUserControls,
     imageOptions,
@@ -266,6 +267,7 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           elementAuthorId={elementAuthorId}
           protectForeignElements={protectForeignElements}
           onProtectedEditBlocked={onProtectedEditBlocked}
+          autoLockImages={autoLockImages}
           viewportStatusFrame={viewportStatusFrame}
           currentUserControls={currentUserControls}
           imageOptions={normalizedImageOptions}

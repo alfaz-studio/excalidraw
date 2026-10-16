@@ -10620,7 +10620,12 @@ class App extends React.Component<AppProps, AppState> {
         this.state.activeTool.type === "selection" &&
         !pointerDownState.boxSelection.hasOccurred &&
         !pointerDownState.resize.isResizing &&
-        !hitElements.some((el) => this.state.selectedElementIds[el.id])
+        // SONACOVE: images exempted — an unlocked one is selected on
+        // pointer-DOWN, so this block would never run and the bar could not
+        // reopen. Upstream's multi-selection intent still holds.
+        !hitElements.some(
+          (el) => this.state.selectedElementIds[el.id] && !isImageElement(el),
+        )
       ) {
         const hitLockedElement = this.getElementAtPosition(
           sceneCoords.x,
@@ -10634,7 +10639,12 @@ class App extends React.Component<AppProps, AppState> {
           this.store.scheduleCapture();
         }
 
-        if (hitLockedElement?.locked) {
+        // SONACOVE: the action bar opens for a locked element OR any image, and
+        // outlives unlocking. Other types already have the properties panel.
+        if (
+          hitLockedElement &&
+          (hitLockedElement.locked || isImageElement(hitLockedElement))
+        ) {
           this.setState({
             activeLockedId:
               hitLockedElement.groupIds.length > 0
@@ -12142,16 +12152,31 @@ class App extends React.Component<AppProps, AppState> {
     );
     const positionedMap = arrayToMap(positioned);
 
-    const nextElements = this.scene
-      .getElementsIncludingDeleted()
-      .map((el) => positionedMap.get(el.id) ?? initializedMap.get(el.id) ?? el);
+    // SONACOVE: see `autoLockImages` in types.ts. Every inserted image is
+    // locked; the bar anchors to the first, since it points at one element.
+    const autoLock =
+      this.props.autoLockImages === true && positioned.length > 0;
+
+    const nextElements = this.scene.getElementsIncludingDeleted().map((el) => {
+      const next = positionedMap.get(el.id) ?? initializedMap.get(el.id) ?? el;
+
+      // `positionedMap` already IS the set of inserted ids.
+      return autoLock && positionedMap.has(el.id)
+        ? newElementWith(next, { locked: true })
+        : next;
+    });
 
     this.updateScene({
       appState: {
-        selectedElementIds: makeNextSelectedElementIds(
-          Object.fromEntries(positioned.map((el) => [el.id, true])),
-          this.state,
-        ),
+        // A locked element is never in the selection; the bar is what the user
+        // acts through instead.
+        selectedElementIds: autoLock
+          ? {}
+          : makeNextSelectedElementIds(
+              Object.fromEntries(positioned.map((el) => [el.id, true])),
+              this.state,
+            ),
+        activeLockedId: autoLock ? positioned[0].id : this.state.activeLockedId,
       },
       elements: nextElements,
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
@@ -12482,6 +12507,27 @@ class App extends React.Component<AppProps, AppState> {
     const left = clientX - offsetLeft;
     const top = clientY - offsetTop;
 
+    this.showContextMenu({ element, type, top, left });
+  };
+
+  /**
+   * Opens the context menu for an element, or for the canvas, at
+   * container-local `top`/`left`.
+   *
+   * SONACOVE: extracted from `handleCanvasContextMenu` so the action bar's
+   * overflow button opens THIS menu rather than a copy that would drift.
+   */
+  public showContextMenu = ({
+    element,
+    type,
+    top,
+    left,
+  }: {
+    element: NonDeletedExcalidrawElement | null;
+    type: "element" | "canvas";
+    top: number;
+    left: number;
+  }) => {
     trackEvent("contextMenu", "openContextMenu", type);
 
     this.setState(

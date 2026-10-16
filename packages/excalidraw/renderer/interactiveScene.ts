@@ -1767,15 +1767,17 @@ const _renderInteractiveScene = ({
     const elements = element
       ? [element]
       : getElementsInGroup(allElementsMap, appState.activeLockedId);
-    renderElementsBoxHighlight(
-      context,
-      appState,
-      elements as NonDeletedExcalidrawElement[], // We don't typecheck runtime because of performance
-      {
-        colors: [getThemedColor("#ced4da", appState.theme)],
-        dashed: true,
-      },
-    );
+    if (elements.some((el) => el.locked)) {
+      renderElementsBoxHighlight(
+        context,
+        appState,
+        elements as NonDeletedExcalidrawElement[], // We don't typecheck runtime because of performance
+        {
+          colors: [getThemedColor("#ced4da", appState.theme)],
+          dashed: true,
+        },
+      );
+    }
   }
 
   const isFrameSelected = selectedElements.some((element) =>
