@@ -1784,8 +1784,13 @@ class App extends React.Component<AppProps, AppState> {
 
           // SONACOVE: a newly seen, valid embed (pasted or inserted by the
           // host) becomes interactive straight away, with a drag bar to move
-          // it while the iframe takes the pointer
-          if (validated) {
+          // it while the iframe takes the pointer. Not in view mode, where
+          // nothing is selected or moved and a click activates as upstream.
+          if (
+            validated &&
+            !this.state.viewModeEnabled &&
+            this.isInteractionEnabled()
+          ) {
             this.embedDragBarIds.add(element.id);
             autoActivate = element;
           }
