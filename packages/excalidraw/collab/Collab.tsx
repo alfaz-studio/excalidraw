@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-restricted-imports */
 import {
   CaptureUpdateAction,
   getSceneVersion,
@@ -15,6 +16,7 @@ import {
   isDevEnv,
   isTestEnv,
   preventUnload,
+  randomId,
   resolvablePromise,
   throttleRAF,
 } from "@excalidraw/common";
@@ -49,6 +51,7 @@ import type {
   ExcalidrawCollabProps,
   ExcalidrawFileError,
   IMeetingDetails,
+  UserToFollow,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 
@@ -81,6 +84,7 @@ import {
   loadFromStorage,
   saveFilesToStorage,
   saveToStorage,
+  addSceneFlushHandler,
   initializeBackend,
   releaseBackend,
   expectBackend,
@@ -126,6 +130,7 @@ export interface CollabAPI {
   setUsername: CollabInstance["setUsername"];
   getUsername: CollabInstance["getUsername"];
   getActiveRoomLink: CollabInstance["getActiveRoomLink"];
+  setUserToFollow: (userToFollow: UserToFollow | null) => void;
   setCollabError: CollabInstance["setErrorDialog"];
 }
 
@@ -139,6 +144,16 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   portal: Portal;
   fileManager: FileManager;
   excalidrawAPI: ExcalidrawCollabProps["excalidrawAPI"];
+
+  /** SONACOVE: socket ids following this client (was AppState.followedBy upstream). */
+  private followedBy = new Set<SocketId>();
+
+  /** SONACOVE: the user this client follows (was AppState.userToFollow upstream). */
+  private userToFollow: UserToFollow | null = null;
+
+  setUserToFollow = (userToFollow: UserToFollow | null) => {
+    this.userToFollow = userToFollow;
+  };
   activeIntervalId: number | null;
   idleTimeoutId: number | null;
 
@@ -163,7 +178,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private collaborators = new Map<SocketId, Collaborator>();
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
-  private clientId = crypto.randomUUID();
+  private removeSceneFlushHandler: (() => void) | null = null;
+  private clientId = randomId();
 
   /**
    * SONACOVE: the identity stamped onto this client's elements. Prefers the
@@ -204,22 +220,23 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         const { roomId, roomKey } = this.portal;
 
         // Not an abort: callers of `fetchImageFilesFromFirebase` don't catch,
-        // so a surface with file storage off must resolve empty rather than
-        // reject.
-        if (!this.filesEnabled) {
+        // so a surface with file storage off, or between rooms, must resolve
+        // empty rather than reject.
+        if (!this.filesEnabled || !roomId || !roomKey) {
           return { loadedFiles: [], erroredFiles: new Map() };
         }
 
-        if (!roomId || !roomKey) {
-          throw new AbortError();
-        }
-
-        return loadFilesFromStorage(
+        const result = await loadFilesFromStorage(
           `files/rooms/${roomId}`,
           roomKey,
           fileIds,
           roomId,
         );
+
+        // Another room's files must not land on this room's board.
+        return this.portal.roomId === roomId
+          ? result
+          : { loadedFiles: [], erroredFiles: new Map() };
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -236,6 +253,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           }),
           roomId,
         });
+
+        // Uploaded under the room just left: not saved for the room now open.
+        if (this.portal.roomId !== roomId) {
+          return { savedFiles: new Map(), erroredFiles: new Map() };
+        }
 
         return {
           savedFiles: savedFiles.reduce(
@@ -274,6 +296,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     window.addEventListener("offline", this.onOfflineStatusToggle);
     window.addEventListener(EVENT.UNLOAD, this.onUnload);
 
+    // The host's leave flow awaits this to archive before navigating: the
+    // unload-time saves ride keepalive, whose 64 KiB cap drops a busy board's
+    // last edits.
+    this.removeSceneFlushHandler = addSceneFlushHandler(this.flushSceneNow);
+
     const unsubOnUserFollow = this.excalidrawAPI.onUserFollow((payload) => {
       this.portal.socket && this.portal.broadcastUserFollowed(payload);
     });
@@ -301,6 +328,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       setUsername: this.setUsername,
       getUsername: this.getUsername,
       getActiveRoomLink: this.getActiveRoomLink,
+      setUserToFollow: this.setUserToFollow,
       setCollabError: this.setErrorDialog,
     };
 
@@ -359,12 +387,27 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
 
     this.pendingBackendConfig = null;
-    initializeBackend(
+    const missed = initializeBackend(
       this.portal.roomId,
       storageBackendUrl,
       meetingDetails,
       this.onFileError,
     );
+
+    // Loads that gave up before the token arrived: nothing else re-runs them.
+    if (missed?.scene && this.sceneEnabled && this.portal.roomKey) {
+      void this.mergePersistedScene({
+        roomId: this.portal.roomId,
+        roomKey: this.portal.roomKey,
+      });
+    }
+    if (missed?.files.size) {
+      this.fileManager.clearFetchErrors(missed.files);
+      void this.applyImageFiles(true);
+    }
+    if (missed?.upload) {
+      void this.portal.queueFileUpload();
+    }
   };
 
   private flushPendingBackendConfig = () => {
@@ -381,6 +424,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   };
 
   componentWillUnmount() {
+    this.removeSceneFlushHandler?.();
     window.removeEventListener("online", this.onOfflineStatusToggle);
     window.removeEventListener("offline", this.onOfflineStatusToggle);
     window.removeEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
@@ -438,8 +482,26 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
   });
 
+  /**
+   * The leave flow's final save. Not `final` (that buys keepalive for a save
+   * nobody can await); `flushed` tells the host this is the last one.
+   */
+  flushSceneNow = async (): Promise<void> => {
+    this.queueSaveToFirebase.cancel();
+    if (!this.portal.socket) {
+      return;
+    }
+    await this.saveCollabRoomToFirebase(
+      getSyncableElements(
+        this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      ),
+      { flushed: true },
+    );
+  };
+
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
+    opts?: { flushed?: boolean },
   ) => {
     // Scene persistence off: the reconcile below would re-apply a stored
     // snapshot over whatever the user is drawing right now.
@@ -454,6 +516,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         this.portal,
         syncableElements,
         this.excalidrawAPI.getAppState(),
+        opts,
       );
 
       if (!storedElements) {
@@ -727,7 +790,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Marks the room as one that is *meant* to have storage, so a later file op
     // that finds no config can tell "never armed on purpose" from a real gap.
     if (storageBackendUrl) {
-      expectBackend(roomId, this.onFileError);
+      expectBackend(roomId, this.onFileError, meetingDetails?.sceneFileId);
     }
 
     if (
@@ -896,11 +959,17 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           return;
         }
 
+        const generation = this.sessionGeneration;
         const decryptedData = await this.decryptPayload(
           iv,
           encryptedData,
           this.portal.roomKey,
         );
+
+        // Decrypted after a leave: the room it belongs to is gone.
+        if (generation !== this.sessionGeneration) {
+          return;
+        }
 
         switch (decryptedData.type) {
           case WS_SUBTYPES.INVALID_RESPONSE:
@@ -979,7 +1048,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
             // we're not following the user
             // (shouldn't happen, but could be late message or bug upstream)
-            if (appState.userToFollow?.socketId !== socketId) {
+            if (this.props.userToFollow?.socketId !== socketId) {
               console.warn(
                 `receiving remote client's (from ${socketId}) viewport bounds even though we're not subscribed to it!`,
               );
@@ -988,8 +1057,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
             // cross-follow case, ignore updates in this case
             if (
-              appState.userToFollow &&
-              appState.followedBy.has(appState.userToFollow.socketId)
+              this.props.userToFollow &&
+              this.followedBy.has(this.props.userToFollow.socketId)
             ) {
               return;
             }
@@ -998,8 +1067,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
               appState: zoomToFitBounds({
                 appState,
                 bounds: sceneBounds,
-                fitToViewport: true,
-                viewportZoomFactor: 1,
+                fit: "contain",
               }).appState,
             });
 
@@ -1044,9 +1112,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.portal.socket.on(
       WS_EVENTS.USER_FOLLOW_ROOM_CHANGE,
       (followedBy: SocketId[]) => {
-        this.excalidrawAPI.updateScene({
-          appState: { followedBy: new Set(followedBy) },
-        });
+        this.followedBy = new Set(followedBy);
 
         this.relayVisibleSceneBounds({ force: true });
       },
@@ -1178,9 +1244,15 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     return reconciledElements;
   };
 
-  private loadImageFiles = throttle(async () => {
+  private loadImageFiles = throttle(
+    () => this.applyImageFiles(),
+    LOAD_IMAGES_TIMEOUT,
+  );
+
+  private applyImageFiles = async (forceFetchFiles?: boolean) => {
     const response = await this.fetchImageFilesFromFirebase({
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      forceFetchFiles,
     });
     if (!response) {
       return;
@@ -1194,7 +1266,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       erroredFiles,
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
-  }, LOAD_IMAGES_TIMEOUT);
+  };
 
   /**
    * Whether the user is mid-interaction — drawing, resizing or dragging.
@@ -1406,7 +1478,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   relayVisibleSceneBounds = (props?: { force: boolean }) => {
     const appState = this.excalidrawAPI.getAppState();
 
-    if (this.portal.socket && (appState.followedBy.size > 0 || props?.force)) {
+    if (this.portal.socket && (this.followedBy.size > 0 || props?.force)) {
       this.portal.broadcastVisibleSceneBounds(
         {
           sceneBounds: getVisibleSceneBounds(appState),
