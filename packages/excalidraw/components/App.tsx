@@ -667,6 +667,9 @@ class App extends React.Component<AppProps, AppState> {
   /** embeds that have been inserted to DOM (as a perf optim, we don't want to
    * insert to DOM before user initially scrolls to them) */
   private initializedEmbeds = new Set<ExcalidrawIframeLikeElement["id"]>();
+  /** SONACOVE: embeds auto-activated on first validation, which get a drag
+   * bar. An instance Set (not state) so the activating render picks it up. */
+  private embedDragBarIds = new Set<ExcalidrawIframeLikeElement["id"]>();
 
   private elementsPendingErasure: ElementsPendingErasure = new Set();
 
@@ -1762,6 +1765,7 @@ class App extends React.Component<AppProps, AppState> {
 
   private updateEmbeddables = () => {
     const iframeLikes = new Set<ExcalidrawIframeLikeElement["id"]>();
+    let autoActivate: NonDeleted<ExcalidrawEmbeddableElement> | null = null;
 
     let updated = false;
     this.scene.getNonDeletedElements().filter((element) => {
@@ -1776,6 +1780,14 @@ class App extends React.Component<AppProps, AppState> {
           );
 
           this.updateEmbedValidationStatus(element, validated);
+
+          // SONACOVE: a newly seen, valid embed (pasted or inserted by the
+          // host) becomes interactive straight away, with a drag bar to move
+          // it while the iframe takes the pointer
+          if (validated) {
+            this.embedDragBarIds.add(element.id);
+            autoActivate = element;
+          }
         }
       } else if (isIframeElement(element)) {
         iframeLikes.add(element.id);
@@ -1787,12 +1799,76 @@ class App extends React.Component<AppProps, AppState> {
       this.scene.triggerUpdate();
     }
 
+    // validation runs once per embed, so this activates each one once
+    // (typed: control flow doesn't see the assignment in the callback above)
+    const activated =
+      autoActivate as NonDeleted<ExcalidrawEmbeddableElement> | null;
+    if (activated && this.state.activeEmbeddable?.element !== activated) {
+      this.setState({
+        activeEmbeddable: { element: activated, state: "active" },
+        selectedElementIds: { [activated.id]: true },
+      });
+    }
+
     // GC
     this.iFrameRefs.forEach((ref, id) => {
       if (!iframeLikes.has(id)) {
         this.iFrameRefs.delete(id);
       }
     });
+    this.embedDragBarIds.forEach((id) => {
+      if (!iframeLikes.has(id)) {
+        this.embedDragBarIds.delete(id);
+      }
+    });
+  };
+
+  /** SONACOVE: moves an embed by its drag bar. Listens on the window so the
+   * drag keeps going while the pointer is over the iframe. */
+  private handleEmbedDragBarPointerDown = (
+    event: React.PointerEvent<HTMLDivElement>,
+    elementId: ExcalidrawIframeLikeElement["id"],
+  ) => {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const element = this.scene.getNonDeletedElement(elementId);
+    if (!element) {
+      return;
+    }
+
+    const start = viewportCoordsToSceneCoords(
+      this.warpClientCoords(event),
+      this.state,
+    );
+    const origin = { x: element.x, y: element.y };
+
+    if (!this.state.selectedElementIds[elementId]) {
+      this.setState({ selectedElementIds: { [elementId]: true } });
+    }
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const current = this.scene.getNonDeletedElement(elementId);
+      if (!current) {
+        return;
+      }
+      const point = viewportCoordsToSceneCoords(
+        this.warpClientCoords(moveEvent),
+        this.state,
+      );
+      this.scene.mutateElement(current, {
+        x: origin.x + (point.x - start.x),
+        y: origin.y + (point.y - start.y),
+      });
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
   };
 
   private renderEmbeddables() {
@@ -1995,6 +2071,21 @@ class App extends React.Component<AppProps, AppState> {
                 )}px`,
               }}
             >
+              {this.embedDragBarIds.has(el.id) && (
+                <div
+                  className="excalidraw__embeddable-dragbar"
+                  title="Drag to move"
+                  aria-label="Drag to move embed"
+                  onPointerDown={(event) =>
+                    this.handleEmbedDragBarPointerDown(event, el.id)
+                  }
+                >
+                  <span
+                    className="excalidraw__embeddable-dragbar__dots"
+                    aria-hidden="true"
+                  />
+                </div>
+              )}
               <div
                 //this is a hack that addresses isse with embedded excalidraw.com embeddable
                 //https://github.com/excalidraw/excalidraw/pull/6691#issuecomment-1607383938

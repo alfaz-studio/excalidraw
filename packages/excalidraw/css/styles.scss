@@ -1079,4 +1079,36 @@ body.excalidraw-cursor-resize * {
     letter-spacing: 0.6px;
     font-family: "Assistant";
   }
+
+  // SONACOVE: grip bar on the top edge of an auto-activated embed; takes the
+  // pointer even while the frame below it is passive
+  .excalidraw__embeddable-dragbar {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px 12px;
+    background: rgba(0, 0, 0, 0.55);
+    border-radius: 999px;
+    cursor: grab;
+    pointer-events: all;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  // 6-dot grip: 2 columns x 3 rows of tiled radial gradients
+  .excalidraw__embeddable-dragbar__dots {
+    width: 18px;
+    height: 12px;
+    background-image: radial-gradient(circle, #fff 1.3px, transparent 1.4px);
+    background-size: 9px 6px;
+    background-position: center;
+    opacity: 0.9;
+  }
 }
