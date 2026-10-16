@@ -1061,6 +1061,25 @@ export interface ExcalidrawProps {
    * rotation-naive, and the lock makes them no-ops. See viewportRotation.ts.
    */
   viewportRotation?: number;
+  /**
+   * SONACOVE: this client's author id, compared with an element's
+   * `customData.authorId` (stamped by the host's collab layer) when
+   * `protectForeignElements` is set.
+   */
+  elementAuthorId?: string;
+  /**
+   * SONACOVE: when set, elements authored by someone else are read-only here:
+   * not erasable, not hit-testable, excluded from marquee/lasso selection and
+   * select-all, and skipped by clear-canvas. Deliberately not `locked`, which
+   * any participant can undo and which syncs. Elements with no author stay
+   * editable. See elementOwnership.ts.
+   */
+  protectForeignElements?: boolean;
+  /**
+   * SONACOVE: called when protection refuses an edit, at most once per eraser
+   * stroke, so the host can tell the user why nothing was erased.
+   */
+  onProtectedEditBlocked?: (reason: "erase") => void;
   viewportStatusFrame?: ViewportStatusFrame | null;
   /**
    * Rendered inside the UserList "who's here" dropdown (desktop) and inline

@@ -74,6 +74,11 @@ export const getElementsWithinSelection = <T extends ExcalidrawElement>(
   // TODO remove (this flag is effectively unused AFAIK)
   excludeElementsInFrames: boolean = true,
   boxSelectionMode: BoxSelectionMode = "contain",
+  // SONACOVE: extra editability test, so a marquee drag can't select (and then
+  // delete) elements the caller doesn't own. A predicate rather than the ownership
+  // props themselves — this package must not depend on @excalidraw/excalidraw.
+  // Defaults to allow-all so every other caller is unaffected.
+  canEdit: (element: ExcalidrawElement) => boolean = () => true,
 ): T[] => {
   const [selectionStartX, selectionStartY, selectionEndX, selectionEndY] =
     getElementAbsoluteCoords(selection, elementsMap);
@@ -93,7 +98,8 @@ export const getElementsWithinSelection = <T extends ExcalidrawElement>(
     bounds: selectionBounds,
     elementsMap,
     type: boxSelectionMode,
-    shouldIgnoreElementFromSelection,
+    shouldIgnoreElementFromSelection: (element) =>
+      shouldIgnoreElementFromSelection(element) || !canEdit(element),
     excludeElementsInFrames,
   });
 };

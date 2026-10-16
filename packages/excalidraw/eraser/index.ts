@@ -33,6 +33,8 @@ import type { Bounds } from "@excalidraw/common";
 import type { GlobalPoint, LineSegment } from "@excalidraw/math/types";
 import type { ElementsMap, ExcalidrawElement } from "@excalidraw/element/types";
 
+import { isElementEditable } from "../elementOwnership";
+
 import { AnimatedTrail } from "../animatedTrail";
 
 import type App from "../components/App";
@@ -40,6 +42,10 @@ import type App from "../components/App";
 export class EraserTrail extends AnimatedTrail {
   private elementsToErase: Set<ExcalidrawElement["id"]> = new Set();
   private groupsToErase: Set<ExcalidrawElement["id"]> = new Set();
+
+  // SONACOVE: one report per stroke — the callback exists to explain a refusal
+  // once, not to fire per frame while the pointer is held over the same mark.
+  private reportedProtectedBlock = false;
 
   constructor(app: App) {
     super(app, {
@@ -71,6 +77,7 @@ export class EraserTrail extends AnimatedTrail {
     this.endPath();
     super.startPath(x, y);
     this.elementsToErase.clear();
+    this.reportedProtectedBlock = false;
   }
 
   addPointToPath(x: number, y: number, restore = false) {
@@ -98,9 +105,36 @@ export class EraserTrail extends AnimatedTrail {
       eraserPath[eraserPath.length - 2],
     );
 
-    const candidateElements = this.app.visibleElements.filter(
-      (el) => !el.locked,
+    // SONACOVE: foreign-authored elements are not erasable when the host passes
+    // protectForeignElements. See elementOwnership.ts.
+    const candidateElements = this.app.visibleElements.filter((el) =>
+      isElementEditable(el, this.app.props),
     );
+
+    // SONACOVE: the filter above is why a refusal is otherwise silent — a
+    // foreign element is never hit-tested, so nothing anywhere computes "the
+    // stroke crossed a mark it may not erase". Compute it here, once per
+    // stroke, only when someone is listening.
+    const { onProtectedEditBlocked } = this.app.props;
+
+    if (onProtectedEditBlocked && !this.reportedProtectedBlock) {
+      const blocked = this.app.visibleElements.filter(
+        (el) => !isElementEditable(el, this.app.props),
+      );
+
+      if (blocked.length) {
+        const blockedMap = arrayToMap(blocked);
+
+        if (
+          blocked.some((el) =>
+            eraserTest(pathSegment, el, blockedMap, this.app.state.zoom.value),
+          )
+        ) {
+          this.reportedProtectedBlock = true;
+          onProtectedEditBlocked("erase");
+        }
+      }
+    }
 
     const candidateElementsMap = arrayToMap(candidateElements);
 

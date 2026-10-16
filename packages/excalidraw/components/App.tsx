@@ -280,6 +280,7 @@ import {
   normalizeViewportRotation,
   rotateClientPoint,
 } from "../viewportRotation";
+import { canEditElement } from "../elementOwnership";
 
 import {
   actionAddToLibrary,
@@ -6100,18 +6101,27 @@ class App extends React.Component<AppProps, AppState> {
   ): NonDeleted<ExcalidrawElement>[] {
     const iframeLikes: Ordered<NonDeleted<ExcalidrawIframeLikeElement>>[] = [];
 
-    const elements = (
-      opts?.includeBoundTextElement && opts?.includeLockedElements
-        ? this.scene.getNonDeletedElements()
-        : this.scene
-            .getNonDeletedElements()
-            .filter(
-              (element) =>
-                (opts?.includeLockedElements || !element.locked) &&
-                (opts?.includeBoundTextElement ||
-                  !(isTextElement(element) && element.containerId)),
-            )
-    )
+    // SONACOVE: upstream skipped this filter entirely when both opts were set,
+    // because every condition in it was then trivially true. That equivalence
+    // no longer holds — canEditElement is independent of both opts — so the
+    // shortcut would have handed back foreign elements unfiltered and defeated
+    // the choke point below. No call site passes both today, which is exactly
+    // why it would have gone unnoticed: nothing typechecks, lints or tests it.
+    // One path only.
+    const elements = this.scene
+      .getNonDeletedElements()
+      .filter(
+        (element) =>
+          (opts?.includeLockedElements || !element.locked) &&
+          // Ownership is NOT covered by includeLockedElements — that opt exists
+          // so callers can surface the lock affordance, and a foreign element
+          // must stay unhittable even then. Filtering here rather than at the
+          // call sites covers every hit-test path (drag, right-click,
+          // double-click-to-edit, links) from one place. See elementOwnership.ts.
+          canEditElement(element, this.props) &&
+          (opts?.includeBoundTextElement ||
+            !(isTextElement(element) && element.containerId)),
+      )
       .filter((el) => this.hitElement(x, y, el))
       .filter((element) => !this.isClippedByFrameAt(x, y, element))
       .filter((el) => {
@@ -10341,6 +10351,7 @@ class App extends React.Component<AppProps, AppState> {
                 this.scene.getNonDeletedElementsMap(),
                 false,
                 this.state.boxSelectionMode,
+                (element) => canEditElement(element, this.props),
               )
             : [];
 

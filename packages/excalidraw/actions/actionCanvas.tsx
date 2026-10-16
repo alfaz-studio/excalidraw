@@ -17,6 +17,7 @@ import { CaptureUpdateAction } from "@excalidraw/element";
 import type { Bounds } from "@excalidraw/common";
 
 import { getDefaultAppState } from "../appState";
+import { canEditElement } from "../elementOwnership";
 import { ColorPicker } from "../components/ColorPicker/ColorPicker";
 import { IconButton } from "../components/IconButton";
 import { Tooltip } from "../components/Tooltip";
@@ -81,6 +82,20 @@ export const actionChangeViewBackgroundColor = register<Partial<AppState>>({
   },
 });
 
+/**
+ * The `currentItem*` keys hold the user's tool preferences (stroke colour,
+ * font size, stroke width, ...), which `APP_STATE_STORAGE_CONF` persists, so
+ * clearing the canvas drops the drawing and leaves the toolbar alone. Matched
+ * on the prefix so a newly added preference is carried over too.
+ */
+const getCurrentItemPrefs = (appState: AppState): Partial<AppState> =>
+  (Object.keys(appState) as (keyof AppState)[])
+    .filter((key) => key.startsWith("currentItem"))
+    .reduce(
+      (prefs, key) => Object.assign(prefs, { [key]: appState[key] }),
+      {} as Partial<AppState>,
+    );
+
 export const actionClearCanvas = register({
   name: "clearCanvas",
   label: "labels.clearCanvas",
@@ -96,11 +111,16 @@ export const actionClearCanvas = register({
   perform: (elements, appState, _, app) => {
     app.imageCache.clear();
     return {
+      // SONACOVE: leave foreign-authored elements standing; clear-canvas has no
+      // `locked` check to compose with. See elementOwnership.ts.
       elements: elements.map((element) =>
-        newElementWith(element, { isDeleted: true }),
+        canEditElement(element, app.props)
+          ? newElementWith(element, { isDeleted: true })
+          : element,
       ),
       appState: {
         ...getDefaultAppState(),
+        ...getCurrentItemPrefs(appState),
         files: {},
         theme: appState.theme,
         penMode: appState.penMode,

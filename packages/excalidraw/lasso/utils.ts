@@ -32,6 +32,10 @@ import type {
 } from "@excalidraw/math/types";
 import type { ElementsMap, ExcalidrawElement } from "@excalidraw/element/types";
 
+import { isElementEditable } from "../elementOwnership";
+
+import type { ElementOwnership } from "../elementOwnership";
+
 import type { BoxSelectionMode } from "../types";
 
 export const getLassoSelectedElementIds = (input: {
@@ -42,6 +46,9 @@ export const getLassoSelectedElementIds = (input: {
   intersectedElements: Set<ExcalidrawElement["id"]>;
   enclosedElements: Set<ExcalidrawElement["id"]>;
   simplifyDistance?: number;
+  // SONACOVE: so a lasso drag can't select (and then delete) elements this client
+  // doesn't own. See elementOwnership.ts.
+  ownership?: ElementOwnership;
   mode?: BoxSelectionMode;
 }): {
   selectedElementIds: string[];
@@ -54,6 +61,7 @@ export const getLassoSelectedElementIds = (input: {
     intersectedElements,
     enclosedElements,
     simplifyDistance,
+    ownership,
     mode = "contain",
   } = input;
   // simplify the path to reduce the number of points
@@ -61,9 +69,12 @@ export const getLassoSelectedElementIds = (input: {
   if (simplifyDistance) {
     path = simplify(lassoPath, simplifyDistance) as GlobalPoint[];
   }
-  // bound text is never selected on its own, it's covered by its container
+  // bound text is never selected on its own, it's covered by its container.
+  // SONACOVE: additionally exclude anything this client doesn't own (see
+  // elementOwnership.ts) so a lasso drag can't select — and then delete — it.
   const selectableElements = elements.filter(
-    (el) => !el.locked && !isBoundToContainer(el),
+    (el) =>
+      !el.locked && !isBoundToContainer(el) && isElementEditable(el, ownership),
   );
   // as the path might not enclose a shape anymore, clear before checking
   enclosedElements.clear();

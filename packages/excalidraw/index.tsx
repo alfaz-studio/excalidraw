@@ -115,6 +115,9 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     renderScrollbars,
     lockedViewport,
     viewportRotation,
+    elementAuthorId,
+    protectForeignElements,
+    onProtectedEditBlocked,
     viewportStatusFrame,
     currentUserControls,
     imageOptions,
@@ -259,6 +262,9 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           renderScrollbars={renderScrollbars}
           lockedViewport={lockedViewport}
           viewportRotation={viewportRotation}
+          elementAuthorId={elementAuthorId}
+          protectForeignElements={protectForeignElements}
+          onProtectedEditBlocked={onProtectedEditBlocked}
           viewportStatusFrame={viewportStatusFrame}
           currentUserControls={currentUserControls}
           imageOptions={normalizedImageOptions}
