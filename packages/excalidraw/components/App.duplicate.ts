@@ -483,7 +483,7 @@ export class AppDuplicate {
       // update drag origin to the position at which we started
       // the duplication so that the drag offset is correct
       pointerDownState.drag.origin = viewportCoordsToSceneCoords(
-        event,
+        this.app.warpClientCoords(event),
         this.app.state,
       );
 

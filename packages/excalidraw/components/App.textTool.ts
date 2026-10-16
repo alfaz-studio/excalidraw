@@ -224,7 +224,10 @@ export class AppTextTool {
       return;
     }
     const target = this.updateHover(
-      viewportCoordsToSceneCoords(pointer, this.app.state),
+      viewportCoordsToSceneCoords(
+        this.app.warpClientCoords(pointer),
+        this.app.state,
+      ),
       modifiers,
     );
     if (!this.app.pan.isNavigating()) {
@@ -355,7 +358,10 @@ export class AppTextTool {
       this.cancel();
       return true;
     }
-    const pointerCoords = viewportCoordsToSceneCoords(event, this.app.state);
+    const pointerCoords = viewportCoordsToSceneCoords(
+      this.app.warpClientCoords(event),
+      this.app.state,
+    );
     if (this.isDrag(pointerCoords)) {
       this.resolvePending(true, pointerCoords, pointerDownState, event);
     }
@@ -382,7 +388,10 @@ export class AppTextTool {
       this.cancel();
       return;
     }
-    const pointerCoords = viewportCoordsToSceneCoords(event, this.app.state);
+    const pointerCoords = viewportCoordsToSceneCoords(
+      this.app.warpClientCoords(event),
+      this.app.state,
+    );
     this.resolvePending(
       this.isDrag(pointerCoords),
       pointerCoords,
