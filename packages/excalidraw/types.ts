@@ -46,6 +46,7 @@ import type {
   CaptureUpdateActionType,
   DurableIncrement,
   EphemeralIncrement,
+  ShapeTemplateTool,
 } from "@excalidraw/element";
 import type { GlobalPoint } from "@excalidraw/math";
 
@@ -159,7 +160,8 @@ export type ToolType =
   | "frame"
   | "magicframe"
   | "embeddable"
-  | "laser";
+  | "laser"
+  | ShapeTemplateTool;
 
 export type ElementOrToolType = ExcalidrawElementType | ToolType | "custom";
 

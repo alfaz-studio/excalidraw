@@ -17,6 +17,7 @@ import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import { unbindBindingElement, updateBoundElements } from "./binding";
 import { getCommonBounds } from "./bounds";
+import { getShapeTemplatePoints, isShapeTemplateTool } from "./shapeTemplates";
 import { getPerfectElementSize } from "./sizeHelpers";
 import { getBoundTextElement } from "./textElement";
 import { getMinTextElementWidth } from "./textMeasurements";
@@ -337,15 +338,20 @@ export const dragNewElement = ({
       };
     }
 
+    const template = isShapeTemplateTool(elementType)
+      ? getShapeTemplatePoints(elementType, width, height)
+      : null;
+
     scene.mutateElement(
       newElement,
       {
-        x: newX + (originOffset?.x ?? 0),
-        y: newY + (originOffset?.y ?? 0),
+        x: newX + (originOffset?.x ?? 0) + (template?.offsetX ?? 0),
+        y: newY + (originOffset?.y ?? 0) + (template?.offsetY ?? 0),
         width,
         height,
         ...textAutoResize,
         ...imageInitialDimension,
+        ...(template && { points: template.points }),
       },
       { informMutation, isDragging: false },
     );
