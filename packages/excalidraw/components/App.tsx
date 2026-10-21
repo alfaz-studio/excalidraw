@@ -68,6 +68,7 @@ import {
   distance,
   getFontString,
   getNearestScrollableContainer,
+  isElementRendered,
   isInputLike,
   isToolIcon,
   isWritableElement,
@@ -4775,6 +4776,16 @@ class App extends React.Component<AppProps, AppState> {
   // Input handling
   private onKeyDown = withBatchedUpdates(
     (event: React.KeyboardEvent | KeyboardEvent) => {
+      // SONACOVE: the meet client keeps a closed board mounted under
+      // `display: none`, where edits from page-wide keys would still sync to
+      // every participant unseen (#1096).
+      if (
+        this.props.handleKeyboardGlobally &&
+        !isElementRendered(this.excalidrawContainerRef.current)
+      ) {
+        return;
+      }
+
       // normalize `event.key` when CapsLock is pressed #2372
       if (
         "Proxy" in window &&
