@@ -222,22 +222,23 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         const { roomId, roomKey } = this.portal;
 
         // Not an abort: callers of `fetchImageFilesFromFirebase` don't catch,
-        // so a surface with file storage off must resolve empty rather than
-        // reject.
-        if (!this.filesEnabled) {
+        // so a surface with file storage off, or between rooms, must resolve
+        // empty rather than reject.
+        if (!this.filesEnabled || !roomId || !roomKey) {
           return { loadedFiles: [], erroredFiles: new Map() };
         }
 
-        if (!roomId || !roomKey) {
-          throw new AbortError();
-        }
-
-        return loadFilesFromStorage(
+        const result = await loadFilesFromStorage(
           `files/rooms/${roomId}`,
           roomKey,
           fileIds,
           roomId,
         );
+
+        // Another room's files must not land on this room's board.
+        return this.portal.roomId === roomId
+          ? result
+          : { loadedFiles: [], erroredFiles: new Map() };
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -254,6 +255,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           }),
           roomId,
         });
+
+        // Uploaded under the room just left: not saved for the room now open.
+        if (this.portal.roomId !== roomId) {
+          return { savedFiles: new Map(), erroredFiles: new Map() };
+        }
 
         return {
           savedFiles: savedFiles.reduce(
@@ -377,12 +383,27 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
 
     this.pendingBackendConfig = null;
-    initializeBackend(
+    const missed = initializeBackend(
       this.portal.roomId,
       storageBackendUrl,
       meetingDetails,
       this.onFileError,
     );
+
+    // Loads that gave up before the token arrived: nothing else re-runs them.
+    if (missed?.scene && this.sceneEnabled && this.portal.roomKey) {
+      void this.mergePersistedScene({
+        roomId: this.portal.roomId,
+        roomKey: this.portal.roomKey,
+      });
+    }
+    if (missed?.files.size) {
+      this.fileManager.clearFetchErrors(missed.files);
+      void this.applyImageFiles(true);
+    }
+    if (missed?.upload) {
+      void this.portal.queueFileUpload();
+    }
   };
 
   private flushPendingBackendConfig = () => {
@@ -748,7 +769,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Marks the room as one that is *meant* to have storage, so a later file op
     // that finds no config can tell "never armed on purpose" from a real gap.
     if (storageBackendUrl) {
-      expectBackend(roomId, this.onFileError);
+      expectBackend(roomId, this.onFileError, meetingDetails?.sceneFileId);
     }
 
     if (
@@ -917,11 +938,17 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           return;
         }
 
+        const generation = this.sessionGeneration;
         const decryptedData = await this.decryptPayload(
           iv,
           encryptedData,
           this.portal.roomKey,
         );
+
+        // Decrypted after a leave: the room it belongs to is gone.
+        if (generation !== this.sessionGeneration) {
+          return;
+        }
 
         switch (decryptedData.type) {
           case WS_SUBTYPES.INVALID_RESPONSE:
@@ -1208,9 +1235,15 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     return reconciledElements;
   };
 
-  private loadImageFiles = throttle(async () => {
+  private loadImageFiles = throttle(
+    () => this.applyImageFiles(),
+    LOAD_IMAGES_TIMEOUT,
+  );
+
+  private applyImageFiles = async (forceFetchFiles?: boolean) => {
     const response = await this.fetchImageFilesFromFirebase({
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      forceFetchFiles,
     });
     if (!response) {
       return;
@@ -1224,7 +1257,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       erroredFiles,
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
-  }, LOAD_IMAGES_TIMEOUT);
+  };
 
   /**
    * Whether the user is mid-interaction — drawing, resizing or dragging.
