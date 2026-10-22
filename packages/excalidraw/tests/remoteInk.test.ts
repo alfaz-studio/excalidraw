@@ -7,6 +7,7 @@ import {
   applyInkFrameToStrokes,
   buildInkFrame,
   isInkFrame,
+  MAX_INK_POINTS_PER_STROKE,
   MAX_INK_STROKES_PER_PEER,
 } from "../remoteInk";
 
@@ -115,8 +116,39 @@ describe("live ink frames", () => {
   });
 
   it("reject a malformed frame from a peer", () => {
+    const good = frames(3, 3)[0];
+
+    expect(isInkFrame(good)).toBe(true);
     expect(isInkFrame({ id: "s", points: "nope" })).toBe(false);
-    expect(isInkFrame(frames(3, 3)[0])).toBe(true);
+    expect(isInkFrame({ ...good, x: NaN })).toBe(false);
+    expect(isInkFrame({ ...good, pressures: [0.5] })).toBe(false);
+    expect(isInkFrame({ ...good, pressures: [0.5, "x", 0.5] })).toBe(false);
+    expect(
+      isInkFrame({
+        ...good,
+        points: Array.from({ length: 10_000 }, () => [0, 0]),
+      }),
+    ).toBe(false);
+  });
+
+  it("stop growing a preview at the cap", () => {
+    let preview: RemoteInk | undefined;
+
+    for (let i = 0; i * 500 < MAX_INK_POINTS_PER_STROKE + 2000; i++) {
+      preview = applyInkFrame(
+        preview,
+        {
+          ...frames(3, 3)[0],
+          from: i * 500,
+          points: Array.from({ length: 500 }, () => [1, 1]),
+        },
+        0,
+      );
+    }
+
+    expect(preview!.points.length).toBeLessThanOrEqual(
+      MAX_INK_POINTS_PER_STROKE + 500,
+    );
   });
 });
 
@@ -191,13 +223,16 @@ describe("holding a stroke back while it is drawn", () => {
 });
 
 describe("Collab live ink", () => {
-  const setup = () => {
+  const setup = (scene: string[] = []) => {
     const appState: { newElement: any } = { newElement: null };
+    const updateScene = vi.fn();
     const collab = new Collab({
       excalidrawAPI: {
         getAppState: () => appState,
         getSceneElementsIncludingDeleted: () => [],
-        updateScene: vi.fn(),
+        getSceneElementsMapIncludingDeleted: () =>
+          new Map(scene.map((id) => [id, element(id, 1)])),
+        updateScene,
       },
     } as any);
     const broadcastScene = vi.fn();
@@ -206,8 +241,50 @@ describe("Collab live ink", () => {
     collab.portal.broadcastScene = broadcastScene as any;
     collab.portal.broadcastInk = broadcastInk as any;
 
-    return { appState, broadcastInk, broadcastScene, collab };
+    return { appState, broadcastInk, broadcastScene, collab, updateScene };
   };
+
+  /** Ink previews the collab layer has put on the board. */
+  const previews = (updateScene: ReturnType<typeof vi.fn>) =>
+    updateScene.mock.calls.flatMap(([data]) =>
+      data.collaborators
+        ? [...data.collaborators.values()].flatMap(
+            (c: any) => c.inkStrokes ?? [],
+          )
+        : [],
+    );
+
+  // The finished element goes reliably and its frames lossily, so it can arrive first.
+  it("ignores a late frame for a stroke already on the board", () => {
+    const { collab, updateScene } = setup(["s1"]);
+
+    collab.handleInkFrame("peer" as any, { ...frames(3, 3)[0], done: true });
+
+    expect(previews(updateScene)).toEqual([]);
+  });
+
+  it("previews a peer's stroke that is not on the board yet", () => {
+    const { collab, updateScene } = setup();
+
+    collab.handleInkFrame("peer" as any, frames(3, 3)[0]);
+
+    expect(previews(updateScene).map((s) => s.id)).toEqual(["s1"]);
+  });
+
+  it("releases a stroke when the next one starts in the same change", () => {
+    const { appState, broadcastInk, collab } = setup();
+    const a = element("a", 3);
+    const b = element("b", 1);
+
+    appState.newElement = a;
+    collab.broadcastElements([a]);
+    appState.newElement = b;
+    collab.broadcastElements([a, b]);
+
+    expect(broadcastInk).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "a", done: true }),
+    );
+  });
 
   it("sends the finished stroke at pen-up even when its version did not move", () => {
     const { appState, broadcastInk, broadcastScene, collab } = setup();

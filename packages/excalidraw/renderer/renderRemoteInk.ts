@@ -7,6 +7,13 @@ import type { ExcalidrawFreeDrawElement } from "@excalidraw/element/types";
 import type { InteractiveCanvasAppState, RemoteInk } from "../types";
 
 /**
+ * Outlines by preview. A preview object is replaced whenever its stroke changes, so this is
+ * computed once per frame received rather than on every interactive render (cursor moves
+ * included).
+ */
+const outlineCache = new WeakMap<RemoteInk, [number, number][]>();
+
+/**
  * Fills each stroke the way the static renderer fills a freedraw element, so the preview looks
  * like the stroke it turns into. The context must already be scaled for zoom.
  *
@@ -24,12 +31,17 @@ export const renderRemoteInk = (
       continue;
     }
 
-    const outline = getFreedrawOutlinePoints({
-      points: stroke.points,
-      pressures: stroke.pressures,
-      simulatePressure: stroke.simulatePressure,
-      strokeWidth: stroke.strokeWidth,
-    } as unknown as ExcalidrawFreeDrawElement);
+    let outline = outlineCache.get(stroke);
+
+    if (!outline) {
+      outline = getFreedrawOutlinePoints({
+        points: stroke.points,
+        pressures: stroke.pressures,
+        simulatePressure: stroke.simulatePressure,
+        strokeWidth: stroke.strokeWidth,
+      } as unknown as ExcalidrawFreeDrawElement);
+      outlineCache.set(stroke, outline);
+    }
 
     if (!outline.length) {
       continue;

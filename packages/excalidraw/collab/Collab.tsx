@@ -980,17 +980,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           case WS_SUBTYPES.INK: {
             const { socketId, ...frame } = decryptedData.payload;
 
-            if (!isInkFrame(frame) || this.landedInkIds.has(frame.id)) {
-              break;
-            }
-
-            this.updateCollaborator(socketId, {
-              inkStrokes: applyInkFrameToStrokes(
-                this.collaborators.get(socketId)?.inkStrokes,
-                frame,
-                Date.now(),
-              ),
-            });
+            this.handleInkFrame(socketId, frame);
             break;
           }
           case WS_SUBTYPES.MOUSE_LOCATION: {
@@ -1601,6 +1591,36 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       this.collaborators = collaborators;
       this.excalidrawAPI.updateScene({ collaborators });
     }
+  };
+
+  /**
+   * SONACOVE: folds a peer's live-ink frame into their previews.
+   *
+   * @param socketId - The peer.
+   * @param frame - The untrusted frame.
+   */
+  handleInkFrame = (socketId: SocketId, frame: unknown) => {
+    if (!isInkFrame(frame) || this.landedInkIds.has(frame.id)) {
+      return;
+    }
+
+    const strokes = this.collaborators.get(socketId)?.inkStrokes;
+
+    // The finished element can overtake the stroke's frames — it goes reliably, they go lossy —
+    // so a frame for a stroke already on the board with no preview arrived late, and would put
+    // a stale partial preview over the real thing until the TTL.
+    if (
+      !strokes?.some((stroke) => stroke.id === frame.id) &&
+      this.excalidrawAPI.getSceneElementsMapIncludingDeleted().has(frame.id)
+    ) {
+      this.rememberLandedInk(frame.id);
+
+      return;
+    }
+
+    this.updateCollaborator(socketId, {
+      inkStrokes: applyInkFrameToStrokes(strokes, frame, Date.now()),
+    });
   };
 
   private rememberLandedInk = (id: string) => {

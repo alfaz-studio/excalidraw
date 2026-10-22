@@ -16,6 +16,12 @@ import type { RemoteInk } from "./types";
 /** Points repeated from the previous frame, so one lost frame doesn't open a gap. */
 const INK_OVERLAP_POINTS = 2;
 
+/** A sender emits a handful per frame; anything far above that is not a real frame. */
+const MAX_INK_POINTS_PER_FRAME = 512;
+
+/** A preview stops growing here; the finished element still lands whole. */
+export const MAX_INK_POINTS_PER_STROKE = 20_000;
+
 /** One frame of a stroke in progress, as it goes over the wire. */
 export type InkFrame = {
   id: string;
@@ -110,6 +116,10 @@ export const applyInkFrame = (
 
   const end = frame.from + frame.points.length;
 
+  if (current && current.points.length >= MAX_INK_POINTS_PER_STROKE) {
+    return current;
+  }
+
   if (current && end <= current.received) {
     return frame.done && !current.done
       ? { ...current, done: true, updatedAt: now }
@@ -165,22 +175,26 @@ export const applyInkFrameToStrokes = (
  */
 export const isInkFrame = (value: unknown): value is InkFrame => {
   const frame = value as Partial<InkFrame> | null;
+  const finite = (n: unknown) => typeof n === "number" && Number.isFinite(n);
 
   return (
     typeof frame?.id === "string" &&
-    typeof frame.x === "number" &&
-    typeof frame.y === "number" &&
-    typeof frame.from === "number" &&
+    finite(frame.x) &&
+    finite(frame.y) &&
+    finite(frame.from) &&
+    frame.from! >= 0 &&
     typeof frame.strokeColor === "string" &&
-    typeof frame.strokeWidth === "number" &&
-    typeof frame.opacity === "number" &&
+    finite(frame.strokeWidth) &&
+    finite(frame.opacity) &&
     Array.isArray(frame.points) &&
+    frame.points.length <= MAX_INK_POINTS_PER_FRAME &&
     frame.points.every(
-      (p) =>
-        Array.isArray(p) &&
-        typeof p[0] === "number" &&
-        typeof p[1] === "number",
+      (p) => Array.isArray(p) && finite(p[0]) && finite(p[1]),
     ) &&
-    Array.isArray(frame.pressures)
+    Array.isArray(frame.pressures) &&
+    // Either no pressures (simulated) or one per point — the outline reads them by index.
+    (frame.pressures.length === 0 ||
+      frame.pressures.length === frame.points.length) &&
+    frame.pressures.every(finite)
   );
 };
