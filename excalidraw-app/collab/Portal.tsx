@@ -6,6 +6,7 @@ import throttle from "lodash.throttle";
 
 import type { UserIdleState } from "@excalidraw/common";
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
+import type { InkFrame } from "@excalidraw/excalidraw/remoteInk";
 import type {
   CollabSocket,
   OnUserFollowedPayload,
@@ -206,8 +207,18 @@ class Portal {
     // sync out only the elements we think we need to to save bandwidth.
     // periodically we'll resync the whole thing to make sure no one diverges
     // due to a dropped message (server goes down etc).
+    // SONACOVE: the stroke being drawn goes out once, finished, when the pen lifts — never
+    // version by version. Not recorded as broadcast either, which is what lets the release send
+    // it. See remoteInk.ts. Optional because Portal is shared with the upstream app's own Collab,
+    // which has no release path and so must never hold a stroke back.
+    const inkId =
+      (
+        this.collab as Partial<{ getInkElementId: () => string | null }>
+      ).getInkElementId?.() ?? null;
+
     const syncableElements = elements.reduce((acc, element) => {
       if (
+        element.id !== inkId &&
         (syncAll ||
           !this.broadcastedElementVersions.has(element.id) ||
           element.version > this.broadcastedElementVersions.get(element.id)!) &&
@@ -245,6 +256,22 @@ class Portal {
     this.queueFileUpload();
 
     await this._broadcastSocketData(data as SocketUpdateData);
+  };
+
+  /** SONACOVE: one frame of the local stroke in progress, lossy. See remoteInk.ts. */
+  broadcastInk = (frame: InkFrame) => {
+    // Not queued for later like the scene: a frame is stale the moment the next one exists.
+    if (this.socket?.id && this.socketInitialized) {
+      const data: SocketUpdateDataSource["INK"] = {
+        type: WS_SUBTYPES.INK,
+        payload: { ...frame, socketId: this.socket.id as SocketId },
+      };
+
+      return this._broadcastSocketData(
+        data as SocketUpdateData,
+        true, // volatile
+      );
+    }
   };
 
   broadcastIdleChange = (userState: UserIdleState) => {
