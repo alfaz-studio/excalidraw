@@ -22,7 +22,15 @@ STAMP_FILE="packages/excalidraw/dist/prod/.source-stamp"
 # always meant to mean. Untracked files still need `status`, so both feed the digest.
 SOURCE_STAMP="$(git rev-parse HEAD 2>/dev/null || echo nogit)-$( { git diff HEAD 2>/dev/null; git status --porcelain 2>/dev/null; } | sha1sum | cut -c1-12)"
 
-if [ ! -f "packages/excalidraw/dist/prod/index.js" ] || [ "$(cat "$STAMP_FILE" 2>/dev/null)" != "$SOURCE_STAMP" ]; then
+# Every package the bundle imports at runtime; a dist missing from any of them (a partial
+# cache restore, say) fails the host's build, so it counts as stale too.
+PACKAGES="common math fractional-indexing element excalidraw"
+MISSING_DIST=""
+for pkg in $PACKAGES; do
+    [ -f "packages/$pkg/dist/prod/index.js" ] || MISSING_DIST="$MISSING_DIST $pkg"
+done
+
+if [ -n "$MISSING_DIST" ] || [ "$(cat "$STAMP_FILE" 2>/dev/null)" != "$SOURCE_STAMP" ]; then
     echo "Package dist missing or stale. Building packages (esbuild only, skipping type generation)..."
 
     # Build each package using esbuild directly (skip gen:types which has
@@ -32,6 +40,11 @@ if [ ! -f "packages/excalidraw/dist/prod/index.js" ] || [ "$(cat "$STAMP_FILE" 2
 
     echo "  Building @excalidraw/math..."
     (cd packages/math && rm -rf dist && node ../../scripts/buildBase.js)
+
+    # element and excalidraw import it as `@excalidraw/fractional-indexing`, which the host
+    # aliases to this dist.
+    echo "  Building @excalidraw/fractional-indexing..."
+    (cd packages/fractional-indexing && rm -rf dist && node ../../scripts/buildBase.js)
 
     echo "  Building @excalidraw/element..."
     (cd packages/element && rm -rf dist && node ../../scripts/buildBase.js)
