@@ -32,6 +32,8 @@ import type {
   ExcalidrawTextElement,
 } from "@excalidraw/element/types";
 
+import { canEditElement } from "../elementOwnership";
+
 import { getSelectionStateForElements } from "./App.selection";
 
 import type { PointerDownState } from "../types";
@@ -158,7 +160,9 @@ export class AppDuplicate {
       text && isTextElement(text)
         ? elementsMap.get(text.containerId ?? text.id)
         : null;
-    if (!element) {
+    // SONACOVE: an edited text can sit on (or in) an element this client
+    // doesn't own; a handed-over press must not select or move it
+    if (!element || !canEditElement(element, this.app.props)) {
       return false;
     }
 
