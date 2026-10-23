@@ -753,6 +753,11 @@ export class AppViewport {
       return;
     }
 
+    // SONACOVE: the viewport is derived under `lockedViewport`
+    if (this.app.props.lockedViewport) {
+      return;
+    }
+
     const { target, fit, lock, animation } = opts;
     const offsets = this.resolveOffsets(opts.offsets);
     const { bounds, type } = resolveViewportTarget(
@@ -856,7 +861,9 @@ export class AppViewport {
       preserveScrollConstraintsSnapBack?: boolean;
     },
   ) => {
-    if (this.isLockedTransitionPending) {
+    // SONACOVE: every user pan/zoom (wheel, pinch, hand/space drag, edge
+    // autoscroll) routes through here; the viewport is derived under a lock
+    if (this.isLockedTransitionPending || this.app.props.lockedViewport) {
       return false;
     }
 

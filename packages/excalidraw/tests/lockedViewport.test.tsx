@@ -1,5 +1,6 @@
 // SONACOVE: lockedViewport — tests for the derived-viewport lock mode.
 import React from "react";
+import { vi } from "vitest";
 
 import { Excalidraw } from "../index";
 import {
@@ -141,6 +142,27 @@ describe("<Excalidraw lockedViewport>", () => {
     expect(h.state.zoom.value).toBeCloseTo(0.5, 6);
     expect(h.state.scrollX).toBeCloseTo(0, 4);
     expect(h.state.scrollY).toBeCloseTo(0, 4);
+  });
+
+  it("never reports a drifted viewport to the host", async () => {
+    const onScrollChange = vi.fn();
+    mockBoundingClientRect({ width: 960, height: 540 });
+    await render(
+      <div>
+        <Excalidraw lockedViewport={LOCK} onScrollChange={onScrollChange} />
+      </div>,
+    );
+    await waitFor(() => expect(h.state.zoom.value).toBeCloseTo(0.5, 6));
+    onScrollChange.mockClear();
+
+    fireEvent.wheel(h.app.interactiveCanvas!, {
+      deltaY: -100,
+      ctrlKey: true,
+    });
+    fireEvent.wheel(h.app.interactiveCanvas!, { deltaX: 40, deltaY: 40 });
+    h.app.viewport.setViewport({ target: [0, 0, 100, 100], fit: "contain" });
+
+    expect(onScrollChange).not.toHaveBeenCalled();
   });
 
   it("ignores programmatic viewport changes", async () => {

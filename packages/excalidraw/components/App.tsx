@@ -4405,12 +4405,11 @@ class App extends React.Component<AppProps, AppState> {
       return;
     }
 
-    // A scroll/zoom animation started before (or despite) the lock — e.g. a
-    // search-match scroll or an element-link recenter mid-flight when the
-    // prop flips on — writes viewport values via raw setState every RAF
-    // frame, bypassing the translateCanvas guard. Cancel it instead of
-    // fighting it frame by frame.
-    this.cancelInProgressAnimation?.();
+    // an animation started before the lock would keep writing the viewport
+    // every frame; stop it instead of fighting it
+    if (this.viewport.isAnimating) {
+      this.viewport.setViewport(null);
+    }
 
     if (!lockedViewportNeedsUpdate(lock, this.state)) {
       return;
@@ -5039,8 +5038,6 @@ class App extends React.Component<AppProps, AppState> {
     });
   };
 
-  private cancelInProgressAnimation: (() => void) | null = null;
-
   /** emits a follow/unfollow intent to the host (which owns the
    *  `userToFollow` state) via both the `onUserFollow` prop and the
    *  imperative API emitter */
@@ -5059,27 +5056,6 @@ class App extends React.Component<AppProps, AppState> {
         action: "UNFOLLOW",
       });
     }
-  };
-
-  private maybeUnfollowRemoteUser = () => {
-    if (this.props.userToFollow) {
-      this.requestUnfollow();
-    }
-  };
-
-  /** use when changing scrollX/scrollY/zoom based on user interaction */
-  private translateCanvas: React.Component<any, AppState>["setState"] = (
-    state,
-  ) => {
-    // SONACOVE: lockedViewport — the viewport is derived; ignore every
-    // user-interaction pan/zoom (wheel, pinch, hand/space drag, edge
-    // autoscroll all route through here).
-    if (this.props.lockedViewport) {
-      return;
-    }
-    this.cancelInProgressAnimation?.();
-    this.maybeUnfollowRemoteUser();
-    this.setState(state);
   };
 
   setToast = (toast: AppState["toast"]) => {
@@ -6130,7 +6106,7 @@ class App extends React.Component<AppProps, AppState> {
     event.preventDefault();
 
     // SONACOVE: lockedViewport — the viewport is derived; ignore trackpad
-    // pinch zoom (this Safari path bypasses translateCanvas).
+    // pinch zoom (this Safari path bypasses viewport.translate).
     if (this.props.lockedViewport) {
       return;
     }
