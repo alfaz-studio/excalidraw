@@ -81,6 +81,7 @@ import type {
   NonDeletedSceneElementsMap,
 } from "@excalidraw/element/types";
 
+import { renderRemoteInk } from "../renderer/renderRemoteInk";
 import { renderSnaps } from "../renderer/renderSnaps";
 import { roundRect } from "../renderer/roundRect";
 import {
@@ -1968,6 +1969,9 @@ const _renderInteractiveScene = ({
   });
 
   renderSnaps(context, appState);
+
+  // SONACOVE: under the cursors, over everything on the board.
+  renderRemoteInk(context, appState, renderConfig.remoteInk);
 
   context.restore();
 
