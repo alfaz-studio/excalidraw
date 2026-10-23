@@ -20,7 +20,10 @@ import {
   isArrowElement,
   hasStrokeColor,
   toolIsArrow,
+  isShapeTemplateTool,
 } from "@excalidraw/element";
+
+import type { ShapeTemplateTool } from "@excalidraw/element";
 
 import type {
   ExcalidrawElement,
@@ -83,6 +86,10 @@ import {
   RectangleIcon,
   DiamondIcon,
   EllipseIcon,
+  StarIcon,
+  HeartIcon,
+  TickIcon,
+  CrossIcon,
   ShapesIcon,
   ArrowIcon,
   LineIcon,
@@ -1136,6 +1143,26 @@ export const ShapesSwitcher = ({
       icon: EllipseIcon,
       title: capitalizeString(t("toolBar.ellipse")),
     },
+    {
+      type: "star",
+      icon: StarIcon,
+      title: capitalizeString(t("toolBar.star")),
+    },
+    {
+      type: "heart",
+      icon: HeartIcon,
+      title: capitalizeString(t("toolBar.heart")),
+    },
+    {
+      type: "tick",
+      icon: TickIcon,
+      title: capitalizeString(t("toolBar.tick")),
+    },
+    {
+      type: "cross",
+      icon: CrossIcon,
+      title: capitalizeString(t("toolBar.cross")),
+    },
   ] as const;
 
   const LINEAR_TOOLS = [
@@ -1153,7 +1180,7 @@ export const ShapesSwitcher = ({
 
   // Track which shape/linear tool was last used so the popover shows the right default
   const [lastActiveShape, setLastActiveShape] = useState<
-    "rectangle" | "diamond" | "ellipse"
+    "rectangle" | "diamond" | "ellipse" | ShapeTemplateTool
   >("rectangle");
   const [lastActiveLinear, setLastActiveLinear] = useState<"arrow" | "line">(
     "arrow",
@@ -1163,7 +1190,8 @@ export const ShapesSwitcher = ({
     if (
       activeTool.type === "rectangle" ||
       activeTool.type === "diamond" ||
-      activeTool.type === "ellipse"
+      activeTool.type === "ellipse" ||
+      isShapeTemplateTool(activeTool.type)
     ) {
       setLastActiveShape(activeTool.type);
     }

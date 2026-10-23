@@ -134,7 +134,9 @@ import {
   newElement,
   newImageElement,
   newLinearElement,
+  newShapeTemplateElement,
   newTextElement,
+  isShapeTemplateTool,
   refreshTextDimensions,
   deepCopyElement,
   duplicateElements,
@@ -260,6 +262,8 @@ import {
   maybeHandleArrowPointlikeDrag,
   getUncroppedWidthAndHeight,
 } from "@excalidraw/element";
+
+import type { ShapeTemplateTool } from "@excalidraw/element";
 
 import type { GlobalPoint, LocalPoint, Radians } from "@excalidraw/math";
 
@@ -9145,7 +9149,8 @@ class App extends React.Component<AppProps, AppState> {
       | "diamond"
       | "ellipse"
       | "iframe"
-      | "embeddable",
+      | "embeddable"
+      | ShapeTemplateTool,
   ) {
     return this.state.currentItemRoundness === "round"
       ? {
@@ -9157,7 +9162,10 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   private createGenericElementOnPointerDown = (
-    elementType: ExcalidrawGenericElement["type"] | "embeddable",
+    elementType:
+      | ExcalidrawGenericElement["type"]
+      | "embeddable"
+      | ShapeTemplateTool,
     pointerDownState: PointerDownState,
   ): void => {
     const [gridX, gridY] = getGridPoint(
@@ -9194,6 +9202,8 @@ class App extends React.Component<AppProps, AppState> {
         type: "embeddable",
         ...baseElementAttributes,
       });
+    } else if (isShapeTemplateTool(elementType)) {
+      element = newShapeTemplateElement(elementType, baseElementAttributes);
     } else {
       element = newElement({
         type: elementType,
@@ -10047,7 +10057,11 @@ class App extends React.Component<AppProps, AppState> {
               newElement,
             });
           }
-        } else if (isLinearElement(newElement) && !newElement.isDeleted) {
+        } else if (
+          isLinearElement(newElement) &&
+          !newElement.isDeleted &&
+          !isShapeTemplateTool(this.state.activeTool.type)
+        ) {
           pointerDownState.drag.hasOccurred = true;
           const points = newElement.points;
 
@@ -10511,7 +10525,11 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
-      if (isLinearElement(newElement)) {
+      // Shape templates are lines sized like a rectangle, so they finalize like one.
+      if (
+        isLinearElement(newElement) &&
+        !isShapeTemplateTool(activeTool.type)
+      ) {
         if (
           newElement!.points.length > 1 &&
           newElement.points[1][0] !== 0 &&

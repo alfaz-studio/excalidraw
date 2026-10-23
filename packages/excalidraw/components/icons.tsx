@@ -353,6 +353,43 @@ export const EllipseIcon = createIcon(
   tablerIconProps,
 );
 
+// tabler-icons: star
+export const StarIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M12 17.75l-6.172 3.245l1.179 -6.873l-5 -4.867l6.9 -1l3.086 -6.253l3.086 6.253l6.9 1l-5 4.867l1.179 6.873z" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: heart
+export const HeartIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: check
+export const TickIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M5 12l5 5l10 -10" />
+  </g>,
+  tablerIconProps,
+);
+
+// tabler-icons: x
+export const CrossIcon = createIcon(
+  <g strokeWidth="1.5">
+    <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+    <path d="M18 6l-12 12" />
+    <path d="M6 6l12 12" />
+  </g>,
+  tablerIconProps,
+);
+
 // tabler-icons: shapes (triangle + circle + square combo)
 export const ShapesIcon = createIcon(
   <g strokeWidth="1.5">

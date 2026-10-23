@@ -1,5 +1,7 @@
 import type { ElementOrToolType } from "@excalidraw/excalidraw/types";
 
+import { isShapeTemplateTool } from "./shapeTemplates";
+
 export const hasBackground = (type: ElementOrToolType) =>
   type === "rectangle" ||
   type === "iframe" ||
@@ -7,7 +9,9 @@ export const hasBackground = (type: ElementOrToolType) =>
   type === "ellipse" ||
   type === "diamond" ||
   type === "line" ||
-  type === "freedraw";
+  type === "freedraw" ||
+  type === "star" ||
+  type === "heart";
 
 export const hasStrokeColor = (type: ElementOrToolType) =>
   type === "rectangle" ||
@@ -17,7 +21,8 @@ export const hasStrokeColor = (type: ElementOrToolType) =>
   type === "arrow" ||
   type === "line" ||
   type === "text" ||
-  type === "embeddable";
+  type === "embeddable" ||
+  isShapeTemplateTool(type);
 
 export const hasStrokeWidth = (type: ElementOrToolType) =>
   type === "rectangle" ||
@@ -27,7 +32,8 @@ export const hasStrokeWidth = (type: ElementOrToolType) =>
   type === "diamond" ||
   type === "freedraw" ||
   type === "arrow" ||
-  type === "line";
+  type === "line" ||
+  isShapeTemplateTool(type);
 
 export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "rectangle" ||
@@ -36,7 +42,8 @@ export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "ellipse" ||
   type === "diamond" ||
   type === "arrow" ||
-  type === "line";
+  type === "line" ||
+  isShapeTemplateTool(type);
 
 export const canChangeRoundness = (type: ElementOrToolType) =>
   type === "rectangle" ||

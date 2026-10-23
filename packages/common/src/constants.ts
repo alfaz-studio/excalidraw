@@ -513,6 +513,10 @@ export const TOOL_TYPE = {
   magicframe: "magicframe",
   embeddable: "embeddable",
   laser: "laser",
+  star: "star",
+  heart: "heart",
+  tick: "tick",
+  cross: "cross",
 } as const;
 
 export const EDITOR_LS_KEYS = {
