@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-restricted-imports */
 import {
   Excalidraw,
   LiveCollaborationTrigger,
@@ -19,7 +20,6 @@ import Trans from "@excalidraw/excalidraw/components/Trans";
 import {
   APP_NAME,
   EVENT,
-  THEME,
   VERSION_TIMEOUT,
   debounce,
   getVersion,
@@ -860,7 +860,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
       <Excalidraw
         {...props.excalidraw}
         storageBackendUrl={props.storageBackendUrl}
-        excalidrawAPI={excalidrawRefCallback}
+        onExcalidrawAPI={excalidrawRefCallback}
         onChange={onChange}
         initialData={initialStatePromiseRef.current.promise}
         isCollaborating={isCollaborating}
@@ -892,7 +892,11 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         onLinkOpen={(element, event) => {
           if (element.link && isElementLink(element.link)) {
             event.preventDefault();
-            excalidrawAPI?.scrollToContent(element.link, { animate: true });
+            excalidrawAPI?.setViewport({
+              target: element.link,
+              fit: "scale-down",
+              animation: true,
+            });
           }
         }}
       >
@@ -1151,14 +1155,16 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
             //     }
             //   },
             // },
-            {
-              ...CommandPalette.defaultItems.toggleTheme,
-              perform: () => {
-                setAppTheme(
-                  editorTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK,
-                );
-              },
-            },
+            // SONACOVE: upstream removed CommandPalette.defaultItems.toggleTheme;
+            // the app theme toggle is wired via onThemeChange instead.
+            // {
+            //   ...CommandPalette.defaultItems.toggleTheme,
+            //   perform: () => {
+            //     setAppTheme(
+            //       editorTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK,
+            //     );
+            //   },
+            // },
             {
               label: t("labels.installPWA"),
               category: DEFAULT_CATEGORIES.app,

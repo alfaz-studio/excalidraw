@@ -12,10 +12,11 @@ import { newTextElement } from "./newElement";
 import { wrapText } from "./textWrapping";
 import { isIframeElement } from "./typeChecks";
 
+import type { RenderEnvironment } from "./renderEnvironment";
 import type {
-  ExcalidrawElement,
   ExcalidrawIframeLikeElement,
   IframeData,
+  NonDeletedExcalidrawElement,
 } from "./types";
 
 type IframeDataWithSandbox = MarkRequired<IframeData, "sandbox">;
@@ -84,6 +85,11 @@ const RE_REDDIT =
 
 const RE_REDDIT_EMBED =
   /^<blockquote[\s\S]*?\shref=["'](https?:\/\/(?:www\.)?reddit\.com\/[^"']*)/i;
+
+// share links can be prefixed with the author's username
+// (instagram.com/<username>/p/<shortcode>)
+const RE_INSTAGRAM =
+  /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:[\w.]+\/)?(p|reels?|tv)\/([\w-]+)/;
 
 const parseYouTubeLikeTimestamp = (url: string): number => {
   let timeParam: string | null | undefined;
@@ -220,6 +226,54 @@ const ALLOWED_DOMAINS = new Set([
   "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
   // Desmos calculator embeds iframe as-is via the generic path.
   "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
+  // Second-wave classroom apps, all generic-path (no URL rewrite).
+  "assets.pinterest.com", // official Pin/board widget shim (never frame pinterest.com itself).
+  "*.wikipedia.org", // article URLs on every language subdomain.
+  "wayground.com", // student join page (legacy aliases canonicalize client-side).
+  "google.com", // Maps /embed player only (share pages convert client-side).
+  "maps.google.com", // same Maps player on the maps host.
+  "join.nearpod.com", // student code-entry shell.
+  "nearpod.com", // student join + share paths (login/dashboard reject client-side).
+  "app.nearpod.com", // live lesson player.
+  "share.nearpod.com", // teacher-generated share links.
+  "np1.nearpod.com", // legacy share sessions.
+  // Third-wave classroom apps, all generic-path (no URL rewrite). Hosts the
+  // direct pages refuse to frame (SAMEORIGIN/DENY) stay unlisted — the meet
+  // normalizers convert to the framable shapes client-side.
+  "scratch.mit.edu", // project /embed only (root refuses framing).
+  "codepen.io", // bare host covers www (matchHostname strips www.).
+  "replit.com", // ?embed=true read-only shape (root denies framing).
+  "canva.com", // ?embed design shape (main site refuses framing).
+  "3dwarehouse.sketchup.com", // Warehouse viewer /embed.html (editor is login-walled).
+  "embed.figma.com", // official embed host (www file links convert client-side).
+  "view.genially.com", // official view player.
+  "view.genial.ly", // same player on the short host.
+  "pitch.com", // public share-link /embed iframes.
+  "gamma.app", // /embed docs/presentations (Sites are not embeddable).
+  "onedrive.live.com", // official Share > Embed shape.
+  "quizlet.com", // official /{id}/{mode}/embed shim (root refuses framing).
+  "embed.notion.co", // published Sites embed code (workspace URLs refuse framing).
+  "mentimeter.com", // Share > Embed slides (voting stays on menti.com).
+  "padlet.com", // Share > Embed board/preview/slideshow.
+  "learningapps.org", // official /watch?id= pattern, no login.
+  "thewessens.net", // Mathenaeum games collection (static, no framing headers).
+  "ascendmath.com", // Flash Card Math free tool.
+  "activities.graspablemath.com", // activity share links (no formal embed API).
+  "research.dwi.ufl.edu", // verified UFLI /embed links (toolbox page refuses framing).
+  "*.wiktionary.org", // dictionary entries on every language subdomain.
+  "quran.com", // Quran.Foundation reader.
+  "tanzil.net", // Uthmani text source.
+  "corpus.quran.com", // word-by-word grammar.
+  "altafsir.com", // comparative tafsir library.
+  "quran.ksu.edu.sa", // KSU e-Mushaf.
+  "sunnah.com", // hadith with grading.
+  "colonist.io", // room links (no framing headers).
+  "drawbattle.io", // invite links (no framing headers).
+  "skribbl.io", // private-room links (no framing headers).
+  "playscrabble.com", // game app (client canonicalizes scrabble.com here).
+  "embed.music.apple.com", // official Copy-Embed host (direct pages deny framing).
+  "embed.podcasts.apple.com", // official Copy-Embed host (direct pages deny framing).
+  "instagram.com",
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -246,6 +300,28 @@ const ALLOW_SAME_ORIGIN = new Set([
   "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
   // Desmos calculators keep state in storage, so they keep same-origin.
   "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
+  // Interactive lesson frames keep storage like the quiz players above.
+  "wayground.com", // join-session state.
+  "google.com", // Maps embed on the main host.
+  "maps.google.com", // Maps embed on the maps host.
+  "join.nearpod.com", // join-session state.
+  "nearpod.com", // share-link sessions.
+  "app.nearpod.com", // live lesson sessions.
+  "share.nearpod.com", // share-link sessions.
+  "np1.nearpod.com", // legacy share sessions.
+  // Third-wave frames that keep storage/cookies; static readers stay strict.
+  "scratch.mit.edu", // cloud variables + project state.
+  "codepen.io", // pen runtime storage.
+  "replit.com", // run/fork session state.
+  "view.genially.com", // interactive creations.
+  "view.genial.ly", // same player on the short host.
+  "quizlet.com", // study-mode progress.
+  "padlet.com", // interactive boards.
+  "colonist.io", // game sessions.
+  "drawbattle.io", // game sessions.
+  "skribbl.io", // game sessions.
+  "playscrabble.com", // game sessions.
+  "instagram.com",
 ]);
 
 export const createSrcDoc = (body: string) => {
@@ -285,20 +361,22 @@ export const getEmbedLink = (
     const time = startTime > 0 ? `&start=${startTime}` : ``;
     const isPortrait = ytLink[0].includes("shorts");
     type = "video";
+    // Classroom privacy: every YouTube frame serves from youtube-nocookie.com
+    // (no tracking cookies until play), whatever host was pasted.
     switch (ytLink[1]) {
       case "embed/":
       case "watch?v=":
       case "shorts/":
       case "live/":
       case "v/":
-        link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
+        link = `https://www.youtube-nocookie.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
       case "playlist?list=":
       case "embed/videoseries?list=":
-        link = `https://www.youtube.com/embed/videoseries?list=${ytLink[2]}&enablejsapi=1${time}`;
+        link = `https://www.youtube-nocookie.com/embed/videoseries?list=${ytLink[2]}&enablejsapi=1${time}`;
         break;
       default:
-        link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
+        link = `https://www.youtube-nocookie.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
     }
     // Portrait only for /shorts; everything else is landscape 16:9. // bigger defaults so fresh embeds are usable without an immediate resize.
@@ -374,12 +452,39 @@ export const getEmbedLink = (
   }
 
   const figmaLink = link.match(RE_FIGMA);
-  if (figmaLink) {
+  // The meet client pre-converts public file links to the /embed form with
+  // its own embed_host: re-wrapping those would nest the embed URL, so only
+  // raw file links take the share-host rewrite below.
+  if (figmaLink && !/^https:\/\/(?:www\.)?figma\.com\/embed[?/]/.test(link)) {
     type = "generic";
     link = `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(
       link,
     )}`;
     aspectRatio = { w: 550, h: 550 };
+    embeddedLinkCache.set(originalLink, {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    });
+    return {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    };
+  }
+
+  const instagramLink = link.match(RE_INSTAGRAM);
+  if (instagramLink) {
+    const [, postType, shortcode] = instagramLink;
+    // uncaptioned so the height is predictable (only depends on the media)
+    // — we can't auto-resize to fit a long caption
+    link = `https://www.instagram.com/${
+      postType === "reels" ? "reel" : postType
+    }/${shortcode}/embed/`;
+    // fits portrait (4:5) posts and reels
+    aspectRatio = { w: 400, h: 720 };
     embeddedLinkCache.set(originalLink, {
       link,
       intrinsicSize: aspectRatio,
@@ -521,7 +626,8 @@ export const getEmbedLink = (
 
 export const createPlaceholderEmbeddableLabel = (
   element: ExcalidrawIframeLikeElement,
-): ExcalidrawElement => {
+  renderEnvironment?: RenderEnvironment,
+): NonDeletedExcalidrawElement => {
   let text: string;
   if (isIframeElement(element)) {
     text = "IFrame element";
@@ -549,10 +655,11 @@ export const createPlaceholderEmbeddableLabel = (
     backgroundColor: "transparent",
     fontFamily,
     fontSize,
-    text: wrapText(text, fontString, element.width - 20),
+    text: wrapText(text, fontString, element.width - 20, renderEnvironment),
     textAlign: "center",
     verticalAlign: VERTICAL_ALIGN.MIDDLE,
     angle: element.angle ?? 0,
+    renderEnvironment,
   });
 };
 
