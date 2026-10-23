@@ -90,6 +90,26 @@ export const isWritableElement = (
       target.type === "password" ||
       target.type === "search"));
 
+// SONACOVE: `display: none` on any ancestor takes an element out of layout, so
+// a global key listener owned by it must stand down (#1096). jsdom and Safari
+// < 17.4 have no `checkVisibility`, hence the computed-style walk.
+export const isElementRendered = (
+  element: Element | null | undefined,
+): boolean => {
+  if (!element?.isConnected) {
+    return false;
+  }
+  if (typeof element.checkVisibility === "function") {
+    return element.checkVisibility();
+  }
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    if (getComputedStyle(node).display === "none") {
+      return false;
+    }
+  }
+  return true;
+};
+
 export const getFontFamilyString = ({
   fontFamily,
 }: {
