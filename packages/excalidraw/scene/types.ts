@@ -18,6 +18,7 @@ import type {
   StaticCanvasAppState,
   SocketId,
   PendingExcalidrawElements,
+  RemoteInk,
 } from "../types";
 import type { RoughCanvas } from "roughjs/bin/canvas";
 import type { Drawable } from "roughjs/bin/core";
@@ -71,6 +72,8 @@ export type InteractiveCanvasRenderConfig = {
   remotePointerUserStates: Map<SocketId, UserIdleState>;
   remotePointerUsernames: Map<SocketId, string>;
   remotePointerButton: Map<SocketId, string | undefined>;
+  /** SONACOVE: peers' strokes in progress. See remoteInk.ts. */
+  remoteInk: RemoteInk[];
   selectionColor: string;
   lastViewportPosition: { x: number; y: number };
   // extra options passed to the renderer

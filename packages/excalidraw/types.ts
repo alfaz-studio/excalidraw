@@ -94,6 +94,26 @@ export type Collaborator = Readonly<{
   isInCall?: boolean;
   isSpeaking?: boolean;
   isMuted?: boolean;
+  /** SONACOVE: strokes this collaborator is drawing, not yet on the board. See remoteInk.ts. */
+  inkStrokes?: readonly RemoteInk[];
+}>;
+
+/** SONACOVE: a peer's freehand stroke in progress, drawn as a preview. See remoteInk.ts. */
+export type RemoteInk = Readonly<{
+  id: string;
+  x: number;
+  y: number;
+  points: readonly (readonly [number, number])[];
+  pressures: readonly number[];
+  simulatePressure: boolean;
+  strokeColor: string;
+  strokeWidth: number;
+  opacity: number;
+  /** How far into the sender's stroke the points go; after a lost frame, more than `points`. */
+  received: number;
+  /** The pen lifted; the preview stays until the finished element lands. */
+  done: boolean;
+  updatedAt: number;
 }>;
 
 export type CollaboratorPointer = {

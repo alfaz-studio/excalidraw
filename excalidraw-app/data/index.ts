@@ -19,6 +19,7 @@ import { bytesToHexString } from "@excalidraw/common";
 
 import type { UserIdleState } from "@excalidraw/common";
 import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
+import type { InkFrame } from "@excalidraw/excalidraw/remoteInk";
 import type { SceneBounds } from "@excalidraw/element";
 import type {
   ExcalidrawElement,
@@ -113,6 +114,10 @@ export type SocketUpdateDataSource = {
       username: string;
       sceneBounds: SceneBounds;
     };
+  };
+  INK: {
+    type: WS_SUBTYPES.INK;
+    payload: InkFrame & { socketId: SocketId };
   };
   IDLE_STATUS: {
     type: WS_SUBTYPES.IDLE_STATUS;

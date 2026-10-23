@@ -612,6 +612,17 @@ const _isRetried = (sceneFileId: string, flushed?: boolean) => {
   return !flushed && count < FAILED_SAVES_BEFORE_ALERT;
 };
 
+/** Failed saves in a row per scene: the next tick repeats a failed one, so only a run of them pages. */
+const failedSaves = new Map<string, number>();
+const FAILED_SAVES_BEFORE_ALERT = 3;
+
+const _isRetried = (sceneFileId: string, flushed?: boolean) => {
+  const count = (failedSaves.get(sceneFileId) ?? 0) + 1;
+
+  failedSaves.set(sceneFileId, count);
+  return !flushed && count < FAILED_SAVES_BEFORE_ALERT;
+};
+
 /** Never let a host listener's failure break the save path. */
 const notifyArchive = (event: SceneArchiveEvent) => {
   for (const listener of sceneArchiveListeners) {

@@ -105,8 +105,13 @@ const InteractiveCanvas = (props: InteractiveCanvasProps) => {
       new Map();
     const remotePointerUserStates: InteractiveCanvasRenderConfig["remotePointerUserStates"] =
       new Map();
+    const remoteInk: InteractiveCanvasRenderConfig["remoteInk"] = [];
 
     props.appState.collaborators.forEach((user, socketId) => {
+      // SONACOVE: before the pointer gate — a stylus can stroke with the cursor hidden.
+      if (user.inkStrokes?.length) {
+        remoteInk.push(...user.inkStrokes);
+      }
       if (user.selectedElementIds) {
         for (const id of Object.keys(user.selectedElementIds)) {
           if (!remoteSelectedElementIds.has(id)) {
@@ -154,6 +159,7 @@ const InteractiveCanvas = (props: InteractiveCanvasProps) => {
         remoteSelectedElementIds,
         remotePointerUsernames,
         remotePointerUserStates,
+        remoteInk,
         selectionColor,
         renderScrollbars: props.renderScrollbars,
         // NOTE not memoized on so we don't rerender on cursor move
