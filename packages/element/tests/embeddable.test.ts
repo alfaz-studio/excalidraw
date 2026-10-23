@@ -92,7 +92,7 @@ describe("YouTube timestamp parsing", () => {
       expect(result.link).toContain("start=30");
     }
     // Shorts should have portrait aspect ratio
-    expect(result?.intrinsicSize).toEqual({ w: 315, h: 560 });
+    expect(result?.intrinsicSize).toEqual({ w: 540, h: 960 });
   });
 
   it("should handle playlist URLs with timestamps", () => {
@@ -177,7 +177,7 @@ describe("Google Drive video embedding", () => {
     if (result?.type === "video" || result?.type === "generic") {
       expect(result.link).toBe(expectedLink);
     }
-    expect(result?.intrinsicSize).toEqual({ w: 560, h: 315 });
+    expect(result?.intrinsicSize).toEqual({ w: 960, h: 540 });
   });
 
   it("should preserve resourcekey when available", () => {
@@ -229,5 +229,85 @@ describe("Google Drive video embedding", () => {
         undefined,
       ),
     ).toBe(true);
+  });
+});
+
+describe("YouTube share-variant embeds", () => {
+  it.each([
+    "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+    "https://www.youtube.com/live/dQw4w9WgXcQ",
+    "https://www.youtube.com/v/dQw4w9WgXcQ",
+    "https://www.youtube.com/attribution_link?a=xyz&u=/watch%3Fv%3DdQw4w9WgXcQ",
+    "https://www.youtube.com/watch?feature=shared&v=dQw4w9WgXcQ",
+  ])("should embed as video: %s", (url) => {
+    const result = getEmbedLink(url);
+
+    expect(result?.type).toBe("video");
+    if (result?.type === "video" || result?.type === "generic") {
+      expect(result.link).toBe(
+        "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1",
+      );
+    }
+    expect(result?.intrinsicSize).toEqual({ w: 960, h: 540 });
+  });
+
+  it("should keep the timestamp on reordered watch params", () => {
+    const result = getEmbedLink(
+      "https://www.youtube.com/watch?t=90&v=dQw4w9WgXcQ",
+    );
+
+    expect(result?.type).toBe("video");
+    if (result?.type === "video" || result?.type === "generic") {
+      expect(result.link).toContain("start=90");
+    }
+  });
+
+  it("should validate the new YouTube hosts by default", () => {
+    for (const url of [
+      "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+      "https://www.youtube.com/live/dQw4w9WgXcQ",
+    ]) {
+      expect(embeddableURLValidator(url, undefined)).toBe(true);
+    }
+  });
+
+  it("should not mistake a section page for a video", () => {
+    expect(getEmbedLink("https://www.youtube.com/feed/trending")).toBeNull();
+  });
+});
+
+describe("Google Docs and Desmos embeds", () => {
+  // New integration hosts embed as-is via the generic path (no URL rewrite). // validator proves ALLOWED_DOMAINS, sandbox proves ALLOW_SAME_ORIGIN.
+  it.each([
+    // Slides publish embed URL (docs host, publish path). // canonical pubembed form from File > Share > Publish to web.
+    "https://docs.google.com/presentation/d/e/2PACX-1vT1234567890abcdef/pubembed",
+    // Google Forms response URL (same docs host, forms path). // standard viewform link pasted from the browser.
+    "https://docs.google.com/forms/d/e/1FAIpQLSf1234567890abcdef/viewform",
+    // Desmos calculator URL (www variant proves the bare-host match). // matchHostname strips www. so desmos.com covers this.
+    "https://www.desmos.com/calculator/abc123xyz",
+  ])("should validate by default: %s", (url) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true); // default allowlist accepts the host.
+  });
+
+  it.each([
+    // Same three URLs, now checking the generic passthrough shape. // link unchanged, type generic, same-origin kept.
+    "https://docs.google.com/presentation/d/e/2PACX-1vT1234567890abcdef/pubembed",
+    "https://docs.google.com/forms/d/e/1FAIpQLSf1234567890abcdef/viewform",
+    "https://www.desmos.com/calculator/abc123xyz",
+  ])("should embed as-is via the generic path: %s", (url) => {
+    const result = getEmbedLink(url); // generic path returns the link untouched.
+    expect(result).toBeTruthy(); // a result object exists for the URL.
+    if (result?.type === "video" || result?.type === "generic") {
+      // narrow the union so .link/.sandbox read below.
+      expect(result.link).toBe(url); // no rewrite branch touches these hosts.
+      expect(result.type).toBe("generic"); // non-video hosts fall to the generic kind.
+      expect(result.sandbox?.allowSameOrigin).toBe(true); // both hosts sit in ALLOW_SAME_ORIGIN.
+    } else {
+      throw new Error(`expected generic embed for ${url}`); // fail loudly if a document/srcdoc branch ever claims these URLs.
+    }
   });
 });
