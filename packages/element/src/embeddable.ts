@@ -12,6 +12,7 @@ import { newTextElement } from "./newElement";
 import { wrapText } from "./textWrapping";
 import { isIframeElement } from "./typeChecks";
 
+import type { RenderEnvironment } from "./renderEnvironment";
 import type {
   ExcalidrawIframeLikeElement,
   IframeData,
@@ -84,6 +85,11 @@ const RE_REDDIT =
 
 const RE_REDDIT_EMBED =
   /^<blockquote[\s\S]*?\shref=["'](https?:\/\/(?:www\.)?reddit\.com\/[^"']*)/i;
+
+// share links can be prefixed with the author's username
+// (instagram.com/<username>/p/<shortcode>)
+const RE_INSTAGRAM =
+  /^(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:[\w.]+\/)?(p|reels?|tv)\/([\w-]+)/;
 
 const parseYouTubeLikeTimestamp = (url: string): number => {
   let timeParam: string | null | undefined;
@@ -220,6 +226,7 @@ const ALLOWED_DOMAINS = new Set([
   "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
   // Desmos calculator embeds iframe as-is via the generic path.
   "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
+  "instagram.com",
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
@@ -246,6 +253,7 @@ const ALLOW_SAME_ORIGIN = new Set([
   "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
   // Desmos calculators keep state in storage, so they keep same-origin.
   "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
+  "instagram.com",
 ]);
 
 export const createSrcDoc = (body: string) => {
@@ -394,6 +402,30 @@ export const getEmbedLink = (
     };
   }
 
+  const instagramLink = link.match(RE_INSTAGRAM);
+  if (instagramLink) {
+    const [, postType, shortcode] = instagramLink;
+    // uncaptioned so the height is predictable (only depends on the media)
+    // — we can't auto-resize to fit a long caption
+    link = `https://www.instagram.com/${
+      postType === "reels" ? "reel" : postType
+    }/${shortcode}/embed/`;
+    // fits portrait (4:5) posts and reels
+    aspectRatio = { w: 400, h: 720 };
+    embeddedLinkCache.set(originalLink, {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    });
+    return {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    };
+  }
+
   const valLink = link.match(RE_VALTOWN);
   if (valLink) {
     link =
@@ -521,6 +553,7 @@ export const getEmbedLink = (
 
 export const createPlaceholderEmbeddableLabel = (
   element: ExcalidrawIframeLikeElement,
+  renderEnvironment?: RenderEnvironment,
 ): NonDeletedExcalidrawElement => {
   let text: string;
   if (isIframeElement(element)) {
@@ -549,10 +582,11 @@ export const createPlaceholderEmbeddableLabel = (
     backgroundColor: "transparent",
     fontFamily,
     fontSize,
-    text: wrapText(text, fontString, element.width - 20),
+    text: wrapText(text, fontString, element.width - 20, renderEnvironment),
     textAlign: "center",
     verticalAlign: VERTICAL_ALIGN.MIDDLE,
     angle: element.angle ?? 0,
+    renderEnvironment,
   });
 };
 

@@ -314,7 +314,12 @@ const changeFontSize = (
           oldElement,
           getBaseFontSizeUpdate(oldElement, newFontSize, elementsMap),
         );
-        redrawTextBoundingBox(newElement, container, app.scene);
+        redrawTextBoundingBox(
+          newElement,
+          container,
+          app.scene,
+          app.renderEnvironment,
+        );
 
         newElement = offsetElementAfterFontResize(
           oldElement,
@@ -1341,7 +1346,12 @@ export const actionChangeFontFamily = register<{
         // we either skip the check (have at least one font face loaded) or do the check and find out all the font faces have loaded
         for (const [element, container] of elementContainerMapping) {
           // trigger synchronous redraw
-          redrawTextBoundingBox(element, container, app.scene);
+          redrawTextBoundingBox(
+            element,
+            container,
+            app.scene,
+            app.renderEnvironment,
+          );
         }
       } else {
         // otherwise try to load all font faces for the given chars and redraw elements once our font faces loaded
@@ -1359,6 +1369,7 @@ export const actionChangeFontFamily = register<{
                 latestElement as ExcalidrawTextElement,
                 latestContainer,
                 app.scene,
+                app.renderEnvironment,
               );
             }
           }
@@ -1576,6 +1587,7 @@ export const actionChangeTextAlign = register<TextAlign>({
               newElement,
               app.scene.getContainerElement(oldElement),
               app.scene,
+              app.renderEnvironment,
             );
             return newElement;
           }
@@ -1678,6 +1690,7 @@ export const actionChangeVerticalAlign = register<VerticalAlign>({
               newElement,
               app.scene.getContainerElement(oldElement),
               app.scene,
+              app.renderEnvironment,
             );
             return newElement;
           }

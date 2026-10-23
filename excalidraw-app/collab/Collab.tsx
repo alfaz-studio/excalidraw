@@ -18,6 +18,7 @@ import {
   ACTIVE_THRESHOLD,
   UserIdleState,
   assertNever,
+  debounce,
   isDevEnv,
   isTestEnv,
   preventUnload,
@@ -112,7 +113,11 @@ import type {
 
 export const collabAPIAtom = atom<CollabAPI | null>(null);
 export const isCollaboratingAtom = atom(false);
-export const isOfflineAtom = atom(false);
+export const isOfflineAtom = atom(
+  typeof navigator !== "undefined" && !navigator.onLine,
+);
+
+const OFFLINE_STATUS_DEBOUNCE_TIMEOUT = 1000;
 
 interface CollabState {
   errorMessage: string | null;
@@ -258,8 +263,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   componentDidMount() {
     window.addEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
-    window.addEventListener("online", this.onOfflineStatusToggle);
-    window.addEventListener("offline", this.onOfflineStatusToggle);
+    window.addEventListener("online", this.onOfflineStatusChange);
+    window.addEventListener("offline", this.onOfflineStatusChange);
     window.addEventListener(EVENT.UNLOAD, this.onUnload);
 
     // Lets the host archive the board and WAIT for it before it navigates away
@@ -352,10 +357,16 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
   }
 
+  onOfflineStatusChange = debounce(
+    this.onOfflineStatusToggle,
+    OFFLINE_STATUS_DEBOUNCE_TIMEOUT,
+  );
+
   componentWillUnmount() {
     setSceneFlushHandler(null);
-    window.removeEventListener("online", this.onOfflineStatusToggle);
-    window.removeEventListener("offline", this.onOfflineStatusToggle);
+    window.removeEventListener("online", this.onOfflineStatusChange);
+    window.removeEventListener("offline", this.onOfflineStatusChange);
+    this.onOfflineStatusChange.cancel();
     window.removeEventListener(EVENT.BEFORE_UNLOAD, this.beforeUnload);
     window.removeEventListener(EVENT.UNLOAD, this.onUnload);
     window.removeEventListener(EVENT.POINTER_MOVE, this.onPointerMove);
