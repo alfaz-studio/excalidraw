@@ -23,7 +23,26 @@ type IframeDataWithSandbox = MarkRequired<IframeData, "sandbox">;
 const embeddedLinkCache = new Map<string, IframeDataWithSandbox>();
 
 const RE_YOUTUBE =
-  /^(?:http(?:s)?:\/\/)?(?:www\.)?youtu(?:be\.com|\.be)\/(embed\/|watch\?v=|shorts\/|live\/|playlist\?list=|embed\/videoseries\?list=)?([a-zA-Z0-9_-]+)/;
+  /^(?:http(?:s)?:\/\/)?(?:(?:www|m|music)\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\/(embed\/|watch\?v=|shorts\/|live\/|v\/|playlist\?list=|embed\/videoseries\?list=)?([a-zA-Z0-9_-]+)/;
+
+// Bare section paths must not read as video ids (e.g. /live alone is not a video).
+const RE_YOUTUBE_RESERVED = new Set([
+  "live",
+  "v",
+  "watch",
+  "embed",
+  "shorts",
+  "playlist",
+  "attribution_link",
+  "feed",
+  "channel",
+  "user",
+  "c",
+  "results",
+  "hashtag",
+  "gaming",
+  "music",
+]);
 
 const RE_VIMEO =
   /^(?:http(?:s)?:\/\/)?(?:(?:w){3}\.)?(?:player\.)?vimeo\.com\/(?:video\/)?([^?\s]+)(?:\?.*)?$/;
@@ -34,6 +53,16 @@ const RE_GH_GIST_EMBED =
   /^<script[\s\S]*?\ssrc=["'](https:\/\/gist\.github\.com\/.*?)\.js["']/i;
 
 const RE_MSFORMS = /^(?:https?:\/\/)?forms\.microsoft\.com\//;
+
+// Kahoot assignment links unwrap to the official player embed; the live-PIN
+// join page and the player host iframe as-is (three lists move together here:
+// this matcher, ALLOWED_DOMAINS and ALLOW_SAME_ORIGIN — see below).
+const RE_KAHOOT_CHALLENGE =
+  /^(?:https?:\/\/)?(?:www\.)?kahoot\.it\/challenge\/([^/?#\s]+)/i;
+const RE_KAHOOT_EMBED =
+  /^(?:https?:\/\/)?(?:www\.)?embed\.kahoot\.it\/([^/?#\s]+)/i;
+const RE_KAHOOT_LIVE =
+  /^(?:https?:\/\/)?(?:www\.)?(?:kahoot\.it\/(?:\?|v2\/)?|play\.kahoot\.it\/)/i;
 
 // not anchored to start to allow <blockquote> twitter embeds
 const RE_TWITTER =
@@ -85,6 +114,39 @@ const parseYouTubeLikeTimestamp = (url: string): number => {
   return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds);
 };
 
+// Share-sheet variants never match a path-prefix regex, so unwrap them first.
+const normalizeYouTubeLink = (link: string): string => {
+  let url: URL;
+  try {
+    url = new URL(link.startsWith("http") ? link : `https://${link}`);
+  } catch (error) {
+    return link;
+  }
+  if (
+    url.hostname.replace(/^(www|m|music)\./, "").toLowerCase() !== "youtube.com"
+  ) {
+    return link;
+  }
+  // Attribution links wrap the real watch URL in the `u` param.
+  if (url.pathname === "/attribution_link") {
+    const wrapped = url.searchParams.get("u");
+    if (wrapped) {
+      return wrapped.startsWith("/")
+        ? `https://www.youtube.com${wrapped}`
+        : wrapped;
+    }
+    return link;
+  }
+  // `watch` with params before `v` never matches `watch?v=` positionally.
+  if (url.pathname === "/watch") {
+    const id = url.searchParams.get("v");
+    if (id && !url.search.startsWith("?v=")) {
+      return `https://www.youtube.com/watch?v=${id}`;
+    }
+  }
+  return link;
+};
+
 const parseGoogleDriveVideoLink = (
   url: string,
 ): { fileId: string; resourceKey?: string; timestamp?: number } | null => {
@@ -133,6 +195,9 @@ const parseGoogleDriveVideoLink = (
 const ALLOWED_DOMAINS = new Set([
   "youtube.com",
   "youtu.be",
+  "youtube-nocookie.com",
+  "m.youtube.com",
+  "music.youtube.com",
   "vimeo.com",
   "player.vimeo.com",
   "drive.google.com",
@@ -147,11 +212,22 @@ const ALLOWED_DOMAINS = new Set([
   "giphy.com",
   "reddit.com",
   "forms.microsoft.com",
+  // Kahoot classroom embeds (challenge player, live-PIN join page, player host).
+  "kahoot.it", // bare host covers www.kahoot.it (matchHostname strips www.).
+  "play.kahoot.it", // live-PIN join page host.
+  "embed.kahoot.it", // official player iframe host.
+  // Google Docs embeds (Slides publish, Forms) ship as-is via the generic path.
+  "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
+  // Desmos calculator embeds iframe as-is via the generic path.
+  "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
 ]);
 
 const ALLOW_SAME_ORIGIN = new Set([
   "youtube.com",
   "youtu.be",
+  "youtube-nocookie.com",
+  "m.youtube.com",
+  "music.youtube.com",
   "vimeo.com",
   "player.vimeo.com",
   "drive.google.com",
@@ -162,6 +238,14 @@ const ALLOW_SAME_ORIGIN = new Set([
   "stackblitz.com",
   "reddit.com",
   "forms.microsoft.com",
+  // Interactive quiz/player frames rely on storage and cookies to join.
+  "kahoot.it", // bare host covers www.kahoot.it (matchHostname strips www.).
+  "play.kahoot.it", // live-PIN join page host.
+  "embed.kahoot.it", // official player iframe host.
+  // Slides/Forms need storage for auth + form state, so they keep same-origin.
+  "docs.google.com", // bare host covers www.docs.google.com (matchHostname strips www.).
+  // Desmos calculators keep state in storage, so they keep same-origin.
+  "desmos.com", // bare host covers www.desmos.com (matchHostname strips www.).
 ]);
 
 export const createSrcDoc = (body: string) => {
@@ -185,18 +269,28 @@ export const getEmbedLink = (
     matchHostname(link, ALLOW_SAME_ORIGIN) || "",
   );
 
-  let type: "video" | "generic" = "generic";
-  let aspectRatio = { w: 560, h: 840 };
-  const ytLink = link.match(RE_YOUTUBE);
+  // Default intrinsic size for generic (non-video) embeds. // landscape 4:3 so pasted links read well without resizing.
+  let type: "video" | "generic" = "generic"; // embed kind, refined per matcher below.
+  let aspectRatio = { w: 800, h: 600 }; // fallback size; each video branch overrides with 16:9.
+  const normalizedYtLink = normalizeYouTubeLink(link);
+  const ytLink = normalizedYtLink.match(RE_YOUTUBE);
   if (ytLink?.[2]) {
-    const startTime = parseYouTubeLikeTimestamp(originalLink);
+    if (!ytLink[1] && RE_YOUTUBE_RESERVED.has(ytLink[2])) {
+      return null;
+    }
+    // Unwrapped links carry time inside `u`; reordered watch URLs keep it outside.
+    const startTime =
+      parseYouTubeLikeTimestamp(normalizedYtLink) ||
+      parseYouTubeLikeTimestamp(link);
     const time = startTime > 0 ? `&start=${startTime}` : ``;
-    const isPortrait = link.includes("shorts");
+    const isPortrait = ytLink[0].includes("shorts");
     type = "video";
     switch (ytLink[1]) {
       case "embed/":
       case "watch?v=":
       case "shorts/":
+      case "live/":
+      case "v/":
         link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
       case "playlist?list=":
@@ -207,7 +301,8 @@ export const getEmbedLink = (
         link = `https://www.youtube.com/embed/${ytLink[2]}?enablejsapi=1${time}`;
         break;
     }
-    aspectRatio = isPortrait ? { w: 315, h: 560 } : { w: 560, h: 315 };
+    // Portrait only for /shorts; everything else is landscape 16:9. // bigger defaults so fresh embeds are usable without an immediate resize.
+    aspectRatio = isPortrait ? { w: 540, h: 960 } : { w: 960, h: 540 }; // 9:16 shorts vs 16:9 video.
     embeddedLinkCache.set(originalLink, {
       link,
       intrinsicSize: aspectRatio,
@@ -228,9 +323,9 @@ export const getEmbedLink = (
     const error = !/^\d+$/.test(target)
       ? new URIError("Invalid embed link format")
       : undefined;
-    type = "video";
-    link = `https://player.vimeo.com/video/${target}?api=1`;
-    aspectRatio = { w: 560, h: 315 };
+    type = "video"; // vimeo serves a 16:9 player.
+    link = `https://player.vimeo.com/video/${target}?api=1`; // normalize to the player embed URL.
+    aspectRatio = { w: 960, h: 540 }; // 16:9, matches YouTube landscape default.
     //warning deliberately ommited so it is displayed only once per link
     //same link next time will be served from cache
     embeddedLinkCache.set(originalLink, {
@@ -250,8 +345,8 @@ export const getEmbedLink = (
 
   const googleDriveVideo = parseGoogleDriveVideoLink(link);
   if (googleDriveVideo) {
-    type = "video";
-    const searchParams = new URLSearchParams();
+    type = "video"; // drive preview is a 16:9 video player.
+    const searchParams = new URLSearchParams(); // carry resourcekey/timestamp into the preview URL.
     if (googleDriveVideo.resourceKey) {
       searchParams.set("resourcekey", googleDriveVideo.resourceKey);
     }
@@ -262,8 +357,8 @@ export const getEmbedLink = (
     const search = searchParams.toString();
     link = `https://drive.google.com/file/d/${googleDriveVideo.fileId}/preview${
       search ? `?${search}` : ""
-    }`;
-    aspectRatio = { w: 560, h: 315 };
+    }`; // normalized preview URL keeps file id + params.
+    aspectRatio = { w: 960, h: 540 }; // 16:9, matches other video defaults.
     embeddedLinkCache.set(originalLink, {
       link,
       intrinsicSize: aspectRatio,
@@ -319,6 +414,31 @@ export const getEmbedLink = (
 
   if (RE_MSFORMS.test(link) && !link.includes("embed=true")) {
     link += link.includes("?") ? "&embed=true" : "?embed=true";
+  }
+
+  const kahootChallenge = link.match(RE_KAHOOT_CHALLENGE);
+  const kahootEmbed = link.match(RE_KAHOOT_EMBED);
+  if (kahootChallenge?.[1] || kahootEmbed?.[1] || RE_KAHOOT_LIVE.test(link)) {
+    type = "generic";
+    if (kahootChallenge?.[1]) {
+      link = `https://embed.kahoot.it/${kahootChallenge[1]}`;
+    } else if (kahootEmbed?.[1]) {
+      // official player host passes through untouched.
+      link = `https://embed.kahoot.it/${kahootEmbed[1]}`; // canonical player URL for the slug.
+    } // live-PIN join page keeps its URL as-is (matched, not rewritten).
+    aspectRatio = { w: 960, h: 540 }; // 16:9 player; enlarged like other video sizes.
+    embeddedLinkCache.set(originalLink, {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    });
+    return {
+      link,
+      intrinsicSize: aspectRatio,
+      type,
+      sandbox: { allowSameOrigin },
+    };
   }
 
   if (RE_TWITTER.test(link)) {

@@ -27,6 +27,11 @@ import { isImageElement, isInitializedImageElement } from "@excalidraw/element";
 import { AbortError } from "@excalidraw/excalidraw/errors";
 import { t } from "@excalidraw/excalidraw/i18n";
 import { withBatchedUpdates } from "@excalidraw/excalidraw/reactUtils";
+import {
+  applyInkFrameToStrokes,
+  buildInkFrame,
+  isInkFrame,
+} from "@excalidraw/excalidraw/remoteInk";
 
 import throttle from "lodash.throttle";
 import { PureComponent } from "react";
@@ -58,6 +63,8 @@ import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 import { appJotaiStore, atom } from "../../../excalidraw-app/app-jotai";
 import {
   CURSOR_SYNC_TIMEOUT,
+  REMOTE_INK_STALL_MS,
+  REMOTE_INK_TTL_MS,
   STALE_COLLABORATOR_TIMEOUT_MS,
   STALE_CHECK_INTERVAL_MS,
   FILE_UPLOAD_MAX_BYTES,
@@ -72,6 +79,7 @@ import {
   generateCollaborationLinkData,
   getCollaborationLink,
   getSyncableElements,
+  isSyncableElement,
 } from "../../../excalidraw-app/data";
 import {
   encodeFilesForUpload,
@@ -159,6 +167,26 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private socketInitializationTimer?: number;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
 
+  /**
+   * SONACOVE: the local freehand stroke being drawn, held back from scene sync until the pen
+   * lifts, and how many of its points live-ink frames have carried. See remoteInk.ts.
+   */
+  private heldInk: { id: string; points: number; sent: number } | null = null;
+
+  /**
+   * SONACOVE: strokes released while the pen was still down because they stopped growing — a
+   * pointercancel or lost focus leaves no pen-up to release them. They sync version by version,
+   * as before live ink, for the rest of their drawing.
+   */
+  private stalledInkIds = new Set<string>();
+  private inkStallTimer: number | null = null;
+
+  /**
+   * SONACOVE: strokes whose finished element has arrived. A late lossy frame for one of them must
+   * not bring its preview back on top of the real thing.
+   */
+  private landedInkIds = new Set<string>();
+
   /** A stored scene whose reconcile is waiting for the current stroke to finish. */
   private pendingStoredScene: readonly ExcalidrawElement[] | null = null;
 
@@ -218,22 +246,23 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
         const { roomId, roomKey } = this.portal;
 
         // Not an abort: callers of `fetchImageFilesFromFirebase` don't catch,
-        // so a surface with file storage off must resolve empty rather than
-        // reject.
-        if (!this.filesEnabled) {
+        // so a surface with file storage off, or between rooms, must resolve
+        // empty rather than reject.
+        if (!this.filesEnabled || !roomId || !roomKey) {
           return { loadedFiles: [], erroredFiles: new Map() };
         }
 
-        if (!roomId || !roomKey) {
-          throw new AbortError();
-        }
-
-        return loadFilesFromStorage(
+        const result = await loadFilesFromStorage(
           `files/rooms/${roomId}`,
           roomKey,
           fileIds,
           roomId,
         );
+
+        // Another room's files must not land on this room's board.
+        return this.portal.roomId === roomId
+          ? result
+          : { loadedFiles: [], erroredFiles: new Map() };
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -250,6 +279,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           }),
           roomId,
         });
+
+        // Uploaded under the room just left: not saved for the room now open.
+        if (this.portal.roomId !== roomId) {
+          return { savedFiles: new Map(), erroredFiles: new Map() };
+        }
 
         return {
           savedFiles: savedFiles.reduce(
@@ -374,12 +408,27 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
 
     this.pendingBackendConfig = null;
-    initializeBackend(
+    const missed = initializeBackend(
       this.portal.roomId,
       storageBackendUrl,
       meetingDetails,
       this.onFileError,
     );
+
+    // Loads that gave up before the token arrived: nothing else re-runs them.
+    if (missed?.scene && this.sceneEnabled && this.portal.roomKey) {
+      void this.mergePersistedScene({
+        roomId: this.portal.roomId,
+        roomKey: this.portal.roomKey,
+      });
+    }
+    if (missed?.files.size) {
+      this.fileManager.clearFetchErrors(missed.files);
+      void this.applyImageFiles(true);
+    }
+    if (missed?.upload) {
+      void this.portal.queueFileUpload();
+    }
   };
 
   private flushPendingBackendConfig = () => {
@@ -413,6 +462,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       window.clearTimeout(this.idleTimeoutId);
       this.idleTimeoutId = null;
     }
+    this.clearInkStallTimer();
     if (this.staleCollaboratorTimerId) {
       window.clearInterval(this.staleCollaboratorTimerId);
       this.staleCollaboratorTimerId = null;
@@ -627,6 +677,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Belongs to the room being torn down — if carried into the next one, it would merge a
     // stale board into it.
     this.pendingStoredScene = null;
+    this.heldInk = null;
+    this.landedInkIds.clear();
+    this.stalledInkIds.clear();
+    this.clearInkStallTimer();
+    this.queueInkBroadcast.cancel();
     this.sessionGeneration++;
     this.portal.close();
     this.fileManager.reset();
@@ -742,7 +797,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // Marks the room as one that is *meant* to have storage, so a later file op
     // that finds no config can tell "never armed on purpose" from a real gap.
     if (storageBackendUrl) {
-      expectBackend(roomId, this.onFileError);
+      expectBackend(roomId, this.onFileError, meetingDetails?.sceneFileId);
     }
 
     if (
@@ -911,17 +966,25 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
           return;
         }
 
+        const generation = this.sessionGeneration;
         const decryptedData = await this.decryptPayload(
           iv,
           encryptedData,
           this.portal.roomKey,
         );
 
+        // Decrypted after a leave: the room it belongs to is gone.
+        if (generation !== this.sessionGeneration) {
+          return;
+        }
+
         switch (decryptedData.type) {
           case WS_SUBTYPES.INVALID_RESPONSE:
             return;
           case WS_SUBTYPES.INIT: {
             const remoteElements = decryptedData.payload.elements;
+
+            this.clearLandedInk(remoteElements);
             if (!this.portal.socketInitialized) {
               this.initializeRoom({ fetchScene: false });
               const reconciledElements =
@@ -967,7 +1030,14 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
             this.handleRemoteSceneUpdate(
               this._reconcileElements(decryptedData.payload.elements),
             );
+            this.clearLandedInk(decryptedData.payload.elements);
             break;
+          case WS_SUBTYPES.INK: {
+            const { socketId, ...frame } = decryptedData.payload;
+
+            this.handleInkFrame(socketId, frame);
+            break;
+          }
           case WS_SUBTYPES.MOUSE_LOCATION: {
             const { pointer, button, username, selectedElementIds } =
               decryptedData.payload;
@@ -1190,9 +1260,15 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     return reconciledElements;
   };
 
-  private loadImageFiles = throttle(async () => {
+  private loadImageFiles = throttle(
+    () => this.applyImageFiles(),
+    LOAD_IMAGES_TIMEOUT,
+  );
+
+  private applyImageFiles = async (forceFetchFiles?: boolean) => {
     const response = await this.fetchImageFilesFromFirebase({
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+      forceFetchFiles,
     });
     if (!response) {
       return;
@@ -1206,7 +1282,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       erroredFiles,
       elements: this.excalidrawAPI.getSceneElementsIncludingDeleted(),
     });
-  }, LOAD_IMAGES_TIMEOUT);
+  };
 
   /**
    * Whether the user is mid-interaction — drawing, resizing or dragging.
@@ -1374,6 +1450,17 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       if (collaborator.isCurrentUser) {
         continue;
       }
+
+      // SONACOVE: a preview whose finished element never came (lost, or its author left).
+      const liveInk = collaborator.inkStrokes?.filter(
+        (stroke) => now - stroke.updatedAt <= REMOTE_INK_TTL_MS,
+      );
+
+      if (liveInk && liveInk.length !== collaborator.inkStrokes!.length) {
+        collaborators.set(socketId, { ...collaborator, inkStrokes: liveInk });
+        pruned = true;
+      }
+
       const lastSeen = this.collaboratorLastSeen.get(socketId);
       if (
         lastSeen !== undefined &&
@@ -1432,14 +1519,242 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.portal.broadcastIdleChange(userState);
   };
 
+  /** SONACOVE: the id of the local freehand stroke being drawn, if any. See remoteInk.ts. */
+  getInkElementId = (): string | null => {
+    const element = this.excalidrawAPI.getAppState().newElement;
+
+    return element?.type === "freedraw" && !this.stalledInkIds.has(element.id)
+      ? element.id
+      : null;
+  };
+
   broadcastElements = (elements: readonly OrderedExcalidrawElement[]) => {
+    const inkId = this.getInkElementId();
+    const released =
+      this.heldInk && this.heldInk.id !== inkId ? this.heldInk : null;
+
+    // A released stroke goes out even when the scene version did not move, as nothing else
+    // would ever send it: Portal skipped it while it was held, and recorded no version for it.
     if (
+      released ||
       getSceneVersion(elements) >
-      this.getLastBroadcastedOrReceivedSceneVersion()
+        this.getLastBroadcastedOrReceivedSceneVersion()
     ) {
       this.portal.broadcastScene(WS_SUBTYPES.UPDATE, elements, false);
       this.lastBroadcastedOrReceivedSceneVersion = getSceneVersion(elements);
       this.queueBroadcastAllElements();
+    }
+
+    if (released) {
+      this.releaseInk(released, elements);
+    }
+
+    if (inkId && this.heldInk?.id !== inkId) {
+      this.heldInk = { id: inkId, points: -1, sent: 0 };
+    } else if (!inkId) {
+      this.heldInk = null;
+    }
+
+    if (this.heldInk) {
+      const points = this.inkPointCount();
+
+      // Armed on growth only: changes from peers also land here, and must not keep alive a
+      // stroke whose pen has gone.
+      if (points !== this.heldInk.points) {
+        this.heldInk.points = points;
+        this.armInkStallTimer();
+      }
+      this.queueInkBroadcast();
+    } else {
+      this.clearInkStallTimer();
+    }
+  };
+
+  private inkPointCount = () => {
+    const element = this.excalidrawAPI.getAppState().newElement;
+
+    return element?.type === "freedraw" ? element.points.length : 0;
+  };
+
+  private armInkStallTimer = () => {
+    this.clearInkStallTimer();
+    this.inkStallTimer = window.setTimeout(
+      this.releaseStalledInk,
+      REMOTE_INK_STALL_MS,
+    );
+  };
+
+  private clearInkStallTimer = () => {
+    if (this.inkStallTimer !== null) {
+      window.clearTimeout(this.inkStallTimer);
+      this.inkStallTimer = null;
+    }
+  };
+
+  /**
+   * SONACOVE: a held stroke that stopped growing goes out now rather than at a pen-up that may
+   * never come; peers would otherwise see only a preview, dropped after REMOTE_INK_TTL_MS.
+   */
+  private releaseStalledInk = () => {
+    this.inkStallTimer = null;
+
+    const held = this.heldInk;
+
+    if (!held || this.getInkElementId() !== held.id) {
+      return;
+    }
+
+    this.stalledInkIds.add(held.id);
+    // Bounded: only the stroke in progress is ever looked up.
+    if (this.stalledInkIds.size > 16) {
+      this.stalledInkIds.delete(this.stalledInkIds.values().next().value!);
+    }
+    this.broadcastElements(
+      this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+    );
+  };
+
+  /**
+   * SONACOVE: the last frame of a stroke whose pen lifted. A stray tap is thrown away rather
+   * than finalized, and peers drop its preview at once.
+   */
+  private releaseInk = (
+    released: { id: string; sent: number },
+    elements: readonly OrderedExcalidrawElement[],
+  ) => {
+    this.queueInkBroadcast.cancel();
+
+    const finished = elements.find((element) => element.id === released.id);
+
+    // Portal never sends an invisibly small element, so that one must be dropped like a tap.
+    if (
+      finished?.type === "freedraw" &&
+      !finished.isDeleted &&
+      isSyncableElement(finished)
+    ) {
+      this.portal.broadcastInk({
+        ...buildInkFrame(finished, released.sent).frame,
+        done: true,
+      });
+
+      return;
+    }
+
+    this.portal.broadcastInk({
+      id: released.id,
+      x: 0,
+      y: 0,
+      strokeColor: "",
+      strokeWidth: 0,
+      opacity: 0,
+      simulatePressure: true,
+      from: 0,
+      points: [],
+      pressures: [],
+      discarded: true,
+    });
+  };
+
+  /** SONACOVE: sends the points of the held stroke drawn since the last frame. */
+  private queueInkBroadcast = throttle(() => {
+    const element = this.excalidrawAPI.getAppState().newElement;
+
+    // Nothing new while the pen is still: peers' own changes also queue a frame.
+    if (
+      !this.heldInk ||
+      element?.type !== "freedraw" ||
+      element.id !== this.heldInk.id ||
+      element.points.length === this.heldInk.sent
+    ) {
+      return;
+    }
+
+    const { frame, sent } = buildInkFrame(element, this.heldInk.sent);
+
+    this.heldInk.sent = sent;
+    this.portal.broadcastInk(frame);
+  }, CURSOR_SYNC_TIMEOUT);
+
+  /**
+   * SONACOVE: drops the previews of strokes whose finished element just arrived.
+   *
+   * @param elements - The elements a peer sent.
+   */
+  private clearLandedInk = (elements: readonly { id: string }[]) => {
+    let collaborators: Map<SocketId, Collaborator> | null = null;
+
+    for (const [socketId, collaborator] of this.collaborators) {
+      const strokes = collaborator.inkStrokes;
+
+      if (!strokes?.length) {
+        continue;
+      }
+
+      const landed = elements.filter((element) =>
+        strokes.some((stroke) => stroke.id === element.id),
+      );
+
+      if (!landed.length) {
+        continue;
+      }
+
+      landed.forEach((element) => this.rememberLandedInk(element.id));
+      collaborators ??= new Map(this.collaborators);
+      collaborators.set(socketId, {
+        ...collaborator,
+        inkStrokes: strokes.filter(
+          (stroke) => !landed.some((element) => element.id === stroke.id),
+        ),
+      });
+    }
+
+    if (collaborators) {
+      this.collaborators = collaborators;
+      this.excalidrawAPI.updateScene({ collaborators });
+    }
+  };
+
+  /**
+   * SONACOVE: folds a peer's live-ink frame into their previews.
+   *
+   * @param socketId - The peer.
+   * @param frame - The untrusted frame.
+   */
+  handleInkFrame = (socketId: SocketId, frame: unknown) => {
+    if (!isInkFrame(frame) || this.landedInkIds.has(frame.id)) {
+      return;
+    }
+
+    const strokes = this.collaborators.get(socketId)?.inkStrokes;
+
+    // The finished element can overtake the stroke's frames — it goes reliably, they go lossy —
+    // so a frame for a stroke already on the board with no preview arrived late, and would put
+    // a stale partial preview over the real thing until the TTL.
+    if (
+      !strokes?.some((stroke) => stroke.id === frame.id) &&
+      this.excalidrawAPI.getSceneElementsMapIncludingDeleted().has(frame.id)
+    ) {
+      this.rememberLandedInk(frame.id);
+
+      return;
+    }
+
+    this.updateCollaborator(socketId, {
+      inkStrokes: applyInkFrameToStrokes(strokes, frame, Date.now()),
+    });
+
+    // No element follows a discarded stroke, so nothing else would stop a late frame reviving it.
+    if (frame.discarded) {
+      this.rememberLandedInk(frame.id);
+    }
+  };
+
+  private rememberLandedInk = (id: string) => {
+    this.landedInkIds.add(id);
+
+    // Bounded: only frames still in flight on the lossy channel can name a landed stroke.
+    if (this.landedInkIds.size > 256) {
+      this.landedInkIds.delete(this.landedInkIds.values().next().value!);
     }
   };
 

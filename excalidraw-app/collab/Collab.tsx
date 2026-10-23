@@ -847,6 +847,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             break;
           }
 
+          // SONACOVE: live ink is drawn by the meeting's Collab (packages/excalidraw/collab);
+          // this app shows a peer's stroke when it lands.
+          case WS_SUBTYPES.INK:
+            break;
+
           default: {
             assertNever(decryptedData, null);
           }
