@@ -101,8 +101,9 @@ describe("YouTube timestamp parsing", () => {
 
     expect(result?.type).toBe("video");
     if (result?.type === "video" || result?.type === "generic") {
+      // SONACOVE: classroom privacy, every frame serves from youtube-nocookie.com
       expect(result.link).toBe(
-        "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&start=30",
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1&start=30",
       );
     }
   });
