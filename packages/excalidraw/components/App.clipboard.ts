@@ -328,9 +328,11 @@ export class AppClipboard {
         return;
       }
 
+      // SONACOVE: viewportRotation — elementFromPoint needs the real client
+      // coords, not the warped ones in viewport.lastPosition
       const elementUnderCursor = this.app.ownerDocument.elementFromPoint(
-        this.app.viewport.lastPosition.x,
-        this.app.viewport.lastPosition.y,
+        this.app.lastRealViewportPosition.x,
+        this.app.lastRealViewportPosition.y,
       );
       if (
         event &&
