@@ -60,6 +60,14 @@ describe("embeddables", () => {
       });
     };
 
+    // SONACOVE: the fork activates a newly validated embed by itself, without
+    // the click path that autoplays, so start from a deactivated embed
+    await waitFor(() => {
+      expect(h.state.activeEmbeddable?.state).toBe("active");
+    });
+    mouse.clickAt(5, 5);
+    expect(h.state.activeEmbeddable).toBe(null);
+
     await activate();
     // replace (not `src`) so the reload doesn't add a history entry
     expect(replace).toHaveBeenCalledWith(

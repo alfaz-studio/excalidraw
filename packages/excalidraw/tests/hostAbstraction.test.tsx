@@ -91,6 +91,18 @@ const makeScene = () => {
  * process-global into a bug, so this exercises a pair of them.
  */
 describe("multi-window editors", () => {
+  // SONACOVE: the package entry pulls in the fork's ExcalidrawApp, which turns
+  // render throttling on for the whole page, so frames would go through
+  // requestAnimationFrame instead of the setTimeout spied on below
+  let throttleRender: boolean | undefined;
+  beforeEach(() => {
+    throttleRender = window.EXCALIDRAW_THROTTLE_RENDER;
+    window.EXCALIDRAW_THROTTLE_RENDER = false;
+  });
+  afterEach(() => {
+    window.EXCALIDRAW_THROTTLE_RENDER = throttleRender;
+  });
+
   /**
    * An iframe standing in for a second browser window. jsdom gives each frame
    * a real document but a mostly inert window, so the bits the editor reaches
