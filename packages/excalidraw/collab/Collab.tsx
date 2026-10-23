@@ -60,6 +60,7 @@ import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 import { appJotaiStore, atom } from "../../../excalidraw-app/app-jotai";
 import {
   CURSOR_SYNC_TIMEOUT,
+  REMOTE_INK_STALL_MS,
   REMOTE_INK_TTL_MS,
   STALE_COLLABORATOR_TIMEOUT_MS,
   STALE_CHECK_INTERVAL_MS,
@@ -75,6 +76,7 @@ import {
   generateCollaborationLinkData,
   getCollaborationLink,
   getSyncableElements,
+  isSyncableElement,
 } from "../../../excalidraw-app/data";
 import {
   encodeFilesForUpload,
@@ -155,7 +157,15 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
    * SONACOVE: the local freehand stroke being drawn, held back from scene sync until the pen
    * lifts, and how many of its points live-ink frames have carried. See remoteInk.ts.
    */
-  private heldInk: { id: string; sent: number } | null = null;
+  private heldInk: { id: string; points: number; sent: number } | null = null;
+
+  /**
+   * SONACOVE: strokes released while the pen was still down because they stopped growing — a
+   * pointercancel or lost focus leaves no pen-up to release them. They sync version by version,
+   * as before live ink, for the rest of their drawing.
+   */
+  private stalledInkIds = new Set<string>();
+  private inkStallTimer: number | null = null;
 
   /**
    * SONACOVE: strokes whose finished element has arrived. A late lossy frame for one of them must
@@ -437,6 +447,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       window.clearTimeout(this.idleTimeoutId);
       this.idleTimeoutId = null;
     }
+    this.clearInkStallTimer();
     if (this.staleCollaboratorTimerId) {
       window.clearInterval(this.staleCollaboratorTimerId);
       this.staleCollaboratorTimerId = null;
@@ -653,6 +664,8 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.pendingStoredScene = null;
     this.heldInk = null;
     this.landedInkIds.clear();
+    this.stalledInkIds.clear();
+    this.clearInkStallTimer();
     this.queueInkBroadcast.cancel();
     this.sessionGeneration++;
     this.portal.close();
@@ -1498,7 +1511,9 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   getInkElementId = (): string | null => {
     const element = this.excalidrawAPI.getAppState().newElement;
 
-    return element?.type === "freedraw" ? element.id : null;
+    return element?.type === "freedraw" && !this.stalledInkIds.has(element.id)
+      ? element.id
+      : null;
   };
 
   broadcastElements = (elements: readonly OrderedExcalidrawElement[]) => {
@@ -1523,14 +1538,68 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     }
 
     if (inkId && this.heldInk?.id !== inkId) {
-      this.heldInk = { id: inkId, sent: 0 };
+      this.heldInk = { id: inkId, points: -1, sent: 0 };
     } else if (!inkId) {
       this.heldInk = null;
     }
 
     if (this.heldInk) {
+      const points = this.inkPointCount();
+
+      // Armed on growth only: changes from peers also land here, and must not keep alive a
+      // stroke whose pen has gone.
+      if (points !== this.heldInk.points) {
+        this.heldInk.points = points;
+        this.armInkStallTimer();
+      }
       this.queueInkBroadcast();
+    } else {
+      this.clearInkStallTimer();
     }
+  };
+
+  private inkPointCount = () => {
+    const element = this.excalidrawAPI.getAppState().newElement;
+
+    return element?.type === "freedraw" ? element.points.length : 0;
+  };
+
+  private armInkStallTimer = () => {
+    this.clearInkStallTimer();
+    this.inkStallTimer = window.setTimeout(
+      this.releaseStalledInk,
+      REMOTE_INK_STALL_MS,
+    );
+  };
+
+  private clearInkStallTimer = () => {
+    if (this.inkStallTimer !== null) {
+      window.clearTimeout(this.inkStallTimer);
+      this.inkStallTimer = null;
+    }
+  };
+
+  /**
+   * SONACOVE: a held stroke that stopped growing goes out now rather than at a pen-up that may
+   * never come; peers would otherwise see only a preview, dropped after REMOTE_INK_TTL_MS.
+   */
+  private releaseStalledInk = () => {
+    this.inkStallTimer = null;
+
+    const held = this.heldInk;
+
+    if (!held || this.getInkElementId() !== held.id) {
+      return;
+    }
+
+    this.stalledInkIds.add(held.id);
+    // Bounded: only the stroke in progress is ever looked up.
+    if (this.stalledInkIds.size > 16) {
+      this.stalledInkIds.delete(this.stalledInkIds.values().next().value!);
+    }
+    this.broadcastElements(
+      this.excalidrawAPI.getSceneElementsIncludingDeleted(),
+    );
   };
 
   /**
@@ -1545,7 +1614,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
     const finished = elements.find((element) => element.id === released.id);
 
-    if (finished?.type === "freedraw" && !finished.isDeleted) {
+    // Portal never sends an invisibly small element, so that one must be dropped like a tap.
+    if (
+      finished?.type === "freedraw" &&
+      !finished.isDeleted &&
+      isSyncableElement(finished)
+    ) {
       this.portal.broadcastInk({
         ...buildInkFrame(finished, released.sent).frame,
         done: true,
@@ -1573,10 +1647,12 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private queueInkBroadcast = throttle(() => {
     const element = this.excalidrawAPI.getAppState().newElement;
 
+    // Nothing new while the pen is still: peers' own changes also queue a frame.
     if (
       !this.heldInk ||
       element?.type !== "freedraw" ||
-      element.id !== this.heldInk.id
+      element.id !== this.heldInk.id ||
+      element.points.length === this.heldInk.sent
     ) {
       return;
     }
@@ -1654,6 +1730,11 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     this.updateCollaborator(socketId, {
       inkStrokes: applyInkFrameToStrokes(strokes, frame, Date.now()),
     });
+
+    // No element follows a discarded stroke, so nothing else would stop a late frame reviving it.
+    if (frame.discarded) {
+      this.rememberLandedInk(frame.id);
+    }
   };
 
   private rememberLandedInk = (id: string) => {

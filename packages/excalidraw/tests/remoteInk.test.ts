@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 
+import { REMOTE_INK_STALL_MS } from "../../../excalidraw-app/app_constants";
 import Portal from "../../../excalidraw-app/collab/Portal";
 import Collab from "../collab/Collab";
 import {
@@ -223,13 +224,13 @@ describe("holding a stroke back while it is drawn", () => {
 });
 
 describe("Collab live ink", () => {
-  const setup = (scene: string[] = []) => {
+  const setup = (scene: string[] = [], live: any[] = []) => {
     const appState: { newElement: any } = { newElement: null };
     const updateScene = vi.fn();
     const collab = new Collab({
       excalidrawAPI: {
         getAppState: () => appState,
-        getSceneElementsIncludingDeleted: () => [],
+        getSceneElementsIncludingDeleted: () => live,
         getSceneElementsMapIncludingDeleted: () =>
           new Map(scene.map((id) => [id, element(id, 1)])),
         updateScene,
@@ -314,6 +315,62 @@ describe("Collab live ink", () => {
     expect(broadcastInk).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: "ink", discarded: true }),
     );
+  });
+
+  // pointercancel (palm rejection, a system gesture) and lost focus deliver no pen-up.
+  it("sends a stroke whose pen-up never comes once it stops growing", () => {
+    vi.useFakeTimers();
+    const ink = element("ink", 3);
+    const { appState, broadcastInk, broadcastScene, collab } = setup([], [ink]);
+
+    appState.newElement = ink;
+    collab.broadcastElements([ink]);
+    broadcastScene.mockClear();
+    vi.advanceTimersByTime(REMOTE_INK_STALL_MS);
+
+    expect(collab.getInkElementId()).toBeNull();
+    expect(broadcastScene).toHaveBeenCalledTimes(1);
+    expect(broadcastInk).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: "ink", done: true }),
+    );
+    vi.useRealTimers();
+  });
+
+  it("keeps holding a stroke that is still growing", () => {
+    vi.useFakeTimers();
+    const { appState, broadcastInk, collab } = setup();
+
+    for (let n = 2; n < 10; n++) {
+      appState.newElement = {
+        ...element("ink", n),
+        points: Array.from({ length: n }, (_, i) => [i, i]),
+      };
+      collab.broadcastElements([appState.newElement]);
+      vi.advanceTimersByTime(REMOTE_INK_STALL_MS - 100);
+    }
+
+    expect(collab.getInkElementId()).toBe("ink");
+    expect(broadcastInk).not.toHaveBeenCalledWith(
+      expect.objectContaining({ done: true }),
+    );
+    vi.useRealTimers();
+  });
+
+  it("does not revive a thrown-away stroke from a late frame", () => {
+    const { collab, updateScene } = setup();
+    const [first] = frames(3, 3);
+
+    collab.handleInkFrame("peer" as any, first);
+    collab.handleInkFrame("peer" as any, {
+      ...first,
+      points: [],
+      pressures: [],
+      discarded: true,
+    });
+    updateScene.mockClear();
+    collab.handleInkFrame("peer" as any, frames(6, 3)[1]);
+
+    expect(previews(updateScene)).toEqual([]);
   });
 
   it("streams frames while the pen is down", () => {

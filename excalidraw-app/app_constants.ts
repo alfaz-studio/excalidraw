@@ -16,6 +16,9 @@ export const STALE_CHECK_INTERVAL_MS = 15_000;
 // SONACOVE: a stroke preview whose finished element never arrived (lost, or its author left) is
 // dropped after this long without a frame.
 export const REMOTE_INK_TTL_MS = 60_000;
+// SONACOVE: a stroke in progress that has not grown for this long is sent finished without
+// waiting for a pen-up, which a pointercancel or lost focus never delivers.
+export const REMOTE_INK_STALL_MS = 2_000;
 export const DELETED_ELEMENT_TIMEOUT = 24 * 60 * 60 * 1000; // 1 day
 
 export const FILE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // Limit 10 MiB
