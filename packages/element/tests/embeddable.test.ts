@@ -408,23 +408,34 @@ describe("Third-wave classroom app embeds", () => {
   });
 
   it("should not double-wrap client-converted Figma embeds", () => {
+    // Only the iframe variant of the embed data carries a link.
+    const linkOf = (url: string) => {
+      const data = getEmbedLink(url);
+
+      return data && "link" in data ? data.link : undefined;
+    };
     // The meet normalizer converts public file links to the /embed form with
     // its own embed_host: those pass through untouched.
     const converted =
       "https://www.figma.com/embed?embed_host=sonacove&url=https%3A%2F%2Fwww.figma.com%2Fdesign%2Fabc%2FProject";
-    expect(getEmbedLink(converted)?.link).toBe(converted);
+    expect(linkOf(converted)).toBe(converted);
     // Raw file links still take the share-host rewrite.
     const raw = "https://www.figma.com/design/abc123/Project";
-    expect(getEmbedLink(raw)?.link).toBe(
-      `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(raw)}`,
+    expect(linkOf(raw)).toBe(
+      `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(
+        raw,
+      )}`,
     );
   });
 
   it("should still refuse the dead Trinket host", () => {
     // Trinket shut down 2026-08-31 (verified): unlisted, so pastes reject.
-    expect(embeddableURLValidator("https://trinket.io/embed/python/abc123", undefined)).toBe(
-      false,
-    );
+    expect(
+      embeddableURLValidator(
+        "https://trinket.io/embed/python/abc123",
+        undefined,
+      ),
+    ).toBe(false);
   });
 });
 
