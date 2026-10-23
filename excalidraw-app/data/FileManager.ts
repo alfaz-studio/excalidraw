@@ -190,6 +190,13 @@ export class FileManager {
     );
   };
 
+  /** Lets these failed downloads be retried, e.g. once the room's storage arms late. */
+  clearFetchErrors(ids: Iterable<FileId>) {
+    for (const id of ids) {
+      this.erroredFiles_fetch.delete(id);
+    }
+  }
+
   reset() {
     this.fetchingFiles.clear();
     this.savingFiles.clear();
