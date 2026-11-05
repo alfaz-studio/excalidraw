@@ -106,7 +106,6 @@ import {
   Provider,
   useAtom,
   useAtomValue,
-  useAtomWithInitialValue,
   appJotaiStore,
 } from "../../../excalidraw-app/app-jotai";
 
@@ -128,7 +127,7 @@ import DebugCanvas, {
 } from "../../../excalidraw-app/components/DebugCanvas";
 import { AIComponents } from "../../../excalidraw-app/components/AI";
 
-import Collab, { isCollaboratingAtom, isOfflineAtom } from "./Collab";
+import Collab, { isOfflineAtom } from "./Collab";
 
 import type { CollabAPI } from "./Collab";
 
@@ -402,9 +401,11 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
   // THIS board's Collab only. Null until `<Collab>` mounts a commit later, which the effect
   // below waits out — a shared fallback there would hand it another board's room.
   const [collabAPI, setCollabAPI] = useState<CollabAPI | null>(null);
-  const [isCollaborating] = useAtomWithInitialValue(isCollaboratingAtom, () => {
-    return isCollaborationLink(window.location.href);
-  });
+  // THIS board's session. Not the page-wide atom it replaces, which every mounted board both
+  // reset on mount and cleared on leave — so one board's lifecycle silenced another's broadcasts.
+  const [isCollaborating, setIsCollaborating] = useState(() =>
+    isCollaborationLink(window.location.href),
+  );
   const collabError = useAtomValue(collabErrorIndicatorAtom);
 
   useHandleLibrary({
@@ -953,6 +954,7 @@ const ExcalidrawWrapper = (props: ExcalidrawAppProps) => {
         {excalidrawAPI && !isCollabDisabled && (
           <Collab
             onCollabAPI={setCollabAPI}
+            onCollaboratingChange={setIsCollaborating}
             onRoomOpen={props.onRoomOpen}
             collabServerUrl={props.collabServerUrl}
             collabDetails={props.collabDetails}
