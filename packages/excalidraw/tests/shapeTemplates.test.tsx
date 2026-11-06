@@ -14,9 +14,7 @@ unmountComponent();
 const { h } = window;
 
 const pickFromShapesMenu = (tool: string) => {
-  fireEvent.pointerDown(
-    document.querySelector("[data-testid='toolbar-shapes']")!,
-  );
+  fireEvent.click(document.querySelector("[data-testid='toolbar-shapes']")!);
   UI.clickOnTestId(`toolbar-${tool}`);
 };
 
@@ -42,7 +40,9 @@ describe("shape template tools", () => {
   beforeEach(async () => {
     localStorage.clear();
     reseed(7);
-    await render(<Excalidraw />);
+    await render(
+      <Excalidraw UIOptions={{ canvasActions: { groupShapes: true } }} />,
+    );
   });
 
   it.each([
@@ -85,5 +85,18 @@ describe("shape template tools", () => {
     drag([30, 20], [30, 20]);
 
     expect(h.elements.filter((element) => !element.isDeleted)).toHaveLength(0);
+  });
+});
+
+describe("shapes menu opt-in", () => {
+  it("keeps the separate shape buttons when the host leaves groupShapes off", async () => {
+    localStorage.clear();
+    await render(<Excalidraw />);
+
+    expect(document.querySelector("[data-testid='toolbar-shapes']")).toBeNull();
+    expect(
+      document.querySelector("[data-testid='toolbar-rectangle']"),
+    ).not.toBeNull();
+    expect(document.querySelector("[data-testid='toolbar-star']")).toBeNull();
   });
 });

@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 
 import { KEYS, capitalizeString } from "@excalidraw/common";
 
+import { isShapeTemplateTool } from "@excalidraw/element";
+
+import type { ShapeTemplateTool } from "@excalidraw/element";
 import type { PointerType } from "@excalidraw/element/types";
 
 import { trackEvent } from "../analytics";
@@ -30,6 +33,11 @@ import {
   frameToolIcon,
   EmbedIcon,
   stickyNoteToolIcon,
+  ShapesIcon,
+  StarIcon,
+  HeartIcon,
+  TickIcon,
+  CrossIcon,
 } from "./icons";
 
 import type {
@@ -473,6 +481,102 @@ export const FreedrawToolPopover = ({
         }
       }}
       displayedOption={displayedOption}
+    />
+  );
+};
+
+type GroupedShapeTool = "rectangle" | "diamond" | "ellipse" | ShapeTemplateTool;
+
+const isGroupedShapeTool = (type: string): type is GroupedShapeTool =>
+  type === "rectangle" ||
+  type === "diamond" ||
+  type === "ellipse" ||
+  isShapeTemplateTool(type);
+
+/**
+ * Rectangle, diamond, ellipse and the shape templates (star, heart, tick,
+ * cross) behind one Shapes trigger. The desktop toolbar renders it in place of
+ * the three shape buttons when the host sets
+ * `UIOptions.canvasActions.groupShapes`; the templates have no other entry
+ * point, so a host without it never offers them.
+ */
+export const ShapesToolPopover = ({
+  app,
+  activeTool,
+}: {
+  app: AppClassProperties;
+  activeTool: UIAppState["activeTool"];
+}) => {
+  const SHAPE_TOOLS = [
+    {
+      type: "rectangle",
+      icon: TOOLS.rectangle.icon,
+      title: capitalizeString(t("toolBar.rectangle")),
+    },
+    {
+      type: "diamond",
+      icon: TOOLS.diamond.icon,
+      title: capitalizeString(t("toolBar.diamond")),
+    },
+    {
+      type: "ellipse",
+      icon: TOOLS.ellipse.icon,
+      title: capitalizeString(t("toolBar.ellipse")),
+    },
+    {
+      type: "star",
+      icon: StarIcon,
+      title: capitalizeString(t("toolBar.star")),
+    },
+    {
+      type: "heart",
+      icon: HeartIcon,
+      title: capitalizeString(t("toolBar.heart")),
+    },
+    {
+      type: "tick",
+      icon: TickIcon,
+      title: capitalizeString(t("toolBar.tick")),
+    },
+    {
+      type: "cross",
+      icon: CrossIcon,
+      title: capitalizeString(t("toolBar.cross")),
+    },
+  ] as const;
+
+  const [lastShape, setLastShape] = useState<GroupedShapeTool>(
+    isGroupedShapeTool(activeTool.type) ? activeTool.type : "rectangle",
+  );
+
+  useEffect(() => {
+    if (isGroupedShapeTool(activeTool.type)) {
+      setLastShape(activeTool.type);
+    }
+  }, [activeTool.type]);
+
+  return (
+    <ToolPopover
+      app={app}
+      options={SHAPE_TOOLS}
+      activeTool={activeTool}
+      defaultOption={lastShape}
+      wrapperClassName="tool-popover--shape"
+      namePrefix="shapeType"
+      title={t("headings.shapes")}
+      data-testid="toolbar-shapes"
+      onToolChange={(type: string) => {
+        if (isGroupedShapeTool(type)) {
+          setLastShape(type);
+          app.setActiveTool({ type });
+        }
+      }}
+      displayedOption={{
+        type: lastShape,
+        icon: ShapesIcon,
+        title: t("headings.shapes"),
+      }}
+      fillable={true}
     />
   );
 };
