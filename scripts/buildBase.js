@@ -2,9 +2,12 @@ const path = require("path");
 
 const { build } = require("esbuild");
 
+const { packageTsconfig } = require("./buildTargets");
+
 // contains all dependencies bundled inside
 const getConfig = (outdir) => ({
   outdir,
+  tsconfig: packageTsconfig(),
   bundle: true,
   format: "esm",
   entryPoints: ["src/index.ts"],

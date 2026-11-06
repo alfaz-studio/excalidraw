@@ -7,6 +7,8 @@ const { sassPlugin } = require("esbuild-sass-plugin");
 
 const { parseEnvVariables } = require("../packages/excalidraw/env.cjs");
 
+const { packageTsconfig } = require("./buildTargets");
+
 const ENV_VARS = {
   development: {
     ...parseEnvVariables(`${__dirname}/../.env.development`),
@@ -59,6 +61,7 @@ const precompile = (source, sourcePath) => {
 // excludes all external dependencies and bundles only the source code
 const getConfig = (outdir) => ({
   outdir,
+  tsconfig: packageTsconfig(),
   bundle: true,
   splitting: true,
   format: "esm",
