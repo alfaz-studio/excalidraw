@@ -296,6 +296,7 @@ import {
 // Side-effect import: installs the Object.fromEntries polyfill before the lazy
 // `import("@excalidraw/mermaid-to-excalidraw")` (paste-as-mermaid path) evaluates
 // on runtimes missing that ES2019 global (issue 019ecaf5).
+import "../polyfills/objectFromEntries";
 import { actionWrapTextInContainer } from "../actions/actionBoundText";
 import { actionPaste } from "../actions/actionClipboard";
 import { actionCopyElementLink } from "../actions/actionElementLink";
