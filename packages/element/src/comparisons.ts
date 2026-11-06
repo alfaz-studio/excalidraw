@@ -4,17 +4,25 @@ import { isShapeTemplateTool } from "./shapeTemplates";
 
 export const hasBackground = (type: ElementOrToolType) =>
   type === "rectangle" ||
+  type === "stickynote" ||
   type === "iframe" ||
   type === "embeddable" ||
   type === "ellipse" ||
   type === "diamond" ||
   type === "line" ||
   type === "freedraw" ||
+  type === "autoshape" ||
   type === "star" ||
-  type === "heart";
+  type === "heart" ||
+  // tool-only type; makes the `G` background shortcut work for bucket fill
+  type === "bucketfill";
+
+export const hasFillStyle = (type: ElementOrToolType) =>
+  hasBackground(type) && type !== "stickynote";
 
 export const hasStrokeColor = (type: ElementOrToolType) =>
   type === "rectangle" ||
+  type === "stickynote" ||
   type === "ellipse" ||
   type === "diamond" ||
   type === "freedraw" ||
@@ -22,6 +30,7 @@ export const hasStrokeColor = (type: ElementOrToolType) =>
   type === "line" ||
   type === "text" ||
   type === "embeddable" ||
+  type === "autoshape" ||
   isShapeTemplateTool(type);
 
 export const hasStrokeWidth = (type: ElementOrToolType) =>
@@ -33,6 +42,7 @@ export const hasStrokeWidth = (type: ElementOrToolType) =>
   type === "freedraw" ||
   type === "arrow" ||
   type === "line" ||
+  type === "autoshape" ||
   isShapeTemplateTool(type);
 
 export const hasStrokeStyle = (type: ElementOrToolType) =>
@@ -43,7 +53,13 @@ export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "diamond" ||
   type === "arrow" ||
   type === "line" ||
+  type === "autoshape" ||
   isShapeTemplateTool(type);
+
+export const hasRoughness = (type: ElementOrToolType) =>
+  hasStrokeStyle(type) || type === "stickynote";
+
+export const hasFreedrawMode = (type: ElementOrToolType) => type === "freedraw";
 
 export const canChangeRoundness = (type: ElementOrToolType) =>
   type === "rectangle" ||
@@ -51,6 +67,7 @@ export const canChangeRoundness = (type: ElementOrToolType) =>
   type === "embeddable" ||
   type === "line" ||
   type === "diamond" ||
+  type === "stickynote" ||
   type === "image";
 
 export const toolIsArrow = (type: ElementOrToolType) => type === "arrow";

@@ -1,16 +1,15 @@
 import { DEFAULT_EXPORT_PADDING, EDITOR_LS_KEYS } from "@excalidraw/common";
 
+import { convertToExcalidrawElements } from "@excalidraw/element";
+
+import { exportScene } from "@excalidraw/utils";
+
 import type {
   NonDeletedExcalidrawElement,
   Theme,
 } from "@excalidraw/element/types";
 
 import { EditorLocalStorage } from "../../data/EditorLocalStorage";
-import {
-  convertToExcalidrawElements,
-  exportToCanvas,
-  THEME,
-} from "../../index";
 
 import type { MermaidToExcalidrawLibProps } from "./types";
 
@@ -72,18 +71,26 @@ export const convertMermaidToExcalidraw = async ({
     const api = await mermaidToExcalidrawLib.api;
 
     try {
+      ret = await api.parseMermaidToExcalidraw(mermaidDefinition);
+    } catch (err: unknown) {
+      const originalParseError = err as Error;
+
+      if (!mermaidDefinition.includes('"')) {
+        return { success: false, error: originalParseError };
+      }
+
       try {
-        ret = await api.parseMermaidToExcalidraw(mermaidDefinition);
-      } catch (err: unknown) {
         ret = await api.parseMermaidToExcalidraw(
           mermaidDefinition.replace(/"/g, "'"),
         );
+      } catch {
+        // Keep the original error so line/column references stay aligned with
+        // the user's unmodified input.
+        return { success: false, error: originalParseError };
       }
-    } catch (err: unknown) {
-      return { success: false, error: err as Error };
     }
 
-    const { elements, files } = ret;
+    const { elements, files = {} } = ret;
     setError(null);
 
     data.current = {
@@ -93,15 +100,18 @@ export const convertMermaidToExcalidraw = async ({
       files,
     };
 
-    const canvas = await exportToCanvas({
-      elements: data.current.elements,
-      files: data.current.files,
-      exportPadding: DEFAULT_EXPORT_PADDING,
-      maxWidthOrHeight:
-        Math.max(parent.offsetWidth, parent.offsetHeight) *
-        window.devicePixelRatio,
-      appState: {
-        exportWithDarkMode: theme === THEME.DARK,
+    const canvas = await exportScene({
+      type: "canvas",
+      data: {
+        elements: data.current.elements,
+        files: data.current.files,
+      },
+      config: {
+        padding: DEFAULT_EXPORT_PADDING,
+        maxWidthOrHeight:
+          Math.max(parent.offsetWidth, parent.offsetHeight) *
+          (parent.ownerDocument.defaultView?.devicePixelRatio ?? 1),
+        theme,
       },
     });
 
@@ -149,7 +159,7 @@ export const insertToEditor = ({
     elements: newElements,
     files,
     position: "center",
-    fitToContent: true,
+    fit: "scale-down",
   });
   app.setOpenDialog(null);
 

@@ -5,12 +5,15 @@ import {
   getCommonBounds,
   getElementsInGroup,
   newElementWith,
+  isNonDeletedElement,
   selectGroupsFromGivenElements,
 } from "@excalidraw/element";
 import { sceneCoordsToViewportCoords } from "@excalidraw/common";
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+
+import type { NonDeletedExcalidrawElement } from "@excalidraw/element/types";
 
 import {
   actionBringToFront,
@@ -21,7 +24,7 @@ import {
 } from "../actions";
 import { t } from "../i18n";
 
-import { ToolButton } from "./ToolButton";
+import { IconButton } from "./IconButton";
 
 import "./UnlockPopup.scss";
 
@@ -79,15 +82,24 @@ const UnlockPopup = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const element = app.scene.getElement(activeLockedId);
+  const candidateElement = app.scene.getElement(activeLockedId);
+  // SAFETY: This should never happen, but log it just in case
+  if (candidateElement && !isNonDeletedElement(candidateElement)) {
+    console.error(
+      "[NONDELETED][INVARIANT] UnlockPopup: activeLockedId points to a deleted element",
+    );
+  }
+  const element: NonDeletedExcalidrawElement | null =
+    candidateElement && isNonDeletedElement(candidateElement)
+      ? candidateElement
+      : null;
 
-  const elements =
-    element && !element.isDeleted
-      ? [element]
-      : getElementsInGroup(
-          app.scene.getNonDeletedElementsMap(),
-          activeLockedId,
-        );
+  const elements = element
+    ? [element]
+    : getElementsInGroup<NonDeletedExcalidrawElement>(
+        app.scene.getNonDeletedElementsMap(),
+        activeLockedId,
+      );
 
   if (elements.length === 0) {
     return null;
@@ -263,7 +275,6 @@ const UnlockPopup = ({
           type: "element",
           top,
           left,
-          anchor: { top, bottom: top + barSize.height },
         });
       },
     },
@@ -291,13 +302,12 @@ const UnlockPopup = ({
           danger,
           disabled,
         }) => (
-          <ToolButton
+          <IconButton
             key={key}
             type="icon"
             icon={icon}
             title={label}
             aria-label={label}
-            selected={active}
             disabled={disabled}
             className={danger ? "UnlockPopup__danger" : undefined}
             onPointerDown={onPointerDown}

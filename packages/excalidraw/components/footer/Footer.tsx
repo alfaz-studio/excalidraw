@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { actionShortcuts } from "../../actions";
 import { useTunnels } from "../../context/tunnels";
 import { ExitZenModeButton, UndoRedoActions, ZoomActions } from "../Actions";
+import { useApp } from "../App";
 import { HelpButton } from "../HelpButton";
 import { Section } from "../Section";
 import Stack from "../Stack";
@@ -16,48 +17,53 @@ const Footer = ({
   showExitZenModeBtn,
   renderWelcomeScreen,
   UIOptions,
+  defaultUIEnabled,
+  zoomUIEnabled,
 }: {
   appState: UIAppState;
   actionManager: ActionManager;
   showExitZenModeBtn: boolean;
   renderWelcomeScreen: boolean;
   UIOptions: AppProps["UIOptions"];
+  defaultUIEnabled: boolean;
+  zoomUIEnabled: boolean;
 }) => {
   const { FooterCenterTunnel, WelcomeScreenHelpHintTunnel } = useTunnels();
+  const app = useApp();
 
   return (
     <footer
       role="contentinfo"
       className="layer-ui__wrapper__footer App-menu App-menu_bottom"
     >
-      <div
-        className={clsx("layer-ui__wrapper__footer-left zen-mode-transition", {
-          "layer-ui__wrapper__footer-left--transition-left":
-            appState.zenModeEnabled,
-        })}
-      >
-        <Stack.Col gap={2}>
-          <Section heading="canvasActions">
-            <ZoomActions
-              disableShortcuts={UIOptions.canvasActions.disableShortcuts}
-              renderAction={actionManager.renderAction}
-              zoom={appState.zoom}
-            />
+      {/* footer-left is not faded out in zen mode: it holds the zoom controls,
+          which stay visible (chrome-less). Its children opt in individually. */}
+      {(defaultUIEnabled || (zoomUIEnabled && app.isNavigationEnabled())) && (
+        <div className="layer-ui__wrapper__footer-left zen-mode-transition">
+          <Stack.Col gap={2}>
+            <Section heading="canvasActions">
+              {zoomUIEnabled && app.isNavigationEnabled() && (
+                <ZoomActions
+                  disableShortcuts={UIOptions.canvasActions.disableShortcuts}
+                  renderAction={actionManager.renderAction}
+                />
+              )}
 
-            {!appState.viewModeEnabled && (
-              <UndoRedoActions
-                renderAction={actionManager.renderAction}
-                className={clsx("zen-mode-transition", {
-                  "layer-ui__wrapper__footer-left--transition-bottom":
-                    appState.zenModeEnabled,
-                })}
-              />
-            )}
-          </Section>
-        </Stack.Col>
-      </div>
+              {defaultUIEnabled && !appState.viewModeEnabled && (
+                <UndoRedoActions
+                  renderAction={actionManager.renderAction}
+                  className={clsx("zen-mode-transition", {
+                    "layer-ui__wrapper__footer-left--transition-bottom":
+                      appState.zenModeEnabled,
+                  })}
+                />
+              )}
+            </Section>
+          </Stack.Col>
+        </div>
+      )}
       <FooterCenterTunnel.Out />
-      {!UIOptions.canvasActions.hideHelpDialog && (
+      {(defaultUIEnabled || renderWelcomeScreen) && (
         <div
           className={clsx(
             "layer-ui__wrapper__footer-right zen-mode-transition",
@@ -68,16 +74,20 @@ const Footer = ({
         >
           <div style={{ position: "relative" }}>
             {renderWelcomeScreen && <WelcomeScreenHelpHintTunnel.Out />}
-            <HelpButton
-              onClick={() => actionManager.executeAction(actionShortcuts)}
-            />
+            {defaultUIEnabled && !UIOptions.canvasActions.hideHelpDialog && (
+              <HelpButton
+                onClick={() => actionManager.executeAction(actionShortcuts)}
+              />
+            )}
           </div>
         </div>
       )}
-      <ExitZenModeButton
-        actionManager={actionManager}
-        showExitZenModeBtn={showExitZenModeBtn}
-      />
+      {defaultUIEnabled && (
+        <ExitZenModeButton
+          actionManager={actionManager}
+          showExitZenModeBtn={showExitZenModeBtn}
+        />
+      )}
     </footer>
   );
 };

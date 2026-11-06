@@ -95,6 +95,19 @@ describe("YouTube timestamp parsing", () => {
     expect(result?.intrinsicSize).toEqual({ w: 540, h: 960 });
   });
 
+  it("should handle YouTube live URLs", () => {
+    const url = "https://www.youtube.com/live/dQw4w9WgXcQ?si=abc&t=30";
+    const result = getEmbedLink(url);
+
+    expect(result?.type).toBe("video");
+    if (result?.type === "video" || result?.type === "generic") {
+      // SONACOVE: classroom privacy, every frame serves from youtube-nocookie.com
+      expect(result.link).toBe(
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1&start=30",
+      );
+    }
+  });
+
   it("should handle playlist URLs with timestamps", () => {
     const url =
       "https://www.youtube.com/playlist?list=PLrAXtmRdnEQy1KbG5lbfgQ0-PKQY6FKYZ&t=60";
@@ -246,8 +259,9 @@ describe("YouTube share-variant embeds", () => {
 
     expect(result?.type).toBe("video");
     if (result?.type === "video" || result?.type === "generic") {
+      // Classroom privacy: every frame serves from youtube-nocookie.com.
       expect(result.link).toBe(
-        "https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1",
+        "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1",
       );
     }
     expect(result?.intrinsicSize).toEqual({ w: 960, h: 540 });
@@ -280,6 +294,164 @@ describe("YouTube share-variant embeds", () => {
   });
 });
 
+describe("Second-wave classroom app embeds", () => {
+  // Pinterest shim, Wikipedia articles, Wayground join, Maps player and
+  // Nearpod student surfaces: all generic-path (no rewrite), validated by
+  // host. Validator proves ALLOWED_DOMAINS, sandbox proves ALLOW_SAME_ORIGIN.
+  it.each([
+    "https://assets.pinterest.com/ext/embed.html?id=1234567890123456",
+    "https://assets.pinterest.com/ext/embed.html?grid=teacher/class-ideas",
+    "https://en.wikipedia.org/wiki/Photosynthesis",
+    "https://de.wikipedia.org/wiki/Photosynthese",
+    "https://wayground.com/join?gc=257895",
+    "https://www.google.com/maps/embed?pb=!1m18!2m12",
+    "https://maps.google.com/maps?q=Ankara&output=embed",
+    "https://join.nearpod.com/ABCDE",
+    "https://nearpod.com/student/ABCDE",
+    "https://app.nearpod.com/presentation?pin=ABCDE",
+    "https://share.nearpod.com/xyz123",
+  ])("should validate by default: %s", (url) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true);
+  });
+
+  it("should keep interactive lesson frames same-origin but not static ones", () => {
+    // Wayground, Maps and Nearpod sessions rely on storage/cookies.
+    for (const url of [
+      "https://wayground.com/join?gc=257895",
+      "https://www.google.com/maps/embed?pb=!1m18!2m12",
+      "https://app.nearpod.com/presentation?pin=ABCDE",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(true);
+    }
+    // The Pinterest shim and Wikipedia articles carry no session.
+    for (const url of [
+      "https://assets.pinterest.com/ext/embed.html?id=1234567890123456",
+      "https://en.wikipedia.org/wiki/Photosynthesis",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(false);
+    }
+  });
+
+  it("should still refuse the unframable Pinterest host", () => {
+    // Direct Pinterest pages send SAMEORIGIN and only ever reach the board
+    // through the shim converter, so pinterest.com itself stays unlisted.
+    // (google.com validates by host like docs.google.com does — the meet
+    // normalizer is the gate that only ever stores /embed forms, and share
+    // pages X-Frame-Options-block in the browser regardless.)
+    expect(
+      embeddableURLValidator(
+        "https://www.pinterest.com/pin/1234567890123456/",
+        undefined,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("Third-wave classroom app embeds", () => {
+  // Every client-normalized shape from the meet normalizers: generic-path
+  // (no rewrite), validated by host. Validator proves ALLOWED_DOMAINS,
+  // sandbox proves ALLOW_SAME_ORIGIN.
+  it.each([
+    "https://scratch.mit.edu/projects/123456789/embed",
+    "https://codepen.io/teacher/embed/abcDEF",
+    "https://replit.com/@teacher/lesson-1?embed=true",
+    "https://www.canva.com/design/ABC123/view?embed",
+    "https://3dwarehouse.sketchup.com/embed.html?mid=abc123",
+    "https://embed.figma.com/design/abc123/Project?embed-host=share",
+    "https://view.genially.com/abc123",
+    "https://view.genial.ly/abc123",
+    "https://pitch.com/embed/abc123",
+    "https://gamma.app/embed/abc123",
+    "https://onedrive.live.com/embed?resid=ABC123&authkey=ABC",
+    "https://quizlet.com/123456789/flashcards/embed",
+    "https://embed.notion.co/abc123",
+    "https://www.mentimeter.com/embed/abc123",
+    "https://padlet.com/embed/abc123",
+    "https://learningapps.org/watch?id=abc123",
+    "https://thewessens.net/game",
+    "https://ascendmath.com/fcm/html5/fcm.html",
+    "https://activities.graspablemath.com/whiteboard/abc123",
+    "https://research.dwi.ufl.edu/op.n/file/bca9ju45kvvrvoan/embed",
+    "https://en.wiktionary.org/wiki/apple",
+    "https://quran.com/al-fatihah",
+    "https://tanzil.net/trans/en.transliteration",
+    "https://corpus.quran.com/wordbyword.jsp",
+    "https://altafsir.com/Tafasir.asp",
+    "https://quran.ksu.edu.sa/index.php",
+    "https://sunnah.com/bukhari:1",
+    "https://colonist.io/",
+    "https://drawbattle.io/ABCDEF",
+    "https://skribbl.io/?abc123",
+    "https://playscrabble.com/",
+    "https://embed.music.apple.com/us/album/abc123",
+    "https://embed.podcasts.apple.com/us/podcast/abc123",
+  ])("should validate by default: %s", (url) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true);
+  });
+
+  it("should keep interactive game/tool frames same-origin but not static readers", () => {
+    // Sessions, cloud state and study progress rely on storage/cookies.
+    for (const url of [
+      "https://scratch.mit.edu/projects/123456789/embed",
+      "https://codepen.io/teacher/embed/abcDEF",
+      "https://replit.com/@teacher/lesson-1?embed=true",
+      "https://view.genially.com/abc123",
+      "https://quizlet.com/123456789/flashcards/embed",
+      "https://padlet.com/embed/abc123",
+      "https://colonist.io/",
+      "https://drawbattle.io/ABCDEF",
+      "https://skribbl.io/?abc123",
+      "https://playscrabble.com/",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(true);
+    }
+    // Static readers and viewer decks carry no session.
+    for (const url of [
+      "https://www.canva.com/design/ABC123/view?embed",
+      "https://3dwarehouse.sketchup.com/embed.html?mid=abc123",
+      "https://gamma.app/embed/abc123",
+      "https://onedrive.live.com/embed?resid=ABC123&authkey=ABC",
+      "https://en.wiktionary.org/wiki/apple",
+      "https://quran.com/al-fatihah",
+      "https://sunnah.com/bukhari:1",
+      "https://embed.music.apple.com/us/album/abc123",
+    ]) {
+      expect(getEmbedLink(url)?.sandbox?.allowSameOrigin).toBe(false);
+    }
+  });
+
+  it("should not double-wrap client-converted Figma embeds", () => {
+    // Only the iframe variant of the embed data carries a link.
+    const linkOf = (url: string) => {
+      const data = getEmbedLink(url);
+
+      return data && "link" in data ? data.link : undefined;
+    };
+    // The meet normalizer converts public file links to the /embed form with
+    // its own embed_host: those pass through untouched.
+    const converted =
+      "https://www.figma.com/embed?embed_host=sonacove&url=https%3A%2F%2Fwww.figma.com%2Fdesign%2Fabc%2FProject";
+    expect(linkOf(converted)).toBe(converted);
+    // Raw file links still take the share-host rewrite.
+    const raw = "https://www.figma.com/design/abc123/Project";
+    expect(linkOf(raw)).toBe(
+      `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(
+        raw,
+      )}`,
+    );
+  });
+
+  it("should still refuse the dead Trinket host", () => {
+    // Trinket shut down 2026-08-31 (verified): unlisted, so pastes reject.
+    expect(
+      embeddableURLValidator(
+        "https://trinket.io/embed/python/abc123",
+        undefined,
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("Google Docs and Desmos embeds", () => {
   // New integration hosts embed as-is via the generic path (no URL rewrite). // validator proves ALLOWED_DOMAINS, sandbox proves ALLOW_SAME_ORIGIN.
   it.each([
@@ -308,6 +480,34 @@ describe("Google Docs and Desmos embeds", () => {
       expect(result.sandbox?.allowSameOrigin).toBe(true); // both hosts sit in ALLOW_SAME_ORIGIN.
     } else {
       throw new Error(`expected generic embed for ${url}`); // fail loudly if a document/srcdoc branch ever claims these URLs.
+    }
+  });
+});
+
+describe("Instagram embedding", () => {
+  it.each([
+    {
+      url: "https://www.instagram.com/p/BsOGulcndj-/",
+      expectedLink: "https://www.instagram.com/p/BsOGulcndj-/embed/",
+    },
+    {
+      url: "https://instagram.com/reel/DSu-vbYDDlf/?igsh=MWQ1ZGUxMzBkMA==",
+      expectedLink: "https://www.instagram.com/reel/DSu-vbYDDlf/embed/",
+    },
+    {
+      url: "https://www.instagram.com/reels/DSu-vbYDDlf/",
+      expectedLink: "https://www.instagram.com/reel/DSu-vbYDDlf/embed/",
+    },
+    {
+      url: "https://www.instagram.com/world_record_egg/p/BsOGulcndj-/",
+      expectedLink: "https://www.instagram.com/p/BsOGulcndj-/embed/",
+    },
+  ])("should normalize Instagram link: $url", ({ url, expectedLink }) => {
+    expect(embeddableURLValidator(url, undefined)).toBe(true);
+    const result = getEmbedLink(url);
+    expect(result?.type).toBe("generic");
+    if (result?.type === "generic") {
+      expect(result.link).toBe(expectedLink);
     }
   });
 });
