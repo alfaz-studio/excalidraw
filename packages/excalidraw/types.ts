@@ -1381,12 +1381,35 @@ export type SaveAsImageOptions = {
   hideTheme?: boolean;
 };
 
+/**
+ * SONACOVE: tools the host implements itself, offered together behind one
+ * toolbar popover. Picking one activates `{ type: "custom", customType }`;
+ * the editor does nothing on the canvas for it, and the host does the work
+ * through `onPointerDown` / `onPointerUp`. Compared by reference, so keep the
+ * object stable across renders.
+ */
+export type CustomToolGroup = {
+  /** the trigger's tooltip and accessible name */
+  title: string;
+  /**
+   * keep a picked tool active after each press, for back-to-back use, like
+   * bucket fill; otherwise it reverts to selection like any other tool
+   */
+  stayActive?: boolean;
+  tools: readonly {
+    customType: string;
+    title: string;
+    icon: React.ReactNode;
+  }[];
+};
+
 export type UIOptions = Partial<{
   dockedSidebarBreakpoint: number;
   canvasActions: CanvasActions;
   tools: {
     image: boolean;
   };
+  customToolGroup: CustomToolGroup;
   /**
    * Optionally control the editor form factor and desktop UI mode from the host app.
    * If not provided, we will take care of it internally.

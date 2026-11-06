@@ -27,6 +27,7 @@ import {
 } from "./icons";
 import {
   ArrowToolButton,
+  CustomToolPopover,
   DiamondToolButton,
   EllipseToolButton,
   EraserToolButton,
@@ -308,6 +309,9 @@ export const Toolbar = ({
         <TextToolButton {...toolProps} />
         <StickyNoteToolButton {...toolProps} />
         <EraserToolButton {...toolProps} />
+        {UIOptions.customToolGroup && (
+          <CustomToolPopover {...toolProps} group={UIOptions.customToolGroup} />
+        )}
 
         <div
           className="App-toolbar__divider"

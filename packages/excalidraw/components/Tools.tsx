@@ -35,6 +35,7 @@ import {
 import type {
   AppClassProperties,
   AppState,
+  CustomToolGroup,
   ToolType,
   UIAppState,
 } from "../types";
@@ -473,6 +474,68 @@ export const FreedrawToolPopover = ({
         }
       }}
       displayedOption={displayedOption}
+    />
+  );
+};
+
+/**
+ * The host's custom tools (`UIOptions.customToolGroup`) behind one trigger,
+ * which shows the most recently picked tool and activates it on press.
+ */
+export const CustomToolPopover = ({
+  app,
+  activeTool,
+  group,
+}: {
+  app: AppClassProperties;
+  activeTool: UIAppState["activeTool"];
+  group: CustomToolGroup;
+}) => {
+  const options = group.tools.map((tool) => ({
+    type: tool.customType,
+    icon: tool.icon,
+    title: tool.title,
+  }));
+  const activeCustomType =
+    activeTool.type === "custom" ? activeTool.customType : null;
+
+  const [lastCustomType, setLastCustomType] = useState(
+    activeCustomType ?? options[0]?.type,
+  );
+
+  useEffect(() => {
+    if (
+      activeCustomType &&
+      group.tools.some((tool) => tool.customType === activeCustomType)
+    ) {
+      setLastCustomType(activeCustomType);
+    }
+  }, [activeCustomType, group]);
+
+  const displayedOption =
+    options.find((option) => option.type === lastCustomType) ?? options[0];
+
+  if (!displayedOption) {
+    return null;
+  }
+
+  const activate = (customType: string) => {
+    setLastCustomType(customType);
+    app.setActiveTool({ type: "custom", customType });
+  };
+
+  return (
+    <ToolPopover
+      app={app}
+      options={options}
+      // option types are custom tool ids, so compare against the custom id
+      activeTool={{ type: activeCustomType ?? activeTool.type }}
+      defaultOption={displayedOption.type}
+      wrapperClassName="tool-popover--custom"
+      data-testid="toolbar-custom-tools"
+      onToolChange={activate}
+      onOptionSelect={activate}
+      displayedOption={{ ...displayedOption, title: group.title }}
     />
   );
 };
