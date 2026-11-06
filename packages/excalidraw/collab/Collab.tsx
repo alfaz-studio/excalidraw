@@ -896,18 +896,21 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     };
     this.fallbackInitializationHandler = fallbackInitializationHandler;
 
+    const generation = this.sessionGeneration;
+
     try {
       const { meetingDetails } = this.props;
-      const generation = this.sessionGeneration;
       const socket = await createSocket();
 
       // The room was left while its transport was still connecting. Nothing checked this
       // before, so the session opened anyway — on a surface that switches rooms, that meant a
       // live socket on the page you had already turned away from, and the marks you drew next
       // being broadcast and archived under it.
+      //
+      // The flag and the save lock are left alone: leaving already released them, or, with
+      // `keepCollaborating`, kept them for the session that follows, which holds them now.
       if (generation !== this.sessionGeneration) {
         socket.close();
-        LocalData.resumeSave(this.saveLock);
 
         return null;
       }
@@ -937,6 +940,14 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
     } catch (error) {
+      // A session already left: rolling back here would switch off the session that replaced
+      // it, which then stays connected but never broadcasts.
+      if (generation !== this.sessionGeneration) {
+        console.error(error);
+
+        return null;
+      }
+
       // Unlike socketIOClient (which never throws synchronously — it
       // reconnects), an injected collabSocketFactory can reject, so this
       // path is reachable: roll back the collaboration state entered above,
