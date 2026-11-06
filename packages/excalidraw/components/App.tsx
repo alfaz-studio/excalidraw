@@ -11204,27 +11204,6 @@ class App extends React.Component<AppProps, AppState> {
     const left = clientX - offsetLeft;
     const top = clientY - offsetTop;
 
-    this.showContextMenu({ element, type, top, left });
-  };
-
-  /**
-   * Opens the context menu for an element, or for the canvas.
-   *
-   * SONACOVE: extracted from `handleCanvasContextMenu` so the action bar's
-   * overflow button can open THIS menu rather than a copy that would drift.
-   * `top`/`left` are container-local.
-   */
-  public showContextMenu = ({
-    element,
-    type,
-    top,
-    left,
-  }: {
-    element: NonDeletedExcalidrawElement | null;
-    type: "element" | "canvas";
-    top: number;
-    left: number;
-  }) => {
     trackEvent("contextMenu", "openContextMenu", type);
 
     if (element && !this.state.selectedElementIds[element.id]) {
@@ -11237,11 +11216,7 @@ class App extends React.Component<AppProps, AppState> {
       },
       () => {
         this.setState({
-          contextMenu: {
-            top,
-            left,
-            items: this.getContextMenuItems(type),
-          },
+          contextMenu: { top, left, items: this.getContextMenuItems(type) },
         });
       },
     );

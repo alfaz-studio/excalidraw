@@ -31,9 +31,6 @@ type IconButtonBaseProps = {
   className?: string;
   style?: CSSProperties;
   isLoading?: boolean;
-  // SONACOVE: for a button that toggles a popover — the popover closes on a
-  // document pointerdown, so its trigger has to read that state before it does.
-  onPointerDown?(event: React.PointerEvent): void;
 };
 
 type IconButtonProps =
@@ -60,6 +57,8 @@ type IconButtonProps =
        * (unlike the click event's own pointerType on iOS).
        */
       onSelect?(data: { pointerType: PointerType | null }): void;
+      /** the press that may become a click — e.g. to arm a drag out of the toolbar */
+      onPointerDown?(event: React.PointerEvent<HTMLButtonElement>): void;
     });
 
 export const IconButton = React.forwardRef(
@@ -132,9 +131,6 @@ export const IconButton = React.forwardRef(
           aria-label={props["aria-label"]}
           type="button"
           onClick={onClick}
-          onPointerDown={
-            "onPointerDown" in props ? props.onPointerDown : undefined
-          }
           ref={innerRef}
           disabled={isLoading || props.isLoading || !!props.disabled}
         >

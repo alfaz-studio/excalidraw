@@ -25,15 +25,13 @@ type ContextMenuProps = {
   items: ContextMenuItems;
   top: number;
   left: number;
-  /** SONACOVE: the box this menu was opened from — see Popover's `anchor`. */
-  anchor?: { top: number; bottom: number };
   onClose: (callback?: () => void) => void;
 };
 
 export const CONTEXT_MENU_SEPARATOR = "separator";
 
 export const ContextMenu = React.memo(
-  ({ actionManager, items, top, left, anchor, onClose }: ContextMenuProps) => {
+  ({ actionManager, items, top, left, onClose }: ContextMenuProps) => {
     const appState = useExcalidrawAppState();
     const elements = useExcalidrawElements();
 
@@ -61,7 +59,6 @@ export const ContextMenu = React.memo(
         }}
         top={top}
         left={left}
-        anchor={anchor}
         fitInViewport={true}
         viewportWidth={appState.width}
         viewportHeight={appState.height}
