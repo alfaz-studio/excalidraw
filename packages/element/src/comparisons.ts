@@ -1,7 +1,5 @@
 import type { ElementOrToolType } from "@excalidraw/excalidraw/types";
 
-import { isShapeTemplateTool } from "./shapeTemplates";
-
 export const hasBackground = (type: ElementOrToolType) =>
   type === "rectangle" ||
   type === "stickynote" ||
@@ -12,8 +10,6 @@ export const hasBackground = (type: ElementOrToolType) =>
   type === "line" ||
   type === "freedraw" ||
   type === "autoshape" ||
-  type === "star" ||
-  type === "heart" ||
   // tool-only type; makes the `G` background shortcut work for bucket fill
   type === "bucketfill";
 
@@ -30,8 +26,7 @@ export const hasStrokeColor = (type: ElementOrToolType) =>
   type === "line" ||
   type === "text" ||
   type === "embeddable" ||
-  type === "autoshape" ||
-  isShapeTemplateTool(type);
+  type === "autoshape";
 
 export const hasStrokeWidth = (type: ElementOrToolType) =>
   type === "rectangle" ||
@@ -42,8 +37,7 @@ export const hasStrokeWidth = (type: ElementOrToolType) =>
   type === "freedraw" ||
   type === "arrow" ||
   type === "line" ||
-  type === "autoshape" ||
-  isShapeTemplateTool(type);
+  type === "autoshape";
 
 export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "rectangle" ||
@@ -53,8 +47,7 @@ export const hasStrokeStyle = (type: ElementOrToolType) =>
   type === "diamond" ||
   type === "arrow" ||
   type === "line" ||
-  type === "autoshape" ||
-  isShapeTemplateTool(type);
+  type === "autoshape";
 
 export const hasRoughness = (type: ElementOrToolType) =>
   hasStrokeStyle(type) || type === "stickynote";

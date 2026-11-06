@@ -241,10 +241,6 @@ export const AllowedExcalidrawActiveTools: Record<
   autoshape: false,
   magicframe: false,
   bucketfill: true,
-  star: true,
-  heart: true,
-  tick: true,
-  cross: true,
 };
 
 export type RestoredDataState = {

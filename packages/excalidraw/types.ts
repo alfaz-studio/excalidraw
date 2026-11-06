@@ -54,7 +54,6 @@ import type {
   EphemeralIncrement,
   RenderEnvironment,
   OnDuplicateData,
-  ShapeTemplateTool,
 } from "@excalidraw/element";
 import type { GlobalPoint } from "@excalidraw/math";
 
@@ -191,8 +190,7 @@ export type ToolType =
   | "embeddable"
   | "laser"
   | "autoshape"
-  | "bucketfill"
-  | ShapeTemplateTool;
+  | "bucketfill";
 
 export type ElementOrToolType = ExcalidrawElementType | ToolType | "custom";
 

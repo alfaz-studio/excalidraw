@@ -115,8 +115,6 @@ import {
   newElement,
   newImageElement,
   newLinearElement,
-  newShapeTemplateElement,
-  isShapeTemplateTool,
   deepCopyElement,
   duplicateElements,
   hasBoundTextElement,
@@ -212,8 +210,6 @@ import {
   getBindingStrategyForDraggingBindingElementEndpoints,
   isNonDeletedElement,
 } from "@excalidraw/element";
-
-import type { ShapeTemplateTool } from "@excalidraw/element";
 
 import type { GlobalPoint, LocalPoint } from "@excalidraw/math";
 
@@ -9011,8 +9007,7 @@ class App extends React.Component<AppProps, AppState> {
       | "diamond"
       | "ellipse"
       | "iframe"
-      | "embeddable"
-      | ShapeTemplateTool,
+      | "embeddable",
   ) {
     return this.state.currentItemRoundness === "round"
       ? {
@@ -9031,11 +9026,7 @@ class App extends React.Component<AppProps, AppState> {
   }
 
   private createGenericElementOnPointerDown = (
-    elementType:
-      | ExcalidrawGenericElement["type"]
-      | "embeddable"
-      | "stickynote"
-      | ShapeTemplateTool,
+    elementType: ExcalidrawGenericElement["type"] | "embeddable" | "stickynote",
     pointerDownState: PointerDownState,
   ): void => {
     const [gridX, gridY] = getGridPoint(
@@ -9063,10 +9054,7 @@ class App extends React.Component<AppProps, AppState> {
           ? this.state.currentItemStickynoteBackgroundColor
           : this.state.currentItemBackgroundColor,
       fillStyle: this.state.currentItemFillStyle,
-      // a shape template is saved as a line, so it takes a line's width
-      strokeWidth: this.getCurrentItemStrokeWidth(
-        isShapeTemplateTool(elementType) ? "line" : elementType,
-      ),
+      strokeWidth: this.getCurrentItemStrokeWidth(elementType),
       strokeStyle: this.state.currentItemStrokeStyle,
       roughness: this.state.currentItemRoughness,
       opacity: this.state.currentItemOpacity,
@@ -9086,8 +9074,6 @@ class App extends React.Component<AppProps, AppState> {
         type: "stickynote",
         ...baseElementAttributes,
       });
-    } else if (isShapeTemplateTool(elementType)) {
-      element = newShapeTemplateElement(elementType, baseElementAttributes);
     } else {
       element = newElement({
         type: elementType,
@@ -9577,11 +9563,7 @@ class App extends React.Component<AppProps, AppState> {
               newElement,
             });
           }
-        } else if (
-          isLinearElement(newElement) &&
-          !newElement.isDeleted &&
-          !isShapeTemplateTool(this.state.activeTool.type)
-        ) {
+        } else if (isLinearElement(newElement) && !newElement.isDeleted) {
           pointerDownState.drag.hasOccurred = true;
           const points = newElement.points;
 
@@ -9998,11 +9980,9 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
-      // Shape templates are lines sized like a rectangle, so they finalize like one.
       if (
         isLinearElement(newElement) &&
-        this.state.activeTool.type !== "autoshape" &&
-        !isShapeTemplateTool(this.state.activeTool.type)
+        this.state.activeTool.type !== "autoshape"
       ) {
         const pointerCoords = viewportCoordsToSceneCoords(
           this.warpClientCoords(childEvent),

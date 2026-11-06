@@ -40,7 +40,6 @@ import {
   RectangleToolButton,
   SelectionToolButton,
   SelectionToolPopover,
-  ShapesToolPopover,
   StickyNoteToolButton,
   TextToolButton,
 } from "./Tools";
@@ -296,15 +295,9 @@ export const Toolbar = ({
         ) : (
           <SelectionToolButton {...toolProps} />
         )}
-        {UIOptions.canvasActions.groupShapes === true ? (
-          <ShapesToolPopover {...toolProps} />
-        ) : (
-          <>
-            <RectangleToolButton {...toolProps} />
-            <DiamondToolButton {...toolProps} />
-            <EllipseToolButton {...toolProps} />
-          </>
-        )}
+        <RectangleToolButton {...toolProps} />
+        <DiamondToolButton {...toolProps} />
+        <EllipseToolButton {...toolProps} />
         <ArrowToolButton {...toolProps} />
         <LineToolButton {...toolProps} />
         {isCompactStylesPanel ? (
