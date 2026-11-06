@@ -7,7 +7,7 @@ const { sassPlugin } = require("esbuild-sass-plugin");
 
 const { parseEnvVariables } = require("../packages/excalidraw/env.cjs");
 
-const { packageTsconfig } = require("./buildTargets");
+const { BROWSER_TARGETS, packageTsconfig } = require("./buildTargets");
 
 const ENV_VARS = {
   development: {
@@ -62,6 +62,7 @@ const precompile = (source, sourcePath) => {
 const getConfig = (outdir) => ({
   outdir,
   tsconfig: packageTsconfig(),
+  target: BROWSER_TARGETS,
   bundle: true,
   splitting: true,
   format: "esm",
@@ -71,7 +72,6 @@ const getConfig = (outdir) => ({
       precompile,
     }),
   ],
-  target: "es2020",
   assetNames: "[dir]/[name]",
   chunkNames: "[dir]/[name]-[hash]",
   alias: {
