@@ -1135,12 +1135,6 @@ export interface ExcalidrawProps {
   // a handler is passed — the extra hit-test costs nothing otherwise.
   onProtectedEditBlocked?: (reason: "erase") => void;
 
-  // SONACOVE: lock an image as it is inserted, and open the action bar over it
-  // so the lock is visible. The eraser skips locked elements, so this leaves
-  // only the strokes drawn on top of an image erasable. `locked` rides the
-  // collab broadcast, so the inserting client locking it is enough.
-  autoLockImages?: boolean;
-
   viewportStatusFrame?: ViewportStatusFrame | null;
   currentUserControls?:
     | React.ReactNode

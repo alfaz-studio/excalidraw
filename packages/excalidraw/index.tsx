@@ -119,7 +119,6 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     elementAuthorId,
     protectForeignElements,
     onProtectedEditBlocked,
-    autoLockImages,
     viewportStatusFrame,
     currentUserControls,
     imageOptions,
@@ -268,7 +267,6 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           elementAuthorId={elementAuthorId}
           protectForeignElements={protectForeignElements}
           onProtectedEditBlocked={onProtectedEditBlocked}
-          autoLockImages={autoLockImages}
           viewportStatusFrame={viewportStatusFrame}
           currentUserControls={currentUserControls}
           imageOptions={normalizedImageOptions}
@@ -444,10 +442,6 @@ export type {
 } from "./scene/export";
 
 export { serializeAsJSON, serializeLibraryAsJSON } from "./data/json";
-// Host-app save redirection (Sonacove Electron auto-saves to a folder instead of
-// the OS picker) — every native image export + scene save funnels through fileSave.
-export { setFileSaveOverride } from "./data/filesystem";
-export type { FileSaveOverride, FileSaveOpts } from "./data/filesystem";
 export {
   loadFromBlob,
   loadSceneOrLibraryFromBlob,

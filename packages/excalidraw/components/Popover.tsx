@@ -20,14 +20,6 @@ type Props = {
   viewportWidth?: number;
   viewportHeight?: number;
   className?: string;
-  /**
-   * SONACOVE: the box this popover opened from, in `top`/`left`'s space.
-   *
-   * Given only a point, `fitInViewport` bottom-aligns a popover too tall to fit
-   * — landing it over its own trigger. With the box it picks the side with room
-   * and caps its height to that room.
-   */
-  anchor?: { top: number; bottom: number };
 };
 
 export const Popover = ({
@@ -39,7 +31,6 @@ export const Popover = ({
   viewportWidth = window.innerWidth,
   viewportHeight = window.innerHeight,
   className,
-  anchor,
 }: Props) => {
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -129,46 +120,20 @@ export const Popover = ({
         )}px`;
       }
 
-      // SONACOVE: anchored placement.
-      if (anchor) {
-        const MARGIN = 8;
-        const below = viewportHeight - anchor.bottom - MARGIN;
-        const above = anchor.top - MARGIN;
-        // Below by default, above only when that side has more room; capped
-        // either way so it scrolls rather than escaping the canvas.
-        const useBelow = height <= below || below >= above;
-        const room = Math.max(useBelow ? below : above, 0);
-
-        element.style.top = useBelow
-          ? `${anchor.bottom + MARGIN}px`
-          : `${Math.max(
-              MARGIN,
-              anchor.top - Math.min(height, room) - MARGIN,
-            )}px`;
-
-        if (height > room) {
-          element.style.maxHeight = `${room}px`;
-          element.style.overflowY = "auto";
-        }
+      const maxHeight = Math.max(0, viewportHeight - POPOVER_CONTAINER_GAP * 2);
+      if (height >= maxHeight) {
+        element.style.height = `${maxHeight}px`;
+        element.style.top = `${POPOVER_CONTAINER_GAP}px`;
+        element.style.overflowY = "scroll";
       } else {
-        const maxHeight = Math.max(
-          0,
-          viewportHeight - POPOVER_CONTAINER_GAP * 2,
-        );
-        if (height >= maxHeight) {
-          element.style.height = `${maxHeight}px`;
-          element.style.top = `${POPOVER_CONTAINER_GAP}px`;
-          element.style.overflowY = "scroll";
-        } else {
-          element.style.top = `${clamp(
-            top,
-            POPOVER_CONTAINER_GAP,
-            viewportHeight - POPOVER_CONTAINER_GAP - height,
-          )}px`;
-        }
+        element.style.top = `${clamp(
+          top,
+          POPOVER_CONTAINER_GAP,
+          viewportHeight - POPOVER_CONTAINER_GAP - height,
+        )}px`;
       }
     }
-  }, [anchor, top, left, fitInViewport, viewportWidth, viewportHeight]);
+  }, [top, left, fitInViewport, viewportWidth, viewportHeight]);
 
   useEffect(() => {
     if (onCloseRequest) {

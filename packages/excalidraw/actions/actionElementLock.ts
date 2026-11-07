@@ -120,21 +120,13 @@ export const actionToggleElementLock = register({
           appState,
         );
 
-    // SONACOVE: `activeLockedId` means "the element the action bar points at",
-    // so it survives unlocking — the bar's other actions become useful exactly
-    // then. The exception is a MULTI-element unlock, which dissolves the
-    // temporary group just above and would leave the bar anchored to nothing.
-    let activeLockedId: string | null = null;
-
-    if (newGroupId) {
-      activeLockedId = nextLockState ? newGroupId : null;
-    } else if (isAGroup) {
-      activeLockedId = nextLockState
+    const activeLockedId = nextLockState
+      ? newGroupId
+        ? newGroupId
+        : isAGroup
         ? selectedElements[0].groupIds.at(-1)!
-        : null;
-    } else {
-      activeLockedId = selectedElements[0].id;
-    }
+        : selectedElements[0].id
+      : null;
 
     return {
       elements: nextElements,
