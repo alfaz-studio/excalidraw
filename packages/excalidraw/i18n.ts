@@ -98,7 +98,14 @@ export const setLanguage = async (lang: Language) => {
     currentLangData = {};
   } else {
     try {
-      currentLangData = await import(`./locales/${currentLang.code}.json`);
+      // `+`, not a template literal: our Safari 12 target makes esbuild lower
+      // template literals to `.concat()`, which its glob import doesn't see, so
+      // no locale would be bundled. A host bundler that swallows a failed chunk
+      // load (Vite's `vite:preloadError` + preventDefault) resolves undefined.
+      currentLangData =
+        // eslint-disable-next-line prefer-template
+        (await import("./locales/" + currentLang.code + ".json")) ??
+        fallbackLangData;
     } catch (error: any) {
       console.error(`Failed to load language ${lang.code}:`, error.message);
       currentLangData = fallbackLangData;
