@@ -36,13 +36,9 @@ import { FilledButton } from "./FilledButton";
 
 import "./ImageExportDialog.scss";
 
-import type {
-  AppClassProperties,
-  BinaryFiles,
-  SaveAsImageOptions,
-  UIAppState,
-} from "../types";
 import type { ActionManager } from "../actions/manager";
+
+import type { AppClassProperties, BinaryFiles, UIAppState } from "../types";
 
 export const ErrorCanvasPreview = () => {
   return (
@@ -61,7 +57,6 @@ type ImageExportModalProps = {
   elementsSnapshot: readonly NonDeletedExcalidrawElement[];
   files: BinaryFiles;
   actionManager: ActionManager;
-  options: SaveAsImageOptions;
   onExportImage: AppClassProperties["onExportImage"];
   name: string;
   exportWithDarkMode: boolean;
@@ -72,7 +67,6 @@ const ImageExportModal = ({
   elementsSnapshot,
   files,
   actionManager,
-  options,
   onExportImage,
   name,
   exportWithDarkMode,
@@ -228,7 +222,7 @@ const ImageExportModal = ({
       </div>
       <div className="ImageExportModal__settings">
         <h3>{t("imageExportDialog.header")}</h3>
-        {!options.disableSelection && hasSelection && (
+        {hasSelection && (
           <ExportSetting
             label={t("imageExportDialog.label.onlySelected")}
             name="exportOnlySelected"
@@ -242,86 +236,74 @@ const ImageExportModal = ({
             />
           </ExportSetting>
         )}
-        {!options.defaultBackgroundValue && (
-          <ExportSetting
-            label={t("imageExportDialog.label.withBackground")}
+        <ExportSetting
+          label={t("imageExportDialog.label.withBackground")}
+          name="exportBackgroundSwitch"
+        >
+          <Switch
             name="exportBackgroundSwitch"
-          >
-            <Switch
-              name="exportBackgroundSwitch"
-              checked={exportWithBackground}
-              onChange={(checked) => {
-                setExportWithBackground(checked);
-                actionManager.executeAction(
-                  actionChangeExportBackground,
-                  "ui",
-                  checked,
-                );
-              }}
-            />
-          </ExportSetting>
-        )}
-        {!options?.hideTheme && (
-          <ExportSetting
-            label={t("imageExportDialog.label.darkMode")}
+            checked={exportWithBackground}
+            onChange={(checked) => {
+              setExportWithBackground(checked);
+              actionManager.executeAction(
+                actionChangeExportBackground,
+                "ui",
+                checked,
+              );
+            }}
+          />
+        </ExportSetting>
+        <ExportSetting
+          label={t("imageExportDialog.label.darkMode")}
+          name="exportDarkModeSwitch"
+        >
+          <Switch
             name="exportDarkModeSwitch"
-          >
-            <Switch
-              name="exportDarkModeSwitch"
-              checked={exportWithDarkMode}
-              onChange={(checked) => {
-                actionManager.executeAction(
-                  actionExportWithDarkMode,
-                  "ui",
-                  checked,
-                );
-              }}
-            />
-          </ExportSetting>
-        )}
-        {!options?.disableSceneEmbed && (
-          <ExportSetting
-            label={t("imageExportDialog.label.embedScene")}
-            tooltip={t("imageExportDialog.tooltip.embedScene")}
+            checked={exportWithDarkMode}
+            onChange={(checked) => {
+              actionManager.executeAction(
+                actionExportWithDarkMode,
+                "ui",
+                checked,
+              );
+            }}
+          />
+        </ExportSetting>
+        <ExportSetting
+          label={t("imageExportDialog.label.embedScene")}
+          tooltip={t("imageExportDialog.tooltip.embedScene")}
+          name="exportEmbedSwitch"
+        >
+          <Switch
             name="exportEmbedSwitch"
-          >
-            <Switch
-              name="exportEmbedSwitch"
-              checked={embedScene}
-              onChange={(checked) => {
-                setEmbedScene(checked);
-                actionManager.executeAction(
-                  actionChangeExportEmbedScene,
-                  "ui",
-                  checked,
-                );
-              }}
-            />
-          </ExportSetting>
-        )}
-        {!options.disableScale && (
-          <ExportSetting
-            label={t("imageExportDialog.label.scale")}
+            checked={embedScene}
+            onChange={(checked) => {
+              setEmbedScene(checked);
+              actionManager.executeAction(
+                actionChangeExportEmbedScene,
+                "ui",
+                checked,
+              );
+            }}
+          />
+        </ExportSetting>
+        <ExportSetting
+          label={t("imageExportDialog.label.scale")}
+          name="exportScale"
+        >
+          <RadioGroup
             name="exportScale"
-          >
-            <RadioGroup
-              name="exportScale"
-              value={exportScale}
-              onChange={(scale) => {
-                setExportScale(scale);
-                actionManager.executeAction(
-                  actionChangeExportScale,
-                  "ui",
-                  scale,
-                );
-              }}
-              choices={EXPORT_SCALES.map((scale) => ({
-                value: scale,
-                label: `${scale}\u00d7`,
-              }))}
-            />
-          </ExportSetting>
-        )}
+            value={exportScale}
+            onChange={(scale) => {
+              setExportScale(scale);
+              actionManager.executeAction(actionChangeExportScale, "ui", scale);
+            }}
+            choices={EXPORT_SCALES.map((scale) => ({
+              value: scale,
+              label: `${scale}\u00d7`,
+            }))}
+          />
+        </ExportSetting>
 
         <div className="ImageExportModal__settings__buttons">
           <FilledButton
@@ -348,27 +330,26 @@ const ImageExportModal = ({
           >
             {t("imageExportDialog.button.exportToSvg")}
           </FilledButton>
-          {!options.disableClipboard &&
-            (probablySupportsClipboardBlob || isFirefox) && (
-              <FilledButton
-                className="ImageExportModal__settings__buttons__button"
-                label={t("imageExportDialog.title.copyPngToClipboard")}
-                status={copyStatus}
-                onClick={async () => {
-                  await onExportImage(
-                    EXPORT_IMAGE_TYPES.clipboard,
-                    exportedElements,
-                    {
-                      exportingFrame,
-                    },
-                  );
-                  onCopy();
-                }}
-                icon={copyIcon}
-              >
-                {t("imageExportDialog.button.copyPngToClipboard")}
-              </FilledButton>
-            )}
+          {(probablySupportsClipboardBlob || isFirefox) && (
+            <FilledButton
+              className="ImageExportModal__settings__buttons__button"
+              label={t("imageExportDialog.title.copyPngToClipboard")}
+              status={copyStatus}
+              onClick={async () => {
+                await onExportImage(
+                  EXPORT_IMAGE_TYPES.clipboard,
+                  exportedElements,
+                  {
+                    exportingFrame,
+                  },
+                );
+                onCopy();
+              }}
+              icon={copyIcon}
+            >
+              {t("imageExportDialog.button.copyPngToClipboard")}
+            </FilledButton>
+          )}
         </div>
       </div>
     </div>
@@ -413,7 +394,6 @@ export const ImageExportDialog = ({
   appState,
   files,
   actionManager,
-  options,
   onExportImage,
   onCloseRequest,
   name,
@@ -422,7 +402,6 @@ export const ImageExportDialog = ({
   elements: readonly NonDeletedExcalidrawElement[];
   files: BinaryFiles;
   actionManager: ActionManager;
-  options: SaveAsImageOptions;
   onExportImage: AppClassProperties["onExportImage"];
   onCloseRequest: () => void;
   name: string;
@@ -443,7 +422,6 @@ export const ImageExportDialog = ({
         appStateSnapshot={appStateSnapshot}
         files={files}
         actionManager={actionManager}
-        options={options}
         onExportImage={onExportImage}
         name={name}
         exportWithDarkMode={appState.exportWithDarkMode}

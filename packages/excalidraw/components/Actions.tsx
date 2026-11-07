@@ -1,8 +1,8 @@
 import clsx from "clsx";
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { Popover } from "radix-ui";
 
-import { CLASSES, KEYS, capitalizeString } from "@excalidraw/common";
+import { CLASSES } from "@excalidraw/common";
 
 import { isArrowElement } from "@excalidraw/element";
 
@@ -14,7 +14,6 @@ import type {
 
 import { actionToggleZenMode } from "../actions";
 
-import { trackEvent } from "../analytics";
 import { t } from "../i18n";
 import { getTargetElements } from "../scene";
 
@@ -26,40 +25,21 @@ import { actionToggleViewMode } from "../actions/actionToggleViewMode";
 
 import "./Actions.scss";
 
-import { useExcalidrawContainer, useStylesPanelMode } from "./App";
+import { useExcalidrawContainer } from "./App";
 import Stack from "./Stack";
 import { Tooltip } from "./Tooltip";
 import { PropertiesPopover } from "./PropertiesPopover";
 import {
-  EmbedIcon,
-  extraToolsIcon,
-  frameToolIcon,
-  // mermaidLogoIcon,
-  laserPointerToolIcon,
-  // MagicIcon,
-  LassoIcon,
-  toggleLayoutIcon,
   sharpArrowIcon,
   roundArrowIcon,
   elbowArrowIcon,
   TextSizeIcon,
   adjustmentsIcon,
   DotsHorizontalIcon,
-  SelectionIcon,
-  RectangleIcon,
-  DiamondIcon,
-  EllipseIcon,
-  ShapesIcon,
-  ArrowIcon,
-  LineIcon,
   pencilIcon,
 } from "./icons";
 
 import { Island } from "./Island";
-import { getToolbarTools } from "./shapes";
-import { IconButton } from "./IconButton";
-import { ToolPopover } from "./ToolPopover";
-import DropdownMenu from "./dropdownMenu/DropdownMenu";
 
 import { getShapeActionPredicates } from "./shapeActionPredicates";
 
@@ -186,74 +166,46 @@ export const SelectedShapeActions = ({
 
   return (
     <div className="selected-shape-actions">
-      <div>
-        {predicates.strokeColor &&
-          renderAction("changeStrokeColor", {
-            hideColorInput: UIOptions.canvasActions.hideColorInput,
-          })}
-      </div>
+      <div>{predicates.strokeColor && renderAction("changeStrokeColor")}</div>
       {predicates.backgroundColor && (
-        <div>
-          {renderAction("changeBackgroundColor", {
-            hideColorInput: UIOptions.canvasActions.hideColorInput,
-          })}
-        </div>
+        <div>{renderAction("changeBackgroundColor")}</div>
       )}
       {predicates.fill && renderAction("changeFillStyle")}
 
       {predicates.strokeWidth && renderAction("changeStrokeWidth")}
 
-      {predicates.strokeStyle && !UIOptions.canvasActions.hideStrokeStyle && (
-        <>{renderAction("changeStrokeStyle")}</>
-      )}
+      {predicates.strokeStyle && <>{renderAction("changeStrokeStyle")}</>}
 
       {predicates.freedrawMode && renderAction("changeFreedrawMode")}
 
       {predicates.sloppiness && <>{renderAction("changeSloppiness")}</>}
 
-      {predicates.roundness && !UIOptions.canvasActions.hideSharpness && (
-        <>{renderAction("changeRoundness")}</>
-      )}
+      {predicates.roundness && <>{renderAction("changeRoundness")}</>}
 
       {predicates.arrowType && <>{renderAction("changeArrowType")}</>}
 
       {predicates.text && (
         <>
-          {!UIOptions.canvasActions.hideFontFamily && (
-            <fieldset>{renderAction("changeFontFamily")}</fieldset>
-          )}
-          {renderAction("changeFontSize", {
-            fontSizeOptions: UIOptions?.canvasActions?.fontSizeOptions,
-          })}
-          {predicates.textAlign &&
-            !UIOptions.canvasActions.hideTextAlign &&
-            renderAction("changeTextAlign")}
+          <fieldset>{renderAction("changeFontFamily")}</fieldset>
+          {renderAction("changeFontSize")}
+          {predicates.textAlign && renderAction("changeTextAlign")}
         </>
       )}
 
-      {predicates.verticalAlign &&
-        !UIOptions.canvasActions.disableVerticalAlignOptions &&
-        renderAction("changeVerticalAlign")}
-      {predicates.arrowheads &&
-        !UIOptions.canvasActions.hideArrowHeadsOptions && (
-          <>{renderAction("changeArrowhead")}</>
-        )}
+      {predicates.verticalAlign && renderAction("changeVerticalAlign")}
+      {predicates.arrowheads && <>{renderAction("changeArrowhead")}</>}
 
-      {predicates.opacity &&
-        !UIOptions.canvasActions.hideOpacityInput &&
-        renderAction("changeOpacity")}
+      {predicates.opacity && renderAction("changeOpacity")}
 
-      {predicates.layers && !UIOptions.canvasActions.hideLayers && (
-        <LayersFieldset renderAction={renderAction} />
-      )}
+      {predicates.layers && <LayersFieldset renderAction={renderAction} />}
 
-      {predicates.align && !UIOptions.canvasActions.disableAlignItems && (
+      {predicates.align && (
         <AlignFieldset
           renderAction={renderAction}
           showDistribute={predicates.distribute}
         />
       )}
-      {predicates.showExtraActions && !UIOptions.canvasActions.disableGrouping && (
+      {predicates.showExtraActions && (
         <fieldset>
           <legend>{t("labels.actions")}</legend>
           <div className="buttonList">
@@ -937,408 +889,6 @@ export const MobileShapeActions = ({
         )}
       </div>
     </Island>
-  );
-};
-
-export const ShapesSwitcher = ({
-  activeTool,
-  allowedShapes,
-  appState,
-  setAppState,
-  app,
-  disableShortcuts,
-  UIOptions,
-}: {
-  activeTool: UIAppState["activeTool"];
-  allowedShapes?: Array<string>;
-  appState: UIAppState;
-  setAppState: React.Component<any, AppState>["setState"];
-  app: AppClassProperties;
-  disableShortcuts?: boolean;
-  UIOptions: AppProps["UIOptions"];
-}) => {
-  const [isExtraToolsMenuOpen, setIsExtraToolsMenuOpen] = useState(false);
-  const stylesPanelMode = useStylesPanelMode();
-  const isFullStylesPanel = stylesPanelMode === "full";
-  const isCompactStylesPanel = stylesPanelMode === "compact";
-
-  const SELECTION_TOOLS = [
-    {
-      type: "selection",
-      icon: SelectionIcon,
-      title: capitalizeString(t("toolBar.selection")),
-    },
-    {
-      type: "lasso",
-      icon: LassoIcon,
-      title: capitalizeString(t("toolBar.lasso")),
-    },
-  ] as const;
-
-  const SHAPE_TOOLS = [
-    {
-      type: "rectangle",
-      icon: RectangleIcon,
-      title: capitalizeString(t("toolBar.rectangle")),
-    },
-    {
-      type: "diamond",
-      icon: DiamondIcon,
-      title: capitalizeString(t("toolBar.diamond")),
-    },
-    {
-      type: "ellipse",
-      icon: EllipseIcon,
-      title: capitalizeString(t("toolBar.ellipse")),
-    },
-  ] as const;
-
-  const LINEAR_TOOLS = [
-    {
-      type: "arrow",
-      icon: ArrowIcon,
-      title: capitalizeString(t("toolBar.arrow")),
-    },
-    {
-      type: "line",
-      icon: LineIcon,
-      title: capitalizeString(t("toolBar.line")),
-    },
-  ] as const;
-
-  // Track which shape/linear tool was last used so the popover shows the right default
-  const [lastActiveShape, setLastActiveShape] = useState<
-    "rectangle" | "diamond" | "ellipse"
-  >("rectangle");
-  const [lastActiveLinear, setLastActiveLinear] = useState<"arrow" | "line">(
-    "arrow",
-  );
-
-  useEffect(() => {
-    if (
-      activeTool.type === "rectangle" ||
-      activeTool.type === "diamond" ||
-      activeTool.type === "ellipse"
-    ) {
-      setLastActiveShape(activeTool.type);
-    }
-  }, [activeTool.type]);
-
-  useEffect(() => {
-    if (activeTool.type === "arrow" || activeTool.type === "line") {
-      setLastActiveLinear(activeTool.type);
-    }
-  }, [activeTool.type]);
-
-  // Tools that get grouped into popovers
-  const GROUPED_SHAPE_TYPES = new Set(["rectangle", "diamond", "ellipse"]);
-  const GROUPED_LINEAR_TYPES = new Set(["arrow", "line"]);
-
-  const frameToolSelected = activeTool.type === "frame";
-  const laserToolSelected = activeTool.type === "laser";
-  const lassoToolSelected =
-    isFullStylesPanel &&
-    activeTool.type === "lasso" &&
-    app.state.preferredSelectionTool.type !== "lasso";
-
-  const embeddableToolSelected = activeTool.type === "embeddable";
-
-  // const { TTDDialogTriggerTunnel } = useTunnels();
-
-  // Track whether we've already rendered the linear popover group
-  let linearPopoverRendered = false;
-
-  return (
-    <>
-      {getToolbarTools(app)
-        .filter(
-          (shape) => !allowedShapes || allowedShapes.includes(shape.value),
-        )
-        .map(({ value, icon, key, numericKey, fillable, toolbar }) => {
-          if (
-            toolbar === false ||
-            UIOptions.tools?.[
-              value as Extract<
-                typeof value,
-                keyof AppProps["UIOptions"]["tools"]
-              >
-            ] === false
-          ) {
-            return null;
-          }
-
-          // ── Shape group rendered outside .map(), skip here ──
-          if (
-            GROUPED_SHAPE_TYPES.has(value) &&
-            UIOptions.canvasActions.groupShapes === true
-          ) {
-            return null;
-          }
-
-          // ── Linear tools popover (arrow, line) ──
-          if (
-            GROUPED_LINEAR_TYPES.has(value) &&
-            UIOptions.canvasActions.groupShapes === true
-          ) {
-            if (linearPopoverRendered) {
-              return null;
-            }
-            linearPopoverRendered = true;
-
-            return (
-              <ToolPopover
-                key="linear-popover"
-                app={app}
-                options={LINEAR_TOOLS}
-                activeTool={activeTool}
-                defaultOption={lastActiveLinear}
-                namePrefix="linearType"
-                title={capitalizeString(t("toolBar.arrow"))}
-                data-testid="toolbar-linear"
-                onToolChange={(type: string) => {
-                  app.setActiveTool({ type: type as any });
-                }}
-                displayedOption={
-                  LINEAR_TOOLS.find((tool) => tool.type === lastActiveLinear) ||
-                  LINEAR_TOOLS[0]
-                }
-                fillable={true}
-              />
-            );
-          }
-
-          const label = t(`toolBar.${value}`);
-          const letter =
-            key && capitalizeString(typeof key === "string" ? key : key[0]);
-          const shortcut = letter
-            ? `${letter} ${t("helpDialog.or")} ${numericKey}`
-            : `${numericKey}`;
-          const keybindingLabel =
-            value === "hand" ? undefined : numericKey || letter;
-          const title = disableShortcuts
-            ? capitalizeString(label)
-            : `${capitalizeString(label)} — ${shortcut}`;
-
-          // when in compact styles panel mode (tablet)
-          // use a ToolPopover for selection/lasso toggle as well
-          if (
-            (value === "selection" || value === "lasso") &&
-            isCompactStylesPanel
-          ) {
-            return (
-              <ToolPopover
-                key={"selection-popover"}
-                app={app}
-                options={SELECTION_TOOLS}
-                activeTool={activeTool}
-                defaultOption={app.state.preferredSelectionTool.type}
-                namePrefix="selectionType"
-                title={capitalizeString(t("toolBar.selection"))}
-                data-testid="toolbar-selection"
-                onToolChange={(type: string) => {
-                  if (type === "selection" || type === "lasso") {
-                    app.setActiveTool({ type });
-                    setAppState({
-                      preferredSelectionTool: { type, initialized: true },
-                    });
-                  }
-                }}
-                displayedOption={
-                  SELECTION_TOOLS.find(
-                    (tool) =>
-                      tool.type === app.state.preferredSelectionTool.type,
-                  ) || SELECTION_TOOLS[0]
-                }
-                fillable={activeTool.type === "selection"}
-              />
-            );
-          }
-
-          return (
-            <IconButton
-              className={clsx("Shape", { fillable })}
-              key={value}
-              type="toggle"
-              icon={icon}
-              checked={activeTool.type === value}
-              disableShortcuts={disableShortcuts}
-              title={title}
-              keyBindingLabel={keybindingLabel}
-              aria-label={capitalizeString(label)}
-              aria-keyshortcuts={shortcut}
-              data-testid={`toolbar-${value}`}
-              onPointerDown={(event) => {
-                const { pointerType } = event;
-                if (!app.state.penDetected && pointerType === "pen") {
-                  app.togglePenMode(true);
-                }
-
-                if (value === "selection") {
-                  if (app.state.activeTool.type === "selection") {
-                    app.setActiveTool({ type: "lasso" });
-                  } else {
-                    app.setActiveTool({ type: "selection" });
-                  }
-                }
-              }}
-              onSelect={() => {
-                if (app.state.activeTool.type !== value) {
-                  trackEvent("toolbar", value, "ui");
-                }
-                if (value === "image") {
-                  app.setActiveTool({
-                    type: value,
-                  });
-                } else {
-                  app.setActiveTool({ type: value });
-                }
-              }}
-            />
-          );
-        })}
-      {UIOptions.canvasActions.groupShapes === true && (
-        <>
-          <div className="App-toolbar__divider" />
-          <ToolPopover
-            key="shape-popover"
-            app={app}
-            options={SHAPE_TOOLS}
-            activeTool={activeTool}
-            defaultOption={lastActiveShape}
-            wrapperClassName="tool-popover--shape"
-            namePrefix="shapeType"
-            title="Shapes"
-            data-testid="toolbar-shapes"
-            onToolChange={(type: string) => {
-              app.setActiveTool({ type: type as any });
-            }}
-            displayedOption={{
-              type: lastActiveShape,
-              icon: ShapesIcon,
-              title: "Shapes",
-            }}
-            fillable={true}
-          />
-        </>
-      )}
-
-      <DropdownMenu open={isExtraToolsMenuOpen}>
-        <DropdownMenu.Trigger
-          className={clsx("App-toolbar__extra-tools-trigger", {
-            "App-toolbar__extra-tools-trigger--selected":
-              frameToolSelected ||
-              embeddableToolSelected ||
-              lassoToolSelected ||
-              // in collab we're already highlighting the laser button
-              // outside toolbar, so let's not highlight extra-tools button
-              // on top of it
-              (laserToolSelected && !app.props.isCollaborating),
-          })}
-          onToggle={() => {
-            setIsExtraToolsMenuOpen(!isExtraToolsMenuOpen);
-            setAppState({ openMenu: null, openPopup: null });
-          }}
-          title={t("toolBar.extraTools")}
-        >
-          {frameToolSelected
-            ? frameToolIcon
-            : embeddableToolSelected
-            ? EmbedIcon
-            : laserToolSelected && !app.props.isCollaborating
-            ? laserPointerToolIcon
-            : lassoToolSelected
-            ? LassoIcon
-            : extraToolsIcon}
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content
-          onClickOutside={() => setIsExtraToolsMenuOpen(false)}
-          onSelect={() => setIsExtraToolsMenuOpen(false)}
-          className="App-toolbar__extra-tools-dropdown"
-        >
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "frame" })}
-            icon={frameToolIcon}
-            shortcut={KEYS.F.toLocaleUpperCase()}
-            data-testid="toolbar-frame"
-            selected={frameToolSelected}
-          >
-            {t("toolBar.frame")}
-          </DropdownMenu.Item>
-          {/* <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "laser" })}
-            icon={laserPointerToolIcon}
-            data-testid="toolbar-laser"
-            selected={laserToolSelected}
-            shortcut={KEYS.K.toLocaleUpperCase()}
-          >
-            {t("toolBar.laser")}
-          </DropdownMenu.Item> */}
-          {!UIOptions.canvasActions.hideEmbedableTools && (
-            <>
-              <DropdownMenu.Item
-                onSelect={() => app.setActiveTool({ type: "embeddable" })}
-                icon={EmbedIcon}
-                data-testid="toolbar-embeddable"
-                selected={embeddableToolSelected}
-              >
-                {t("toolBar.embeddable")}
-              </DropdownMenu.Item>
-              {/* <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "laser" })}
-            icon={laserPointerToolIcon}
-            data-testid="toolbar-laser"
-            selected={laserToolSelected}
-            shortcut={KEYS.K.toLocaleUpperCase()}
-          >
-            {t("toolBar.laser")}
-          </DropdownMenu.Item> */}
-              {isFullStylesPanel && (
-                <DropdownMenu.Item
-                  onSelect={() => app.setActiveTool({ type: "lasso" })}
-                  icon={LassoIcon}
-                  data-testid="toolbar-lasso"
-                  selected={lassoToolSelected}
-                >
-                  {t("toolBar.lasso")}
-                </DropdownMenu.Item>
-              )}
-              {/* <div style={{ margin: "6px 0", fontSize: 14, fontWeight: 600 }}>
-            Generate
-          </div> */}
-              {/* {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
-          <DropdownMenu.Item
-            onSelect={() => app.setOpenDialog({ name: "ttd", tab: "mermaid" })}
-            icon={mermaidLogoIcon}
-            data-testid="toolbar-embeddable"
-          >
-            {t("toolBar.mermaidToExcalidraw")}
-          </DropdownMenu.Item> */}
-              {/* {app.props.aiEnabled !== false && app.plugins.diagramToCode && (
-            <DropdownMenu.Item
-              onSelect={() => app.onMagicframeToolSelect()}
-              icon={MagicIcon}
-              data-testid="toolbar-magicframe"
-              badge={<DropdownMenu.Item.Badge>AI</DropdownMenu.Item.Badge>}
-            >
-              {t("toolBar.magicframe")}
-            </DropdownMenu.Item>
-          )} */}
-            </>
-          )}
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item
-            onSelect={() => {
-              document.dispatchEvent(new CustomEvent("anno-toggle-layout"));
-            }}
-            icon={toggleLayoutIcon}
-            data-testid="toolbar-toggle-layout"
-          >
-            Toggle layout
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>
-      <div className="App-toolbar__divider App-toolbar__shapes-divider" />
-    </>
   );
 };
 

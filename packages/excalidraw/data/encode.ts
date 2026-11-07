@@ -297,15 +297,11 @@ const splitBuffers = (concatenatedBuffer: Uint8Array) => {
 const _encryptAndCompress = async (
   data: Uint8Array<ArrayBuffer> | string,
   encryptionKey: string,
-  skipEncryption: boolean = false,
 ) => {
-  const compressed = deflate(data) as Uint8Array<ArrayBuffer>;
-
-  if (skipEncryption) {
-    return { iv: new Uint8Array(0), buffer: new Uint8Array(compressed) };
-  }
-
-  const { encryptedBuffer, iv } = await encryptData(encryptionKey, compressed);
+  const { encryptedBuffer, iv } = await encryptData(
+    encryptionKey,
+    deflate(data) as Uint8Array<ArrayBuffer>,
+  );
 
   return { iv, buffer: new Uint8Array(encryptedBuffer) };
 };
@@ -327,7 +323,6 @@ export const compressData = async <T extends Record<string, any> = never>(
   dataBuffer: Uint8Array,
   options: {
     encryptionKey: string;
-    skipEncryption?: boolean;
   } & ([T] extends [never]
     ? {
         metadata?: T;
@@ -339,7 +334,7 @@ export const compressData = async <T extends Record<string, any> = never>(
   const fileInfo: FileEncodingInfo = {
     version: 2,
     compression: "pako@1",
-    encryption: options.skipEncryption ? null : "AES-GCM",
+    encryption: "AES-GCM",
   };
 
   const encodingMetadataBuffer = new TextEncoder().encode(
@@ -353,7 +348,6 @@ export const compressData = async <T extends Record<string, any> = never>(
   const { iv, buffer } = await _encryptAndCompress(
     concatBuffers(contentsMetadataBuffer, dataBuffer),
     options.encryptionKey,
-    options.skipEncryption,
   );
 
   return concatBuffers(encodingMetadataBuffer, iv, buffer);
@@ -362,22 +356,19 @@ export const compressData = async <T extends Record<string, any> = never>(
 /** @private */
 const _decryptAndDecompress = async (
   iv: Uint8Array<ArrayBuffer>,
-  buffer: Uint8Array<ArrayBuffer>,
+  decryptedBuffer: Uint8Array<ArrayBuffer>,
   decryptionKey: string,
   isCompressed: boolean,
-  isEncrypted: boolean = true,
 ) => {
-  let data: Uint8Array = buffer;
-
-  if (isEncrypted) {
-    data = new Uint8Array(await decryptData(iv, buffer, decryptionKey));
-  }
+  decryptedBuffer = new Uint8Array(
+    await decryptData(iv, decryptedBuffer, decryptionKey),
+  );
 
   if (isCompressed) {
-    return inflate(data);
+    return inflate(decryptedBuffer);
   }
 
-  return data;
+  return decryptedBuffer;
 };
 
 export const decompressData = async <T extends Record<string, any>>(
@@ -391,8 +382,6 @@ export const decompressData = async <T extends Record<string, any>>(
     new TextDecoder().decode(encodingMetadataBuffer),
   );
 
-  const isEncrypted = !!encodingMetadata.encryption;
-
   try {
     const [contentsMetadataBuffer, contentsBuffer] = splitBuffers(
       await _decryptAndDecompress(
@@ -400,7 +389,6 @@ export const decompressData = async <T extends Record<string, any>>(
         buffer,
         options.decryptionKey,
         !!encodingMetadata.compression,
-        isEncrypted,
       ),
     );
 

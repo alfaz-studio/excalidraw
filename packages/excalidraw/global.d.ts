@@ -58,19 +58,6 @@ interface Blob {
 
 declare module "*.scss";
 
-// tunnel-rat types are built against React 18 and incompatible with React 19's
-// stricter JSX component signatures. Override Out to use React.FC.
-declare module "tunnel-rat" {
-  import type React from "react";
-  type Props = {
-    children: React.ReactNode;
-  };
-  export default function tunnel(): {
-    In: ({ children }: Props) => null;
-    Out: React.FC;
-  };
-}
-
 // --------------------------------------------------------------------------—
 // ensure Uint8Array isn't assignable to ArrayBuffer
 // (due to TS structural typing)

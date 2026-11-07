@@ -884,23 +884,11 @@ export const textWysiwyg = ({
       event.preventDefault();
       submittedViaKeyboard = true;
       handleSubmit();
-    } else if (
-      (
-        actionSaveToActiveFile.keyTest as
-          | ((e: KeyboardEvent) => boolean)
-          | undefined
-      )?.(event)
-    ) {
+    } else if (actionSaveToActiveFile.keyTest(event)) {
       event.preventDefault();
       handleSubmit();
       app.actionManager.executeAction(actionSaveToActiveFile, "keyboard");
-    } else if (
-      (
-        actionSaveFileToDisk.keyTest as
-          | ((e: KeyboardEvent) => boolean)
-          | undefined
-      )?.(event)
-    ) {
+    } else if (actionSaveFileToDisk.keyTest(event)) {
       event.preventDefault();
       handleSubmit();
       app.actionManager.executeAction(actionSaveFileToDisk, "keyboard");

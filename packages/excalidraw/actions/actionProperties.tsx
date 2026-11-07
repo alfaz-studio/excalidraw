@@ -405,7 +405,7 @@ export const actionChangeStrokeColor = register<
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     };
   },
-  PanelComponent: ({ elements, appState, updateData, app, data }) => {
+  PanelComponent: ({ elements, appState, updateData, app }) => {
     const { stylesPanelMode } = getStylesPanelInfo(app);
     const target = resolveColorTarget(appState, elements, "strokeColor");
     // a note has no stroke: its "stroke" is the ink of its text and footer
@@ -429,7 +429,6 @@ export const actionChangeStrokeColor = register<
             true,
             (hasSelection) => (!hasSelection ? target.currentValue : null),
           )}
-          hideColorInput={data?.hideColorInput}
           onChange={(color) => updateData({ color })}
           elements={elements}
           appState={appState}
@@ -519,7 +518,7 @@ export const actionChangeBackgroundColor = register<
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     };
   },
-  PanelComponent: ({ elements, appState, updateData, app, data }) => {
+  PanelComponent: ({ elements, appState, updateData, app }) => {
     const { stylesPanelMode } = getStylesPanelInfo(app);
     const target = resolveColorTarget(appState, elements, "backgroundColor");
     // while editing a note's label the picker shows and sets the note's fill
@@ -574,7 +573,7 @@ export const actionChangeBucketFillBackgroundColor = register<
       captureUpdate: CaptureUpdateAction.EVENTUALLY,
     };
   },
-  PanelComponent: ({ elements, appState, updateData, app, data }) => {
+  PanelComponent: ({ elements, appState, updateData, app }) => {
     const { stylesPanelMode } = getStylesPanelInfo(app);
 
     return (
@@ -597,7 +596,6 @@ export const actionChangeBucketFillBackgroundColor = register<
           color={app.bucketFill.getBucketFillBackgroundColor(
             appState.currentItemBackgroundColor,
           )}
-          hideColorInput={data?.hideColorInput}
           onChange={(color) =>
             updateData({ currentItemBackgroundColor: color })
           }
@@ -630,7 +628,7 @@ export const actionChangeFillStyle = register<ExcalidrawElement["fillStyle"]>({
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     };
   },
-  PanelComponent: ({ elements, appState, updateData, app, data }) => {
+  PanelComponent: ({ elements, appState, updateData, app }) => {
     const selectedElements = getSelectedElements(elements, appState);
     const selectedFillStyleElements = selectedElements.filter((element) =>
       hasFillStyle(element.type),
@@ -1022,42 +1020,6 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
     },
     PanelComponent: ({ elements, appState, updateData, app, data }) => {
       const { isCompact } = getStylesPanelInfo(app);
-      const fontSizeOptions = data?.fontSizeOptions;
-
-      const allOptions = [
-        {
-          key: "s",
-          value: FONT_SIZES.sm,
-          text: t("labels.small"),
-          icon: FontSizeSmallIcon,
-          testId: "fontSize-small",
-        },
-        {
-          key: "m",
-          value: FONT_SIZES.md,
-          text: t("labels.medium"),
-          icon: FontSizeMediumIcon,
-          testId: "fontSize-medium",
-        },
-        {
-          key: "l",
-          value: FONT_SIZES.lg,
-          text: t("labels.large"),
-          icon: FontSizeLargeIcon,
-          testId: "fontSize-large",
-        },
-        {
-          key: "xl",
-          value: FONT_SIZES.xl,
-          text: t("labels.veryLarge"),
-          icon: FontSizeExtraLargeIcon,
-          testId: "fontSize-veryLarge",
-        },
-      ];
-
-      const filteredOptions = fontSizeOptions
-        ? allOptions.filter((opt) => fontSizeOptions.includes(opt.key))
-        : allOptions;
 
       return (
         <fieldset>
@@ -1065,7 +1027,32 @@ export const actionChangeFontSize = register<ExcalidrawTextElement["fontSize"]>(
           <div className="buttonList">
             <RadioSelection
               group="font-size"
-              options={filteredOptions}
+              options={[
+                {
+                  value: FONT_SIZES.sm,
+                  text: t("labels.small"),
+                  icon: FontSizeSmallIcon,
+                  testId: "fontSize-small",
+                },
+                {
+                  value: FONT_SIZES.md,
+                  text: t("labels.medium"),
+                  icon: FontSizeMediumIcon,
+                  testId: "fontSize-medium",
+                },
+                {
+                  value: FONT_SIZES.lg,
+                  text: t("labels.large"),
+                  icon: FontSizeLargeIcon,
+                  testId: "fontSize-large",
+                },
+                {
+                  value: FONT_SIZES.xl,
+                  text: t("labels.veryLarge"),
+                  icon: FontSizeExtraLargeIcon,
+                  testId: "fontSize-veryLarge",
+                },
+              ]}
               value={getFormValue(
                 elements,
                 app,
@@ -2006,7 +1993,7 @@ export const actionChangeArrowhead = register<{
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     };
   },
-  PanelComponent: ({ elements, appState, updateData, app, data }) => {
+  PanelComponent: ({ elements, appState, updateData, app }) => {
     const isRTL = getLanguage().rtl;
     const startArrowheadOptions = useMemo(
       () => getArrowheadOptions(!isRTL),
@@ -2274,7 +2261,7 @@ export const actionChangeArrowType = register<keyof typeof ARROW_TYPE>({
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     };
   },
-  PanelComponent: ({ elements, appState, updateData, app, data }) => {
+  PanelComponent: ({ elements, appState, updateData, app }) => {
     return (
       <fieldset>
         <legend>{t("labels.arrowtypes")}</legend>

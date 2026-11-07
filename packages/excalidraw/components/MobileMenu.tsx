@@ -23,7 +23,6 @@ import type { JSX } from "react";
 type MobileMenuProps = {
   appState: UIAppState;
   actionManager: ActionManager;
-  allowedShapes: Array<string>;
   renderJSONExportDialog: () => React.ReactNode;
   renderImageExportDialog: () => React.ReactNode;
   setAppState: React.Component<any, AppState>["setState"];
@@ -53,7 +52,6 @@ export const MobileMenu = ({
   renderTopLeftUI,
   renderTopRightUI,
   renderSidebars,
-  allowedShapes,
   renderWelcomeScreen,
   defaultUIEnabled,
   scrollBackToContentUIEnabled,

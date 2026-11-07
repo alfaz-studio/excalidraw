@@ -72,7 +72,6 @@ export const actionChangeViewBackgroundColor = register<Partial<AppState>>({
         label={t("labels.canvasBackground")}
         type="canvasBackground"
         color={appState.viewBackgroundColor}
-        hideColorInput={data?.hideColorInput}
         onChange={(color) => updateData({ viewBackgroundColor: color })}
         data-testid="canvas-background-picker"
         elements={elements}

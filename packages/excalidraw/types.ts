@@ -1198,36 +1198,15 @@ export type ImageOptions = Partial<{
 // (see manager renderAction). We also override canvasAction values in
 // Excalidraw package index.tsx.
 export type CanvasActions = Partial<{
-  allowedShapes?: Array<string>;
   allowedShortcuts?: Array<string>;
   changeViewBackgroundColor: boolean;
   clearCanvas: boolean;
-  disableFileDrop?: boolean;
   export: false | ExportOpts;
   hideHelpDialog?: boolean;
-  disableAlignItems?: boolean;
-  disableHints?: boolean;
-  disableGrouping?: boolean;
   disableLink?: boolean;
   disableShortcuts?: boolean;
-  disableVerticalAlignOptions?: boolean;
-  fontSizeOptions?: Array<String>;
-  hideFontFamily?: boolean;
   hideUserList?: boolean;
-  hideLockButton?: boolean;
-  hideTextAlign?: boolean;
-  hideArrowHeadsOptions?: boolean;
-  hideColorInput?: boolean;
-  groupShapes?: boolean;
-  hideEmbedableTools?: boolean;
-  hideIOActions?: boolean;
-  hideLaserOnCollaboration?: boolean;
-  hideLayers?: boolean;
   hideLibraries?: boolean;
-  hideOpacityInput?: boolean;
-  hideSharpness?: boolean;
-  hideStrokeStyle?: boolean;
-  hideWelcomeScreen?: boolean;
   loadScene: boolean;
   saveToActiveFile: boolean;
   /**
@@ -1237,17 +1216,7 @@ export type CanvasActions = Partial<{
    * */
   toggleTheme: boolean | null;
   saveAsImage: boolean;
-  saveAsImageOptions?: SaveAsImageOptions;
 }>;
-
-export type SaveAsImageOptions = {
-  defaultBackgroundValue?: boolean;
-  disableClipboard?: boolean;
-  disableScale?: boolean;
-  disableSceneEmbed?: boolean;
-  disableSelection?: boolean;
-  hideTheme?: boolean;
-};
 
 /**
  * SONACOVE: tools the host implements itself, offered together behind one

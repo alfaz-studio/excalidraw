@@ -33,7 +33,6 @@ import {
 } from "../actions/colorTargets";
 
 import { SelectedShapeActions, CompactShapeActions } from "./Actions";
-import { Toolbar } from "./Toolbar";
 import { LoadingMessage } from "./LoadingMessage";
 import { MobileMenu } from "./MobileMenu";
 import { PasteChartDialog } from "./PasteChartDialog";
@@ -61,6 +60,7 @@ import { Island } from "./Island";
 import { JSONExportDialog } from "./JSONExportDialog";
 import { LaserPointerButton } from "./LaserPointerButton";
 import { Toast } from "./Toast";
+import { Toolbar } from "./Toolbar";
 import {
   ViewportStatusBadge,
   ViewportStatusBorder,
@@ -198,10 +198,7 @@ const LayerUI = ({
   const [eyeDropperState, setEyeDropperState] = useAtom(activeEyeDropperAtom);
 
   const renderJSONExportDialog = () => {
-    if (
-      !UIOptions.canvasActions.export ||
-      UIOptions.canvasActions.hideIOActions
-    ) {
+    if (!UIOptions.canvasActions.export) {
       return null;
     }
 
@@ -232,7 +229,6 @@ const LayerUI = ({
         appState={appState}
         files={files}
         actionManager={actionManager}
-        options={UIOptions.canvasActions.saveAsImageOptions}
         onExportImage={onExportImage}
         onCloseRequest={() => setAppState({ openDialog: null })}
         name={app.getName()}
@@ -480,9 +476,8 @@ const LayerUI = ({
       {/* make sure we render host app components first so that we can detect
           them first on initial render to optimize layout shift */}
       {children}
-      {/* render component fallbacks. Can be rendered anywhere as they'll be
-          tunneled away. We only render tunneled components that actually
-        have defaults when host do not render anything. */}
+      {/* Fallback entry points are the default UI. Host components above keep
+          rendering into the outlets below even when defaults are disabled. */}
       {defaultUIEnabled && (
         <>
           <DefaultMainMenu UIOptions={UIOptions} />
@@ -511,6 +506,8 @@ const LayerUI = ({
           )}
         </>
       )}
+      {/* Keep supporting surfaces available to host-supplied UI, including
+          MainMenu.DefaultItems. */}
       <DefaultOverwriteConfirmDialog />
       {appState.openDialog?.name === "ttd" && <TTDDialog __fallback />}
       {/* ------------------------------------------------------------------ */}
@@ -608,7 +605,7 @@ const LayerUI = ({
       )}
       <tunnels.OverwriteConfirmDialogTunnel.Out />
       {renderImageExportDialog()}
-      {!UIOptions.canvasActions.hideIOActions && renderJSONExportDialog()}
+      {renderJSONExportDialog()}
       {defaultUIEnabled && appState.openDialog?.name === "charts" && (
         <PasteChartDialog
           data={appState.openDialog.data}
@@ -622,7 +619,6 @@ const LayerUI = ({
       )}
       {editorInterface.formFactor === "phone" && (
         <MobileMenu
-          allowedShapes={UIOptions.canvasActions.allowedShapes}
           app={app}
           appState={appState}
           elements={elements}
