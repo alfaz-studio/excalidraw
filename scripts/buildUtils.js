@@ -3,11 +3,15 @@ const path = require("path");
 const { build } = require("esbuild");
 const { sassPlugin } = require("esbuild-sass-plugin");
 
+const { BROWSER_TARGETS, packageTsconfig } = require("./buildTargets");
+
 const { woff2ServerPlugin } = require("./woff2/woff2-esbuild-plugins");
 
 // contains all dependencies bundled inside
 const getConfig = (outdir) => ({
   outdir,
+  tsconfig: packageTsconfig(),
+  target: BROWSER_TARGETS,
   bundle: true,
   format: "esm",
   entryPoints: ["src/index.ts"],

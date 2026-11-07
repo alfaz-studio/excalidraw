@@ -1071,6 +1071,19 @@ class App extends React.Component<AppProps, AppState> {
    * with it aren't selected. Forcing deliberately does not mutate
    * `activeTool.locked`, which is the user's persisted padlock preference.
    */
+  /**
+   * SONACOVE: whether the tool is one of the host's custom tools
+   * (`UIOptions.customToolGroup`) that stays active after a press.
+   */
+  private isStickyCustomTool(activeTool: AppState["activeTool"]): boolean {
+    const group = this.props.UIOptions.customToolGroup;
+    return (
+      activeTool.type === "custom" &&
+      group?.stayActive === true &&
+      group.tools.some((tool) => tool.customType === activeTool.customType)
+    );
+  }
+
   public isToolLocked(): boolean {
     return this.state.activeTool.locked || this.props.activeTool != null;
   }
@@ -10496,6 +10509,8 @@ class App extends React.Component<AppProps, AppState> {
         // bucket fill stays active for back-to-back fills regardless of the
         // tool lock (paint-bucket UX)
         activeTool.type !== TOOL_TYPE.bucketfill &&
+        // SONACOVE: so do a host's custom tools that ask for it (stamps)
+        !this.isStickyCustomTool(activeTool) &&
         (activeTool.type !== "lasso" ||
           // if lasso is turned on but from selection => reset to selection
           (activeTool.type === "lasso" && activeTool.fromSelection))
