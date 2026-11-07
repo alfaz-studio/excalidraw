@@ -18,6 +18,7 @@ import {
   SelectionToolPopover,
   TextToolButton,
   TOOLS,
+  CustomToolPopover,
 } from "./Tools";
 
 import {
@@ -99,8 +100,11 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
   const WIDTH = 36;
   const GAP = 4;
 
-  // hand, selection, freedraw, eraser, rectangle, arrow, others
-  const MIN_TOOLS = 7;
+  const customToolGroup = app.props.UIOptions.customToolGroup;
+
+  // hand, selection, freedraw, eraser, rectangle, arrow, others (+ the host's
+  // custom tools)
+  const MIN_TOOLS = customToolGroup ? 8 : 7;
   const MIN_WIDTH = MIN_TOOLS * WIDTH + (MIN_TOOLS - 1) * GAP;
   const ADDITIONAL_WIDTH = WIDTH + GAP;
 
@@ -213,6 +217,10 @@ export const MobileToolbar = ({ app, setAppState }: MobileToolbarProps) => {
           ) || LINEAR_ELEMENT_TOOLS[0]
         }
       />
+
+      {customToolGroup && (
+        <CustomToolPopover {...toolProps} group={customToolGroup} />
+      )}
 
       {/* Text Tool */}
       {showTextToolOutside && <TextToolButton {...toolProps} hideShortcut />}
