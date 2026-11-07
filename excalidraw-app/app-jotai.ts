@@ -10,15 +10,7 @@ import {
 } from "jotai";
 import { useLayoutEffect } from "react";
 
-import type {
-  INTERNAL_PrdStore,
-  INTERNAL_DevStoreRev4,
-} from "jotai/vanilla/store";
-type PrdOrDevStore =
-  | INTERNAL_PrdStore
-  | (INTERNAL_PrdStore & INTERNAL_DevStoreRev4);
-
-export const appJotaiStore: PrdOrDevStore = createStore();
+export const appJotaiStore = createStore();
 
 export { atom, Provider, useAtom, useAtomValue, useSetAtom };
 

@@ -114,7 +114,6 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
     aiEnabled,
     showDeprecatedFonts,
     renderScrollbars,
-    storageBackendUrl,
     lockedViewport,
     viewportRotation,
     elementAuthorId,
@@ -264,7 +263,6 @@ const ExcalidrawBase = (props: ExcalidrawProps) => {
           aiEnabled={aiEnabled !== false}
           showDeprecatedFonts={showDeprecatedFonts}
           renderScrollbars={renderScrollbars}
-          storageBackendUrl={storageBackendUrl}
           lockedViewport={lockedViewport}
           viewportRotation={viewportRotation}
           elementAuthorId={elementAuthorId}
@@ -538,20 +536,6 @@ export { setCustomTextMetricsProvider } from "@excalidraw/element";
 export type { RenderEnvironment } from "@excalidraw/element";
 
 export { CommandPalette } from "./components/CommandPalette/CommandPalette";
-
-export { Collab, ExcalidrawApp } from "./collab/index";
-
-export { generateCollaborationLinkData } from "../../excalidraw-app/data/index";
-// Scene-archive outcomes, for a host that wants to tell the user their board is
-// kept (and, more importantly, when it is not). Same host-hook shape as
-// setFileSaveOverride above.
-export { addSceneArchiveListener } from "../../excalidraw-app/data/storage";
-export type { SceneArchiveEvent } from "../../excalidraw-app/data/storage";
-
-// Archive the board and WAIT for it. For a host that is about to navigate away
-// (leaving a meeting): the unload-time saves ride `keepalive` and are dropped
-// above 56 KiB, so a host that can await should, before it tears the page down.
-export { flushSceneArchive } from "../../excalidraw-app/data/storage";
 
 export {
   renderSpreadsheet,

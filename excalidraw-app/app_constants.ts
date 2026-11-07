@@ -4,24 +4,12 @@ export const INITIAL_SCENE_UPDATE_TIMEOUT = 5000;
 export const FILE_UPLOAD_TIMEOUT = 300;
 export const LOAD_IMAGES_TIMEOUT = 500;
 export const SYNC_FULL_SCENE_INTERVAL_MS = 20000;
-// Floor between saves forced by the tab being hidden. That fires at user
-// frequency, so without a floor alt-tabbing mid-drawing drives a full save
-// cycle per hide. Below SYNC_FULL_SCENE_INTERVAL_MS on purpose: the point is to
-// catch a page we may never hear from again, not to match the throttle.
-export const VISIBILITY_FLUSH_MIN_INTERVAL_MS = 5000;
 export const SYNC_BROWSER_TABS_TIMEOUT = 50;
 export const CURSOR_SYNC_TIMEOUT = 33; // ~30fps
-export const STALE_COLLABORATOR_TIMEOUT_MS = 120_000; // 2× IDLE_THRESHOLD — must outlive idle gap
-export const STALE_CHECK_INTERVAL_MS = 15_000;
-// SONACOVE: a stroke preview whose finished element never arrived (lost, or its author left) is
-// dropped after this long without a frame.
-export const REMOTE_INK_TTL_MS = 60_000;
-// SONACOVE: a stroke in progress that has not grown for this long is sent finished without
-// waiting for a pen-up, which a pointercancel or lost focus never delivers.
-export const REMOTE_INK_STALL_MS = 2_000;
 export const DELETED_ELEMENT_TIMEOUT = 24 * 60 * 60 * 1000; // 1 day
 
-export const FILE_UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // Limit 10 MiB
+// should be aligned with MAX_ALLOWED_FILE_BYTES
+export const FILE_UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // 4 MiB
 // 1 year (https://stackoverflow.com/a/25201898/927631)
 export const FILE_CACHE_MAX_AGE_SEC = 31536000;
 
@@ -39,14 +27,11 @@ export enum WS_SUBTYPES {
   MOUSE_LOCATION = "MOUSE_LOCATION",
   IDLE_STATUS = "IDLE_STATUS",
   USER_VISIBLE_SCENE_BOUNDS = "USER_VISIBLE_SCENE_BOUNDS",
-  // SONACOVE: a stroke in progress, lossy. Builds without it fall to the receive switch's
-  // `assertNever(_, null)`, which is a silent no-op, and see the stroke when the pen lifts.
-  INK = "INK",
 }
 
 export const FIREBASE_STORAGE_PREFIXES = {
-  shareLinkFiles: `files/shareLinks`,
-  collabFiles: `files/rooms`,
+  shareLinkFiles: `/files/shareLinks`,
+  collabFiles: `/files/rooms`,
 };
 
 export const ROOM_ID_BYTES = 10;

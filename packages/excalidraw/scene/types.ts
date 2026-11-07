@@ -95,7 +95,7 @@ export type InteractiveCanvasRenderConfig = {
   remotePointerUserStates: Map<SocketId, UserIdleState>;
   remotePointerUsernames: Map<SocketId, string>;
   remotePointerButton: Map<SocketId, string | undefined>;
-  /** SONACOVE: peers' strokes in progress. See remoteInk.ts. */
+  /** SONACOVE: peers' strokes in progress. See renderRemoteInk.ts. */
   remoteInk: RemoteInk[];
   selectionColor: string;
   lastViewportPosition: { x: number; y: number };

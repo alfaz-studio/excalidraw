@@ -8,10 +8,6 @@ import {
   IV_LENGTH_BYTES,
 } from "@excalidraw/excalidraw/data/encryption";
 import { serializeAsJSON } from "@excalidraw/excalidraw/data/json";
-import {
-  restoreElements,
-  restoreAppState,
-} from "@excalidraw/excalidraw/data/restore";
 import { isInvisiblySmallElement } from "@excalidraw/element";
 import { isInitializedImageElement } from "@excalidraw/element";
 import { t } from "@excalidraw/excalidraw/i18n";
@@ -19,7 +15,6 @@ import { bytesToHexString } from "@excalidraw/common";
 
 import type { UserIdleState } from "@excalidraw/common";
 import type { ImportedDataState } from "@excalidraw/excalidraw/data/types";
-import type { InkFrame } from "@excalidraw/excalidraw/remoteInk";
 import type { SceneBounds } from "@excalidraw/element";
 import type {
   ExcalidrawElement,
@@ -41,7 +36,7 @@ import {
 } from "../app_constants";
 
 import { encodeFilesForUpload } from "./FileManager";
-import { saveFilesToStorage } from "./storage";
+import { saveFilesToFirebase } from "./firebase";
 
 import type { WS_SUBTYPES } from "../app_constants";
 
@@ -114,10 +109,6 @@ export type SocketUpdateDataSource = {
       username: string;
       sceneBounds: SceneBounds;
     };
-  };
-  INK: {
-    type: WS_SUBTYPES.INK;
-    payload: InkFrame & { socketId: SocketId };
   };
   IDLE_STATUS: {
     type: WS_SUBTYPES.IDLE_STATUS;
@@ -250,42 +241,6 @@ export const importFromBackend = async (
   }
 };
 
-export const loadScene = async (
-  id: string | null,
-  privateKey: string | null,
-  localDataState: ImportedDataState | undefined | null,
-) => {
-  let data;
-  if (id != null && privateKey != null) {
-    const imported = await importFromBackend(id, privateKey);
-    data = {
-      elements: restoreElements(imported?.elements, localDataState?.elements, {
-        repairBindings: true,
-        refreshDimensions: false,
-      }),
-      appState: restoreAppState(
-        imported?.appState,
-        localDataState?.appState || null,
-      ),
-      files: imported?.files || {},
-    };
-  } else {
-    data = {
-      elements: restoreElements(localDataState?.elements, null, {
-        repairBindings: true,
-      }),
-      appState: restoreAppState(localDataState?.appState, null),
-      files: localDataState?.files || {},
-    };
-  }
-
-  return {
-    elements: data.elements,
-    appState: data.appState,
-    files: data.files,
-  };
-};
-
 type ExportToBackendResult =
   | { url: null; errorMessage: string }
   | { url: string; errorMessage: null };
@@ -320,7 +275,7 @@ export const exportToBackend = async (
 
     const response = await fetch(BACKEND_V2_POST, {
       method: "POST",
-      body: new Uint8Array(payload) as BodyInit,
+      body: payload.buffer,
     });
     const json = await response.json();
     if (json.id) {
@@ -330,7 +285,7 @@ export const exportToBackend = async (
       url.hash = `json=${json.id},${encryptionKey}`;
       const urlString = url.toString();
 
-      await saveFilesToStorage({
+      await saveFilesToFirebase({
         prefix: `/files/shareLinks/${json.id}`,
         files: filesToUpload,
       });

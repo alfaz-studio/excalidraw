@@ -6,13 +6,7 @@ import {
   reconcileElements,
 } from "@excalidraw/excalidraw";
 import { ErrorDialog } from "@excalidraw/excalidraw/components/ErrorDialog";
-import {
-  APP_NAME,
-  cloneJSON,
-  EVENT,
-  randomId,
-  toBrandedType,
-} from "@excalidraw/common";
+import { APP_NAME, cloneJSON, EVENT, toBrandedType } from "@excalidraw/common";
 import {
   IDLE_THRESHOLD,
   ACTIVE_THRESHOLD,
@@ -55,7 +49,6 @@ import type {
   SocketId,
   Collaborator,
   Gesture,
-  IMeetingDetails,
   UserToFollow,
 } from "@excalidraw/excalidraw/types";
 import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
@@ -63,15 +56,12 @@ import type { Mutable, ValueOf } from "@excalidraw/common/utility-types";
 import { appJotaiStore, atom } from "../app-jotai";
 import {
   CURSOR_SYNC_TIMEOUT,
-  STALE_COLLABORATOR_TIMEOUT_MS,
-  STALE_CHECK_INTERVAL_MS,
   FILE_UPLOAD_MAX_BYTES,
   FIREBASE_STORAGE_PREFIXES,
   INITIAL_SCENE_UPDATE_TIMEOUT,
   LOAD_IMAGES_TIMEOUT,
   WS_SUBTYPES,
   SYNC_FULL_SCENE_INTERVAL_MS,
-  VISIBILITY_FLUSH_MIN_INTERVAL_MS,
   WS_EVENTS,
 } from "../app_constants";
 import {
@@ -87,16 +77,12 @@ import {
 import { FileStatusStore } from "../data/fileStatusStore";
 import { LocalData } from "../data/LocalData";
 import {
-  isSavedToStorage,
-  loadFilesFromStorage,
-  loadFromStorage,
-  saveFilesToStorage,
-  saveToStorage,
-  initializeBackend,
-  setSceneFlushHandler,
-  canPersistScene,
-  releaseBackend,
-} from "../data/storage";
+  isSavedToFirebase,
+  loadFilesFromFirebase,
+  loadFromFirebase,
+  saveFilesToFirebase,
+  saveToFirebase,
+} from "../data/firebase";
 import {
   importUsernameFromLocalStorage,
   saveUsernameToLocalStorage,
@@ -149,8 +135,6 @@ export interface CollabAPI {
 
 interface CollabProps {
   excalidrawAPI: ExcalidrawImperativeAPI;
-  storageBackendUrl?: string;
-  meetingDetails: IMeetingDetails;
 }
 
 class Collab extends PureComponent<CollabProps, CollabState> {
@@ -161,32 +145,8 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   idleTimeoutId: number | null;
 
   private socketInitializationTimer?: number;
-  private lastVisibilityFlush = 0;
   private lastBroadcastedOrReceivedSceneVersion: number = -1;
   private collaborators = new Map<SocketId, Collaborator>();
-  private collaboratorLastSeen = new Map<SocketId, number>();
-  private staleCollaboratorTimerId: number | null = null;
-  private clientId = randomId();
-
-  /**
-   * SONACOVE: identity stamped onto this client's elements by Portal. The
-   * standalone app has no host-supplied participant id, so it always uses
-   * `clientId`. See @excalidraw/excalidraw/elementOwnership.
-   */
-  getElementAuthorId = (): string => this.clientId;
-
-  /**
-   * SONACOVE: mirrors the packaged Collab's capability split. The standalone app
-   * has no per-surface override, so both halves follow `storageBackendUrl`.
-   */
-  get filesEnabled(): boolean {
-    return Boolean(this.props.storageBackendUrl);
-  }
-
-  get sceneEnabled(): boolean {
-    return Boolean(this.props.storageBackendUrl);
-  }
-
   /** the socket ids of the users following the current user */
   private followedBy = new Set<SocketId>();
 
@@ -207,12 +167,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           throw new AbortError();
         }
 
-        return loadFilesFromStorage(
-          `files/rooms/${roomId}`,
-          roomKey,
-          fileIds,
-          roomId,
-        );
+        return loadFilesFromFirebase(`files/rooms/${roomId}`, roomKey, fileIds);
       },
       saveFiles: async ({ addedFiles }) => {
         const { roomId, roomKey } = this.portal;
@@ -220,19 +175,18 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           throw new AbortError();
         }
 
-        const { savedFiles, erroredFiles } = await saveFilesToStorage({
+        const { savedFiles, erroredFiles } = await saveFilesToFirebase({
           prefix: `${FIREBASE_STORAGE_PREFIXES.collabFiles}/${roomId}`,
           files: await encodeFilesForUpload({
             files: addedFiles,
             encryptionKey: roomKey,
             maxBytes: FILE_UPLOAD_MAX_BYTES,
           }),
-          roomId,
         });
 
         return {
           savedFiles: savedFiles.reduce(
-            (acc: Map<FileId, BinaryFileData>, id: FileId) => {
+            (acc: Map<FileId, BinaryFileData>, id) => {
               const fileData = addedFiles.get(id);
               if (fileData) {
                 acc.set(id, fileData);
@@ -242,7 +196,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             new Map(),
           ),
           erroredFiles: erroredFiles.reduce(
-            (acc: Map<FileId, BinaryFileData>, id: FileId) => {
+            (acc: Map<FileId, BinaryFileData>, id) => {
               const fileData = addedFiles.get(id);
               if (fileData) {
                 acc.set(id, fileData);
@@ -266,11 +220,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     window.addEventListener("online", this.onOfflineStatusChange);
     window.addEventListener("offline", this.onOfflineStatusChange);
     window.addEventListener(EVENT.UNLOAD, this.onUnload);
-
-    // Lets the host archive the board and WAIT for it before it navigates away
-    // — the only way to beat the keepalive size cap, which silently drops the
-    // last edits of any board over 56 KiB.
-    setSceneFlushHandler(this.flushSceneNow);
 
     const unsubOnUserFollow = this.excalidrawAPI.onUserFollow((payload) => {
       this.setUserToFollow(
@@ -321,49 +270,12 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     appJotaiStore.set(isOfflineAtom, !window.navigator.onLine);
   };
 
-  componentDidUpdate(prevProps: CollabProps) {
-    // The storage backend was configured ONCE when collaboration started, from
-    // whatever meetingDetails existed at that instant. Two things change after
-    // it, and both were being ignored:
-    //
-    // - `token`. It is fetched asynchronously once the board opens, so at
-    //   startCollaboration it is frequently still empty — and the init is
-    //   gated on it. Without this the backend stayed uninitialised for the
-    //   WHOLE meeting and nothing was ever archived, silently.
-    // - `canPersistScene`. The writer is elected from the participant list, so
-    //   it flips when the elected writer leaves or roles change. A stale copy
-    //   leaves the room with no writer at all.
-    const { storageBackendUrl, meetingDetails } = this.props;
-    const prev = prevProps.meetingDetails;
-
-    if (
-      this.portal.roomId &&
-      storageBackendUrl &&
-      meetingDetails?.sessionId &&
-      meetingDetails.token &&
-      (prev?.token !== meetingDetails.token ||
-        prev?.canPersistScene !== meetingDetails.canPersistScene ||
-        prev?.sessionId !== meetingDetails.sessionId)
-    ) {
-      try {
-        initializeBackend(
-          this.portal.roomId,
-          storageBackendUrl,
-          meetingDetails,
-        );
-      } catch (error) {
-        console.error("Failed to re-initialize storage backend:", error);
-      }
-    }
-  }
-
   onOfflineStatusChange = debounce(
     this.onOfflineStatusToggle,
     OFFLINE_STATUS_DEBOUNCE_TIMEOUT,
   );
 
   componentWillUnmount() {
-    setSceneFlushHandler(null);
     window.removeEventListener("online", this.onOfflineStatusChange);
     window.removeEventListener("offline", this.onOfflineStatusChange);
     this.onOfflineStatusChange.cancel();
@@ -381,10 +293,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     if (this.idleTimeoutId) {
       window.clearTimeout(this.idleTimeoutId);
       this.idleTimeoutId = null;
-    }
-    if (this.staleCollaboratorTimerId) {
-      window.clearInterval(this.staleCollaboratorTimerId);
-      this.staleCollaboratorTimerId = null;
     }
     this.onUmmount?.();
   }
@@ -407,13 +315,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     if (
       this.isCollaborating() &&
       (this.fileManager.shouldPreventUnload(syncableElements) ||
-        !isSavedToStorage(this.portal, syncableElements))
+        !isSavedToFirebase(this.portal, syncableElements))
     ) {
-      // Marked final so the upload goes out with `keepalive` and can outlive the
-      // page — otherwise leaving at the confirm dialog cancels it mid-flight and
-      // the last edits are gone. Still best-effort above the keepalive size cap,
-      // which is what preventUnload below is for.
-      this.saveCollabRoomToFirebase(syncableElements, { final: true });
+      // this won't run in time if user decides to leave the site, but
+      //  the purpose is to run in immediately after user decides to stay
+      this.saveCollabRoomToFirebase(syncableElements);
 
       if (import.meta.env.VITE_APP_DISABLE_PREVENT_UNLOAD !== "true") {
         preventUnload(event);
@@ -425,67 +331,45 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     }
   });
 
-  /**
-   * Archives the board and resolves once the upload has settled.
-   *
-   * Deliberately NOT `{ final: true }`: `final` exists to buy `keepalive` for a
-   * save that cannot be awaited, and it is capped at 56 KiB. Here the page is
-   * still alive precisely because the host is awaiting us, so an ordinary
-   * request is both unbounded in size and actually observable.
-   *
-   * The pending throttled save is cancelled first so it cannot fire a second,
-   * older write behind this one.
-   *
-   * @returns {Promise<void>} Resolves when the save settles.
-   */
-  flushSceneNow = async (): Promise<void> => {
-    this.queueSaveToFirebase.cancel();
-
-    await this.saveCollabRoomToFirebase(
-      getSyncableElements(
-        this.excalidrawAPI.getSceneElementsIncludingDeleted(),
-      ),
-      // Not `final` (that buys keepalive for a save nobody can await) —
-      // `flushed` tells the host this is the last one, so anything it derives
-      // from the scene refreshes now or never.
-      { flushed: true },
-    );
-  };
-
   saveCollabRoomToFirebase = async (
     syncableElements: readonly SyncableExcalidrawElement[],
-    opts?: { final?: boolean; flushed?: boolean },
   ) => {
-    // The clone protects the array from mutation across the await below, which
-    // only matters if there IS a write. `saveToStorage` bails non-writers out
-    // before it touches anything, so in a ten-person meeting nine clients were
-    // deep-copying the whole element array every tick purely to discard it,
-    // each blocking its own main thread while people draw.
-    //
-    // Only the copy is skipped — everything downstream still runs exactly as
-    // before, including the post-save error-indicator reset.
-    syncableElements = canPersistScene(this.portal.roomId)
-      ? cloneJSON(syncableElements)
-      : syncableElements;
+    syncableElements = cloneJSON(syncableElements);
     try {
-      const storedElements = await saveToStorage(
+      const storedElements = await saveToFirebase(
         this.portal,
         syncableElements,
         this.excalidrawAPI.getAppState(),
-        opts,
       );
 
       this.resetErrorIndicator();
 
       if (this.isCollaborating() && storedElements) {
-        this.handleRemoteSceneUpdate(
-          this._reconcileElements(
-            toBrandedType<readonly RemoteExcalidrawElement[]>(storedElements),
-          ),
-        );
+        this.handleRemoteSceneUpdate(this._reconcileElements(storedElements));
       }
-    } catch (error) {
-      console.error("Failed to save collab room:", error);
+    } catch (error: any) {
+      const errorMessage = /is longer than.*?bytes/.test(error.message)
+        ? t("errors.collabSaveFailed_sizeExceeded")
+        : t("errors.collabSaveFailed");
+
+      if (
+        !this.state.dialogNotifiedErrors[errorMessage] ||
+        !this.isCollaborating()
+      ) {
+        this.setErrorDialog(errorMessage);
+        this.setState({
+          dialogNotifiedErrors: {
+            ...this.state.dialogNotifiedErrors,
+            [errorMessage]: true,
+          },
+        });
+      }
+
+      if (this.isCollaborating()) {
+        this.setErrorIndicator(errorMessage);
+      }
+
+      console.error(error);
     }
   };
 
@@ -495,13 +379,10 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.loadImageFiles.cancel();
     this.resetErrorIndicator(true);
 
-    // Final: leaving a meeting usually navigates the page away immediately
-    // after this, which would cancel an ordinary in-flight upload.
     this.saveCollabRoomToFirebase(
       getSyncableElements(
         this.excalidrawAPI.getSceneElementsIncludingDeleted(),
       ),
-      { final: true },
     );
 
     if (this.portal.socket && this.fallbackInitializationHandler) {
@@ -541,14 +422,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   };
 
   private destroySocketClient = (opts?: { isUnload: boolean }) => {
-    // `portal.close()` below nulls the roomId, so release before that.
-    releaseBackend(this.portal.roomId);
-
-    if (this.staleCollaboratorTimerId) {
-      window.clearInterval(this.staleCollaboratorTimerId);
-      this.staleCollaboratorTimerId = null;
-    }
-    this.collaboratorLastSeen.clear();
     this.lastBroadcastedOrReceivedSceneVersion = -1;
     this.portal.close();
     this.fileManager.reset();
@@ -599,14 +472,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     decryptionKey: string,
   ): Promise<ValueOf<SocketUpdateDataSource>> => {
     try {
-      // Empty IV = plaintext (no encryption)
-      if (iv.byteLength === 0) {
-        const decodedData = new TextDecoder("utf-8").decode(
-          new Uint8Array(encryptedData),
-        );
-        return JSON.parse(decodedData);
-      }
-
       const decrypted = await decryptData(iv, encryptedData, decryptionKey);
 
       const decodedData = new TextDecoder("utf-8").decode(
@@ -652,30 +517,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       );
     }
 
-    // Initializing storage backend if storageBackendUrl & jwt are provided
-    const { storageBackendUrl, meetingDetails } = this.props;
-    // Session Id is required to initialize the storage backend
-    if (
-      storageBackendUrl &&
-      meetingDetails?.sessionId &&
-      meetingDetails.token
-    ) {
-      try {
-        initializeBackend(roomId, storageBackendUrl, meetingDetails);
-      } catch (error) {
-        console.error("Failed to initialize storage backend:", error);
-        this.setErrorDialog(
-          `Storage initialization failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    } else {
-      console.error(
-        "Storage not initialized: missing storage backend configuration",
-      );
-    }
-
     // TODO: `ImportedDataState` type here seems abused
     const scenePromise = resolvablePromise<
       | (ImportedDataState & { elements: readonly OrderedExcalidrawElement[] })
@@ -700,29 +541,18 @@ class Collab extends PureComponent<CollabProps, CollabState> {
     this.fallbackInitializationHandler = fallbackInitializationHandler;
 
     try {
-      const { meetingDetails } = this.props;
       this.portal.socket = this.portal.open(
         socketIOClient(import.meta.env.VITE_APP_WS_SERVER_URL, {
           transports: ["websocket", "polling"],
         }),
         roomId,
         roomKey,
-        meetingDetails
-          ? {
-              meetingId: meetingDetails.sessionId,
-              roomName: meetingDetails.roomJid,
-              sceneType: meetingDetails.sceneType || "whiteboard",
-              clientId: this.clientId,
-            }
-          : { clientId: this.clientId },
       );
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      this.setErrorDialog(
-        error instanceof Error ? error.message : String(error),
-      );
+      this.setErrorDialog(error.message);
       return null;
     }
 
@@ -858,11 +688,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             break;
           }
 
-          // SONACOVE: live ink is drawn by the meeting's Collab (packages/excalidraw/collab);
-          // this app shows a peer's stroke when it lands.
-          case WS_SUBTYPES.INK:
-            break;
-
           default: {
             assertNever(decryptedData, null);
           }
@@ -892,14 +717,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
     this.initializeIdleDetector();
 
-    if (this.staleCollaboratorTimerId) {
-      window.clearInterval(this.staleCollaboratorTimerId);
-    }
-    this.staleCollaboratorTimerId = window.setInterval(
-      this.pruneStaleCollaborators,
-      STALE_CHECK_INTERVAL_MS,
-    );
-
     this.setActiveRoomLink(window.location.href);
 
     return scenePromise;
@@ -925,7 +742,7 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       this.excalidrawAPI.resetScene();
 
       try {
-        const elements = await loadFromStorage(
+        const elements = await loadFromFirebase(
           roomLinkData.roomId,
           roomLinkData.roomKey,
           this.portal.socket,
@@ -940,16 +757,14 @@ class Collab extends PureComponent<CollabProps, CollabState> {
             scrollToContent: true,
           };
         }
-      } catch (error) {
+      } catch (error: any) {
         // log the error and move on. other peers will sync us the scene.
         console.error(error);
       } finally {
         this.portal.socketInitialized = true;
-        await this.portal.flushPendingBroadcasts();
       }
     } else {
       this.portal.socketInitialized = true;
-      await this.portal.flushPendingBroadcasts();
     }
     return null;
   };
@@ -1032,21 +847,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
 
   private onVisibilityChange = () => {
     if (document.hidden) {
-      // A hidden tab is the last reliable signal before a page we never get an
-      // unload from — the mobile/bfcache path in particular.
-      //
-      // Rate-limited because this fires at USER frequency, not the 20s throttle:
-      // alt-tabbing while drawing would otherwise force a full cycle per hide
-      // (scene read, reconcile, write). The case this exists for — a hide that
-      // precedes a page we never hear from again — is unaffected, since that
-      // hide is the first one after any recent save.
-      const now = Date.now();
-
-      if (now - this.lastVisibilityFlush >= VISIBILITY_FLUSH_MIN_INTERVAL_MS) {
-        this.lastVisibilityFlush = now;
-        this.queueSaveToFirebase.flush();
-      }
-
       if (this.idleTimeoutId) {
         window.clearTimeout(this.idleTimeoutId);
         this.idleTimeoutId = null;
@@ -1086,8 +886,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
   setCollaborators(sockets: SocketId[]) {
     const collaborators: InstanceType<typeof Collab>["collaborators"] =
       new Map();
-    const now = Date.now();
-    const socketSet = new Set(sockets);
     for (const socketId of sockets) {
       const isCurrentUser = socketId === this.portal.socket?.id;
       collaborators.set(
@@ -1100,12 +898,6 @@ class Collab extends PureComponent<CollabProps, CollabState> {
           { isCurrentUser },
         ),
       );
-      this.collaboratorLastSeen.set(socketId, now);
-    }
-    for (const socketId of this.collaboratorLastSeen.keys()) {
-      if (!socketSet.has(socketId)) {
-        this.collaboratorLastSeen.delete(socketId);
-      }
     }
     this.collaborators = collaborators;
     this.excalidrawAPI.updateScene({ collaborators });
@@ -1129,39 +921,11 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       { isCurrentUser },
     );
     collaborators.set(socketId, user);
-    this.collaboratorLastSeen.set(socketId, Date.now());
     this.collaborators = collaborators;
 
     this.excalidrawAPI.updateScene({
       collaborators,
     });
-  };
-
-  private pruneStaleCollaborators = () => {
-    if (!this.isCollaborating()) {
-      return;
-    }
-    const now = Date.now();
-    let pruned = false;
-    const collaborators = new Map(this.collaborators);
-    for (const [socketId, collaborator] of collaborators) {
-      if (collaborator.isCurrentUser) {
-        continue;
-      }
-      const lastSeen = this.collaboratorLastSeen.get(socketId);
-      if (
-        lastSeen !== undefined &&
-        now - lastSeen > STALE_COLLABORATOR_TIMEOUT_MS
-      ) {
-        collaborators.delete(socketId);
-        this.collaboratorLastSeen.delete(socketId);
-        pruned = true;
-      }
-    }
-    if (pruned) {
-      this.collaborators = collaborators;
-      this.excalidrawAPI.updateScene({ collaborators });
-    }
   };
 
   public setLastBroadcastedOrReceivedSceneVersion = (version: number) => {

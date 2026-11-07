@@ -74,7 +74,6 @@ import type {
   BinaryFiles,
   ExcalidrawInitialDataState,
   UIAppState,
-  IMeetingDetails,
   ExcalidrawProps,
 } from "@excalidraw/excalidraw/types";
 import type { ResolutionType } from "@excalidraw/common/utility-types";
@@ -123,7 +122,7 @@ import {
   importUsernameFromLocalStorage,
 } from "./data/localStorage";
 
-import { loadFilesFromStorage } from "./data/storage";
+import { loadFilesFromFirebase } from "./data/firebase";
 import {
   LibraryIndexedDBAdapter,
   LibraryLocalStorageMigrationAdapter,
@@ -373,16 +372,9 @@ const initializeScene = async (opts: {
   return { scene: null, isExternalScene: false };
 };
 
-interface ExcalidrawWrapperProps {
-  storageBackendUrl?: string;
-  meetingDetails: IMeetingDetails;
-}
-
-const ExcalidrawWrapper = ({
-  storageBackendUrl,
-  meetingDetails,
-}: ExcalidrawWrapperProps) => {
+const ExcalidrawWrapper = () => {
   const excalidrawAPI = useExcalidrawAPI();
+
   const [errorMessage, setErrorMessage] = useState("");
   const isCollabDisabled = isRunningInIframe();
 
@@ -515,7 +507,13 @@ const ExcalidrawWrapper = ({
           }, [] as FileId[]) || [];
 
         if (data.isExternalScene) {
-          loadFilesFromStorage(
+          if (fileIds.length) {
+            // Direct Firebase call (not through FileManager), so track manually
+            FileStatusStore.updateStatuses(
+              fileIds.map((id) => [id, "loading"]),
+            );
+          }
+          loadFilesFromFirebase(
             `${FIREBASE_STORAGE_PREFIXES.shareLinkFiles}/${data.id}`,
             data.key,
             fileIds,
@@ -963,7 +961,6 @@ const ExcalidrawWrapper = ({
         initialData={initialStatePromiseRef.current.promise}
         isCollaborating={isCollaborating}
         onPointerUpdate={collabAPI?.onPointerUpdate}
-        storageBackendUrl={storageBackendUrl}
         UIOptions={{
           canvasActions: {
             toggleTheme: true,
@@ -1091,11 +1088,7 @@ const ExcalidrawWrapper = ({
           />
         )}
         {excalidrawAPI && !isCollabDisabled && (
-          <Collab
-            excalidrawAPI={excalidrawAPI}
-            storageBackendUrl={storageBackendUrl}
-            meetingDetails={meetingDetails}
-          />
+          <Collab excalidrawAPI={excalidrawAPI} />
         )}
 
         <ShareDialog
@@ -1317,20 +1310,7 @@ const ExcalidrawWrapper = ({
   );
 };
 
-interface ExcalidrawAppProps {
-  storageBackendUrl?: string;
-  meetingDetails?: IMeetingDetails;
-}
-
-const meetingDetails = {
-  sessionId: "example-session-id",
-  roomJid: "example-room-jid",
-  jwt: "example-jwt",
-  jid: "example-jid",
-  token: "token",
-};
-
-const ExcalidrawApp = (props?: ExcalidrawAppProps) => {
+const ExcalidrawApp = () => {
   const isCloudExportWindow =
     window.location.pathname === "/excalidraw-plus-export";
   if (isCloudExportWindow) {
@@ -1341,10 +1321,7 @@ const ExcalidrawApp = (props?: ExcalidrawAppProps) => {
     <TopErrorBoundary>
       <Provider store={appJotaiStore}>
         <ExcalidrawAPIProvider>
-          <ExcalidrawWrapper
-            storageBackendUrl={import.meta.env.VITE_APP_STORAGE_BACKEND_URL}
-            meetingDetails={meetingDetails}
-          />
+          <ExcalidrawWrapper />
         </ExcalidrawAPIProvider>
       </Provider>
     </TopErrorBoundary>

@@ -102,7 +102,11 @@ export class FileManager {
       const fileData =
         isInitializedImageElement(element) && files[element.fileId];
 
-      if (fileData && !this.isFileSavedOrBeingSaved(fileData)) {
+      if (
+        fileData &&
+        // NOTE if errored during save, won't retry due to this check
+        !this.isFileSavedOrBeingSaved(fileData)
+      ) {
         addedFiles.set(element.fileId, files[element.fileId]);
         this.savingFiles.set(element.fileId, this.getFileVersion(fileData));
       }
@@ -204,13 +208,6 @@ export class FileManager {
       element.status === "pending"
     );
   };
-
-  /** Lets these failed downloads be retried, e.g. once the room's storage arms late. */
-  clearFetchErrors(ids: Iterable<FileId>) {
-    for (const id of ids) {
-      this.erroredFiles_fetch.delete(id);
-    }
-  }
 
   reset() {
     if (this._onFileStatusChange && this.fetchingFiles.size) {

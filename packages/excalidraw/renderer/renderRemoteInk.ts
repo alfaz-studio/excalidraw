@@ -1,4 +1,5 @@
-// SONACOVE: draws peers' strokes in progress on the interactive canvas. See remoteInk.ts.
+// SONACOVE: draws peers' strokes in progress on the interactive canvas, from
+// `collaborators[].inkStrokes`. The host collab layer streams and folds the frames.
 import { applyDarkModeFilter, THEME } from "@excalidraw/common";
 import { getFreedrawOutlinePoints } from "@excalidraw/element";
 

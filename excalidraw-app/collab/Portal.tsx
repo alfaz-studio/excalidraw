@@ -1,14 +1,12 @@
 import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
-import { stampElementAuthors } from "@excalidraw/excalidraw/elementOwnership";
+import { encryptData } from "@excalidraw/excalidraw/data/encryption";
 import { newElementWith } from "@excalidraw/element";
 import throttle from "lodash.throttle";
 
 import type { UserIdleState } from "@excalidraw/common";
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
-import type { InkFrame } from "@excalidraw/excalidraw/remoteInk";
 import type {
-  CollabSocket,
   OnUserFollowedPayload,
   SocketId,
 } from "@excalidraw/excalidraw/types";
@@ -22,46 +20,29 @@ import type {
   SyncableExcalidrawElement,
 } from "../data";
 import type { TCollabClass } from "./Collab";
-
-export interface RoomMetadata {
-  meetingId?: string;
-  roomName?: string;
-  sceneType?: "whiteboard" | "annotation";
-  clientId?: string;
-}
-
-const textEncoder = new TextEncoder();
-const EMPTY_IV = new Uint8Array(0);
+import type { Socket } from "socket.io-client";
 
 class Portal {
   collab: TCollabClass;
-  socket: CollabSocket | null = null;
+  socket: Socket | null = null;
   socketInitialized: boolean = false; // we don't want the socket to emit any updates until it is fully initialized
   roomId: string | null = null;
   roomKey: string | null = null;
-  roomMetadata: RoomMetadata | null = null;
   broadcastedElementVersions: Map<string, number> = new Map();
-  pendingBroadcasts: Array<() => Promise<void>> = []; // queue broadcasts until socket is initialized
 
   constructor(collab: TCollabClass) {
     this.collab = collab;
   }
 
-  open(socket: CollabSocket, id: string, key: string, metadata?: RoomMetadata) {
+  open(socket: Socket, id: string, key: string) {
     this.socket = socket;
     this.roomId = id;
     this.roomKey = key;
-    this.roomMetadata = metadata ?? null;
-
-    // Remove any stale listeners to prevent duplicates on reconnection
-    this.socket.off("init-room");
-    this.socket.off("new-user");
-    this.socket.off("room-user-change");
 
     // Initialize socket listeners
     this.socket.on("init-room", () => {
       if (this.socket) {
-        this.socket.emit("join-room", this.roomId, this.roomMetadata ?? {});
+        this.socket.emit("join-room", this.roomId);
         trackEvent("share", "room joined");
       }
     });
@@ -84,18 +65,12 @@ class Portal {
       return;
     }
     this.queueFileUpload.flush();
-    // Remove listeners before closing to prevent dangling handlers
-    this.socket.off("init-room");
-    this.socket.off("new-user");
-    this.socket.off("room-user-change");
     this.socket.close();
     this.socket = null;
     this.roomId = null;
     this.roomKey = null;
-    this.roomMetadata = null;
     this.socketInitialized = false;
     this.broadcastedElementVersions = new Map();
-    this.pendingBroadcasts = [];
   }
 
   isOpen() {
@@ -107,57 +82,26 @@ class Portal {
     );
   }
 
-  /** Completes socket initialization and drains the queued broadcasts. */
-  markSocketInitialized() {
-    this.socketInitialized = true;
-    this.flushPendingBroadcasts();
-  }
-
   async _broadcastSocketData(
     data: SocketUpdateData,
     volatile: boolean = false,
     roomId?: string,
   ) {
-    const broadcast = async () => {
-      if (this.socket && this.roomId && this.roomKey) {
-        const encoded = textEncoder.encode(JSON.stringify(data));
+    if (this.isOpen()) {
+      const json = JSON.stringify(data);
+      const encoded = new TextEncoder().encode(json);
+      const { encryptedBuffer, iv } = await encryptData(this.roomKey!, encoded);
 
-        // Payloads are sent plaintext with a zero-length IV sentinel;
-        // receivers (Collab.decryptPayload) treat an empty IV as plaintext.
-        this.socket.emit(
-          volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
-          roomId ?? this.roomId,
-          encoded,
-          EMPTY_IV,
-        );
-      }
-    };
-
-    // If socket is not yet initialized, queue the broadcast
-    if (!this.socketInitialized) {
-      this.pendingBroadcasts.push(broadcast);
-      return;
-    }
-
-    await broadcast();
-  }
-
-  async flushPendingBroadcasts() {
-    const broadcasts = this.pendingBroadcasts;
-    this.pendingBroadcasts = [];
-
-    for (const broadcast of broadcasts) {
-      await broadcast();
+      this.socket?.emit(
+        volatile ? WS_EVENTS.SERVER_VOLATILE : WS_EVENTS.SERVER,
+        roomId ?? this.roomId,
+        encryptedBuffer,
+        iv,
+      );
     }
   }
 
   queueFileUpload = throttle(async () => {
-    // Every broadcast used to trigger an upload sweep unconditionally, so a
-    // surface with file storage off still pushed bytes at the backend.
-    if (!this.collab.filesEnabled) {
-      return;
-    }
-
     try {
       await this.collab.fileManager.saveFiles({
         elements: this.collab.excalidrawAPI.getSceneElementsIncludingDeleted(),
@@ -207,18 +151,8 @@ class Portal {
     // sync out only the elements we think we need to to save bandwidth.
     // periodically we'll resync the whole thing to make sure no one diverges
     // due to a dropped message (server goes down etc).
-    // SONACOVE: the stroke being drawn goes out once, finished, when the pen lifts — never
-    // version by version. Not recorded as broadcast either, which is what lets the release send
-    // it. See remoteInk.ts. Optional because Portal is shared with the upstream app's own Collab,
-    // which has no release path and so must never hold a stroke back.
-    const inkId =
-      (
-        this.collab as Partial<{ getInkElementId: () => string | null }>
-      ).getInkElementId?.() ?? null;
-
     const syncableElements = elements.reduce((acc, element) => {
       if (
-        element.id !== inkId &&
         (syncAll ||
           !this.broadcastedElementVersions.has(element.id) ||
           element.version > this.broadcastedElementVersions.get(element.id)!) &&
@@ -229,20 +163,10 @@ class Portal {
       return acc;
     }, [] as SyncableExcalidrawElement[]);
 
-    // SONACOVE: tag this client's elements with their author on the way out.
-    // Every outbound path funnels through here — the UPDATE delta and the
-    // periodic syncAll resync — so an element is stamped once regardless of
-    // which tool drew it, and the resync can't push an untagged copy that would
-    // strip a peer's edit protection. See elementOwnership.ts.
-    const authoredElements = stampElementAuthors(
-      syncableElements,
-      this.collab.getElementAuthorId(),
-    );
-
     const data: SocketUpdateDataSource[typeof updateType] = {
       type: updateType,
       payload: {
-        elements: authoredElements,
+        elements: syncableElements,
       },
     };
 
@@ -256,22 +180,6 @@ class Portal {
     this.queueFileUpload();
 
     await this._broadcastSocketData(data as SocketUpdateData);
-  };
-
-  /** SONACOVE: one frame of the local stroke in progress, lossy. See remoteInk.ts. */
-  broadcastInk = (frame: InkFrame) => {
-    // Not queued for later like the scene: a frame is stale the moment the next one exists.
-    if (this.socket?.id && this.socketInitialized) {
-      const data: SocketUpdateDataSource["INK"] = {
-        type: WS_SUBTYPES.INK,
-        payload: { ...frame, socketId: this.socket.id as SocketId },
-      };
-
-      return this._broadcastSocketData(
-        data as SocketUpdateData,
-        true, // volatile
-      );
-    }
   };
 
   broadcastIdleChange = (userState: UserIdleState) => {

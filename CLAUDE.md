@@ -3,12 +3,14 @@
 ## Critical Rules
 
 - **NEVER add AI as a co-author** in commits or PRs. No `Co-Authored-By` lines for any AI.
-- **Branch: `main`** — always work with `origin` (alfaz-studio/excalidraw), not upstream.
+- **Branch: `main`** — always work with `origin` (Sonacove's fork), not upstream.
 - **Conventional Commits** with scopes: `feat(feature-name): description`
 
 ## Project Structure
 
-This is a **fork of Excalidraw** used as a git submodule in the [jitsi-meet](https://github.com/alfaz-studio/jitsi-meet) repo. It is a **monorepo** with a clear separation between the core library and the application:
+This is Sonacove's **fork of [excalidraw/excalidraw](https://github.com/excalidraw/excalidraw)**: upstream `master` plus a short series of Sonacove patches. It is a git submodule of the [Sonacove monorepo](https://github.com/alfaz-studio/sonacove) at `apps/meet/excalidraw`, where the meet app builds it with `build-jitsi.sh` and consumes only the package's public exports. Collaboration, storage and live-ink transport live in the host (`apps/meet/react/features/board/`), not here. The patch list and the upstream-sync steps are in the monorepo's `docs/meet/excalidraw-fork-patches.md`.
+
+It is a **monorepo** with a clear separation between the core library and the application:
 
 - **`packages/excalidraw/`** - Main React component library published to npm as `@excalidraw/excalidraw`
 - **`excalidraw-app/`** - Full-featured web application (excalidraw.com) that uses the library

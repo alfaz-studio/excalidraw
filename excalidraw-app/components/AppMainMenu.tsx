@@ -1,34 +1,47 @@
+import {
+  loginIcon,
+  ExcalLogo,
+  eyeIcon,
+} from "@excalidraw/excalidraw/components/icons";
+import { useI18n } from "@excalidraw/excalidraw/i18n";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import React from "react";
 
+import { isDevEnv } from "@excalidraw/common";
+
 import type { Theme } from "@excalidraw/element/types";
+
+import { LanguageList } from "../app-language/LanguageList";
+import { isExcalidrawPlusSignedUser } from "../app_constants";
+
+import { saveDebugState } from "./DebugCanvas";
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
   isCollaborating: boolean;
   isCollabEnabled: boolean;
   theme: Theme | "system";
-  setTheme?: (theme: Theme | "system") => void;
   refresh: () => void;
 }> = React.memo((props) => {
+  const { t } = useI18n();
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
       <MainMenu.DefaultItems.SaveToActiveFile />
       <MainMenu.DefaultItems.Export />
       <MainMenu.DefaultItems.SaveAsImage />
-      {/* {props.isCollabEnabled && (
+      {props.isCollabEnabled && (
         <MainMenu.DefaultItems.LiveCollaborationTrigger
           isCollaborating={props.isCollaborating}
           onSelect={() => props.onCollabDialogOpen()}
         />
-      )} */}
-      {/* <MainMenu.DefaultItems.CommandPalette className="highlighted" /> */}
-      {/* <MainMenu.DefaultItems.SearchMenu /> */}
-      {/* <MainMenu.DefaultItems.Help /> */}
+      )}
+      <MainMenu.DefaultItems.CommandPalette className="highlighted" />
+      <MainMenu.DefaultItems.SearchMenu />
+      <MainMenu.DefaultItems.Help />
       <MainMenu.DefaultItems.ClearCanvas />
       <MainMenu.Separator />
-      {/* <MainMenu.ItemLink
+      <MainMenu.ItemLink
         icon={ExcalLogo}
         href={`${
           import.meta.env.VITE_APP_PLUS_LP
@@ -64,12 +77,12 @@ export const AppMainMenu: React.FC<{
           Visual Debug
         </MainMenu.Item>
       )}
-      <MainMenu.Separator /> */}
+      <MainMenu.Separator />
       <MainMenu.DefaultItems.Preferences />
       <MainMenu.DefaultItems.ToggleTheme allowSystemTheme theme={props.theme} />
-      {/* <MainMenu.ItemCustom>
+      <MainMenu.ItemCustom>
         <LanguageList style={{ width: "100%" }} />
-      </MainMenu.ItemCustom> */}
+      </MainMenu.ItemCustom>
       <MainMenu.DefaultItems.ChangeCanvasBackground />
     </MainMenu>
   );

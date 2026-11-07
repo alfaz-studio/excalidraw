@@ -57,8 +57,6 @@ import type {
 } from "@excalidraw/element";
 import type { GlobalPoint } from "@excalidraw/math";
 
-import type { CollabAPI } from "./collab/Collab";
-
 import type { Action } from "./actions/types";
 import type { Spreadsheet } from "./charts";
 import type { ClipboardData } from "./clipboard";
@@ -98,11 +96,11 @@ export type Collaborator = Readonly<{
   isInCall?: boolean;
   isSpeaking?: boolean;
   isMuted?: boolean;
-  /** SONACOVE: strokes this collaborator is drawing, not yet on the board. See remoteInk.ts. */
+  /** SONACOVE: strokes this collaborator is drawing, not yet on the board. Set by the host. */
   inkStrokes?: readonly RemoteInk[];
 }>;
 
-/** SONACOVE: a peer's freehand stroke in progress, drawn as a preview. See remoteInk.ts. */
+/** SONACOVE: a peer's freehand stroke in progress, drawn as a preview by renderRemoteInk.ts. */
 export type RemoteInk = Readonly<{
   id: string;
   x: number;
@@ -1094,7 +1092,6 @@ export interface ExcalidrawProps {
   aiEnabled?: boolean;
   showDeprecatedFonts?: boolean;
   renderScrollbars?: boolean;
-  storageBackendUrl?: string;
 
   // SONACOVE: lockedViewport — when set, scrollX/scrollY/zoom are fully
   // derived (the scene box [0,width]×[0,height] aspect-fit + centered into
@@ -1166,141 +1163,6 @@ export interface ExcalidrawProps {
       signal: AbortSignal;
     },
   ) => MaybePromise<void> | AsyncGenerator<OnExportProgress, void>;
-}
-
-/**
- * Minimal transport surface the collab layer needs from a "socket". The
- * socket.io client satisfies it structurally; hosts can inject any other
- * transport (e.g. a LiveKit data-channel adapter) via
- * {@link ExcalidrawAppProps.collabSocketFactory}.
- *
- * Expected event contract (mirrors the socket.io relay protocol):
- * - incoming: `init-room`, `first-in-room`, `new-user` (socketId),
- *   `room-user-change` (SocketId[]), `client-broadcast` (data, iv),
- *   `user-follow-room-change` (SocketId[]), `connect_error`
- * - outgoing: `join-room` (roomId, metadata), `server-broadcast` /
- *   `server-volatile-broadcast` (roomId, data, iv), `user-follow` (payload)
- */
-export interface CollabSocket {
-  id?: string;
-  on(event: string, listener: (...args: any[]) => void): unknown;
-  once(event: string, listener: (...args: any[]) => void): unknown;
-  off(event: string, listener?: (...args: any[]) => void): unknown;
-  emit(event: string, ...args: any[]): unknown;
-  close(): unknown;
-}
-
-export type CollabSocketFactory = (opts: {
-  roomId: string;
-}) => Promise<CollabSocket> | CollabSocket;
-
-/**
- * SONACOVE: file and scene persistence are armed independently. Scene storage
- * re-applies a stored snapshot on reconcile, which drops an in-flight stroke —
- * so annotation surfaces run files-only rather than opting out of storage.
- */
-export interface StorageCapabilities {
-  files?: boolean;
-  scene?: boolean;
-}
-
-/** SONACOVE: a file-sync failure the host may want to alert on. */
-export interface ExcalidrawFileError {
-  op: "upload" | "download" | "decrypt";
-  fileId?: string;
-  status?: number;
-  message?: string;
-  prefix?: string;
-}
-
-/**
- * Collab configuration passed through ExcalidrawApp down to the Collab
- * component — one definition so the two prop surfaces can't drift.
- */
-export interface CollabTransportProps {
-  collabServerUrl?: string;
-  collabDetails?: { roomId: string; roomKey: string };
-  /** When provided, used instead of a socket.io connection to collabServerUrl. */
-  collabSocketFactory?: CollabSocketFactory;
-  storageBackendUrl?: string;
-  meetingDetails?: IMeetingDetails;
-  /**
-   * Defaults to `{ files: true, scene: true }` when `storageBackendUrl` is set,
-   * and to everything-off when it isn't.
-   */
-  storageCapabilities?: StorageCapabilities;
-  /** SONACOVE: the user being followed, if any (was AppState.userToFollow upstream). */
-  userToFollow?: UserToFollow | null;
-  onFileError?: (error: ExcalidrawFileError) => void;
-}
-
-export interface ExcalidrawCollabProps extends CollabTransportProps {
-  excalidrawAPI: ExcalidrawImperativeAPI;
-  useTestEnv?: boolean;
-
-  /**
-   * SONACOVE: hands this instance's API to the app that rendered it, and the only route out.
-   *
-   * A module-level registry cannot serve that purpose — several boards mount in one page (the
-   * whiteboard stays mounted behind a visibility swap while the document tab mounts its own
-   * layer), so a shared slot names whichever mounted last and everyone else drives that one.
-   */
-  onCollabAPI?: (api: CollabAPI) => void;
-
-  /**
-   * SONACOVE: fired once the room's transport is attached, which is when edits start
-   * broadcasting — well before `startCollaboration` resolves, since that additionally waits
-   * out the peer-presence window and the stored-scene fetch. A surface that tells the user
-   * whether their marks are shared has to distinguish the two.
-   */
-  onRoomOpen?: (roomId: string) => void;
-
-  /**
-   * SONACOVE: this instance entering or leaving a session — what the app that rendered it shows
-   * as "collaborating". Per instance, replacing a page-wide atom that every mounted board wrote.
-   */
-  onCollaboratingChange?: (isCollaborating: boolean) => void;
-
-  // SONACOVE: mirrors ExcalidrawProps.elementAuthorId — the collab layer stamps
-  // it onto outgoing elements. See elementOwnership.ts.
-  elementAuthorId?: string;
-}
-
-export interface ExcalidrawAppProps extends CollabTransportProps {
-  excalidraw: ExcalidrawProps;
-  getExcalidrawAPI?: Function;
-  getCollabAPI?: Function;
-
-  /** SONACOVE: forwarded to Collab — see `ExcalidrawCollabProps.onRoomOpen`. */
-  onRoomOpen?: (roomId: string) => void;
-}
-
-export interface IMeetingDetails {
-  sessionId: string;
-  roomJid: string;
-  jwt: string;
-  jid?: string;
-  token?: string;
-  sceneType?: "whiteboard" | "annotation";
-
-  /**
-   * Object name the scene is archived under, within the session's file space.
-   *
-   * Defaults to the whiteboard's fixed name, which is a cross-repo contract the
-   * dashboard reads by. A surface that can have SEVERAL scenes alive at once —
-   * a document with one board per page — must set its own, or every page writes
-   * over the same object and the last save wins.
-   */
-  sceneFileId?: string;
-  /**
-   * Whether THIS participant archives the scene to the storage backend.
-   *
-   * Every peer runs the same save throttle, so without a single designated
-   * writer they all read-modify-write one object with no locking (upstream
-   * relied on Firebase transactions; this backend has none). The host sets this
-   * for the moderator only. Peers still read the scene on join.
-   */
-  canPersistScene?: boolean;
 }
 
 export type SceneData = {
