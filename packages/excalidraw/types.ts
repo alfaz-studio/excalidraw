@@ -1255,6 +1255,12 @@ export interface ExcalidrawCollabProps extends CollabTransportProps {
    */
   onRoomOpen?: (roomId: string) => void;
 
+  /**
+   * SONACOVE: this instance entering or leaving a session — what the app that rendered it shows
+   * as "collaborating". Per instance, replacing a page-wide atom that every mounted board wrote.
+   */
+  onCollaboratingChange?: (isCollaborating: boolean) => void;
+
   // SONACOVE: mirrors ExcalidrawProps.elementAuthorId — the collab layer stamps
   // it onto outgoing elements. See elementOwnership.ts.
   elementAuthorId?: string;

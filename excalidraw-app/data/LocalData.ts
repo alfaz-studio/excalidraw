@@ -119,7 +119,9 @@ const isQuotaExceededError = (error: any) => {
   );
 };
 
-type SavingLockTypes = "collaboration";
+// SONACOVE: `collaboration:<clientId>` — one lock per Collab instance, so one board leaving its
+// room does not resume saving under another board that is still collaborating.
+type SavingLockTypes = "collaboration" | `collaboration:${string}`;
 
 export class LocalData {
   private static _save = debounce(

@@ -110,7 +110,6 @@ import type {
   SyncableExcalidrawElement,
 } from "../../../excalidraw-app/data";
 
-export const isCollaboratingAtom = atom(false);
 export const isOfflineAtom = atom(false);
 
 interface CollabState {
@@ -206,6 +205,17 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
   private collaboratorLastSeen = new Map<SocketId, number>();
   private staleCollaboratorTimerId: number | null = null;
   private clientId = randomId();
+
+  /**
+   * SONACOVE: whether THIS instance is in a session. Held per instance rather than in a page-wide
+   * atom: the whiteboard stays mounted behind a visibility swap while a document tab mounts and
+   * unmounts its own layer, and with one shared flag that layer's teardown switched off the
+   * whiteboard's broadcasts — strokes kept drawing locally and silently reached nobody.
+   */
+  private collaborating = false;
+
+  /** SONACOVE: this instance's hold on LocalData saving, per instance for the same reason. */
+  private readonly saveLock = `collaboration:${this.clientId}` as const;
 
   /**
    * SONACOVE: the identity stamped onto this client's elements. Prefers the
@@ -473,12 +483,20 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     // that can exhaust browser WebSocket resources and crash the meeting.
     // Content is preserved server-side and re-synced on reconnect.
     this.destroySocketClient({ isUnload: true });
+
+    // The unload teardown keeps the flag, but a board that is gone must not keep LocalData
+    // paused for every board still on the page.
+    LocalData.resumeSave(this.saveLock);
   }
 
-  isCollaborating = () => appJotaiStore.get(isCollaboratingAtom)!;
+  isCollaborating = () => this.collaborating;
 
   private setIsCollaborating = (isCollaborating: boolean) => {
-    appJotaiStore.set(isCollaboratingAtom, isCollaborating);
+    if (this.collaborating === isCollaborating) {
+      return;
+    }
+    this.collaborating = isCollaborating;
+    this.props.onCollaboratingChange?.(isCollaborating);
   };
 
   private onUnload = () => {
@@ -698,7 +716,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
       // React exactly while someone is flipping through a deck.
       if (!opts?.keepCollaborating) {
         this.setIsCollaborating(false);
-        LocalData.resumeSave("collaboration");
+        LocalData.resumeSave(this.saveLock);
       }
     }
   };
@@ -838,7 +856,7 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     >();
 
     this.setIsCollaborating(true);
-    LocalData.pauseSave("collaboration");
+    LocalData.pauseSave(this.saveLock);
 
     const createSocket = async (): Promise<CollabSocket> => {
       // Host-injected transport (e.g. LiveKit data channels in Sonacove
@@ -878,18 +896,21 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
     };
     this.fallbackInitializationHandler = fallbackInitializationHandler;
 
+    const generation = this.sessionGeneration;
+
     try {
       const { meetingDetails } = this.props;
-      const generation = this.sessionGeneration;
       const socket = await createSocket();
 
       // The room was left while its transport was still connecting. Nothing checked this
       // before, so the session opened anyway — on a surface that switches rooms, that meant a
       // live socket on the page you had already turned away from, and the marks you drew next
       // being broadcast and archived under it.
+      //
+      // The flag and the save lock are left alone: leaving already released them, or, with
+      // `keepCollaborating`, kept them for the session that follows, which holds them now.
       if (generation !== this.sessionGeneration) {
         socket.close();
-        LocalData.resumeSave("collaboration");
 
         return null;
       }
@@ -919,11 +940,19 @@ class Collab extends PureComponent<ExcalidrawCollabProps, CollabState> {
 
       this.portal.socket.once("connect_error", fallbackInitializationHandler);
     } catch (error) {
+      // A session already left: rolling back here would switch off the session that replaced
+      // it, which then stays connected but never broadcasts.
+      if (generation !== this.sessionGeneration) {
+        console.error(error);
+
+        return null;
+      }
+
       // Unlike socketIOClient (which never throws synchronously — it
       // reconnects), an injected collabSocketFactory can reject, so this
       // path is reachable: roll back the collaboration state entered above,
       // or local persistence would stay paused for the rest of the session.
-      LocalData.resumeSave("collaboration");
+      LocalData.resumeSave(this.saveLock);
       this.setIsCollaborating(false);
       console.error(error);
       this.setErrorDialog(
