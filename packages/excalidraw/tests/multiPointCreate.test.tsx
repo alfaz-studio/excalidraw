@@ -11,6 +11,7 @@ import * as InteractiveCanvas from "../renderer/interactiveScene";
 import * as StaticScene from "../renderer/staticScene";
 
 import {
+  act,
   render,
   fireEvent,
   mockBoundingClientRect,
@@ -223,5 +224,32 @@ describe("multi point mode in linear elements", () => {
     );
     expect(renderStaticScene.mock.calls.length).toMatchInlineSnapshot(`7`);
     expect(h.elements.length).toEqual(1);
+  });
+
+  it("cancels the line when the host removes it from the scene mid-draw", async () => {
+    const { getByToolName, container } = await render(<Excalidraw />);
+    fireEvent.click(getByToolName("line"));
+
+    const canvas = container.querySelector("canvas.interactive")!;
+    fireEvent.pointerDown(canvas, { clientX: 30, clientY: 30 });
+    fireEvent.pointerUp(canvas, { clientX: 30, clientY: 30 });
+    fireEvent.pointerMove(canvas, { clientX: 50, clientY: 60 });
+    fireEvent.pointerDown(canvas, { clientX: 50, clientY: 60 });
+    fireEvent.pointerUp(canvas);
+    fireEvent.pointerMove(canvas, { clientX: 80, clientY: 100 });
+
+    expect(h.state.multiElement).not.toBe(null);
+
+    act(() => {
+      h.app.updateScene({ elements: [] });
+    });
+
+    fireEvent.pointerMove(canvas, { clientX: 100, clientY: 140 });
+    fireEvent.pointerMove(canvas, { clientX: 120, clientY: 160 });
+
+    expect(h.state.multiElement).toBe(null);
+    expect(h.state.newElement).toBe(null);
+    expect(h.state.selectedLinearElement).toBe(null);
+    expect(h.elements.length).toEqual(0);
   });
 });

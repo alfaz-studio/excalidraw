@@ -1196,6 +1196,27 @@ class App extends React.Component<AppProps, AppState> {
     }
   };
 
+  /**
+   * The host can replace the scene (`updateScene`) while a linear element is
+   * being drawn or dragged. If that element is gone, drop the in-progress
+   * edit instead of operating on it.
+   */
+  private cancelLinearEditIfElementRemoved(elementId: string): boolean {
+    if (this.scene.getNonDeletedElementsMap().has(elementId)) {
+      return false;
+    }
+    if (this.bindModeHandler) {
+      clearTimeout(this.bindModeHandler);
+      this.bindModeHandler = null;
+    }
+    this.setState({
+      multiElement: null,
+      newElement: null,
+      selectedLinearElement: null,
+    });
+    return true;
+  }
+
   private handleSkipBindMode() {
     if (
       this.state.selectedLinearElement?.initialState &&
@@ -1254,7 +1275,10 @@ class App extends React.Component<AppProps, AppState> {
       if (
         this.lastPointerMoveCoords &&
         this.state.selectedLinearElement?.selectedPointsIndices &&
-        this.state.selectedLinearElement?.selectedPointsIndices.length
+        this.state.selectedLinearElement?.selectedPointsIndices.length &&
+        !this.cancelLinearEditIfElementRemoved(
+          this.state.selectedLinearElement.elementId,
+        )
       ) {
         const { x, y } = this.lastPointerMoveCoords;
         const event =
@@ -1314,6 +1338,10 @@ class App extends React.Component<AppProps, AppState> {
 
     const effector = () => {
       this.bindModeHandler = null;
+
+      if (this.cancelLinearEditIfElementRemoved(arrow.id)) {
+        return;
+      }
 
       invariant(
         this.lastPointerMoveCoords,
@@ -7157,6 +7185,10 @@ class App extends React.Component<AppProps, AppState> {
     }
 
     if (this.state.multiElement && this.state.selectedLinearElement) {
+      if (this.cancelLinearEditIfElementRemoved(this.state.multiElement.id)) {
+        return;
+      }
+
       const { multiElement, selectedLinearElement } = this.state;
       const { x: rx, y: ry, points } = multiElement;
       const lastPoint = points[points.length - 1];
